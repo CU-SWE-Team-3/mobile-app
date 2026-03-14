@@ -1,0 +1,66 @@
+name: soundcloud_clone
+description: SoundCloud Clone - Cross-Platform Flutter App
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # Networking
+  dio: ^5.4.0
+
+  # Real-Time
+  socket_io_client: ^2.0.3+1
+
+  # Audio
+  just_audio: ^0.9.36
+  audio_service: ^0.18.12
+  just_waveform: ^0.0.7
+
+  # Storage & Auth
+  flutter_secure_storage: ^9.0.0
+  shared_preferences: ^2.2.2
+
+  # UI
+  cached_network_image: ^3.3.1
+  go_router: ^13.2.0
+
+  # File/Image Picking
+  file_picker: ^8.0.0
+  image_picker: ^1.0.7
+
+  # Utilities
+  get_it: ^7.6.7
+  equatable: ^2.0.5
+  dartz: ^0.10.1
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.8.1
+  intl: ^0.19.0
+
+  # Payment
+  flutter_stripe: ^10.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.3.9
+  freezed: ^2.4.7
+  json_serializable: ^6.7.1
+  mocktail: ^1.0.3
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/mock/
