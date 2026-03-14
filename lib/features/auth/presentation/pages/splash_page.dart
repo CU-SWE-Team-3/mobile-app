@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'start_page.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -26,12 +27,12 @@ class _SplashPageState extends State<SplashPage> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF111111),
+    return Scaffold(
+      backgroundColor: const Color(0xFF111111),
       body: Center(
-        child: Text(
-          '☁',
-          style: TextStyle(fontSize: 80),
+        child: Image.asset(
+          'assets/images/soundcloud_logo.png',
+          width: 180,
         ),
       ),
     );

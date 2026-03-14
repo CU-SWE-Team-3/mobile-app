@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'features/auth/presentation/pages/register_page.dart';
+import 'features/auth/presentation/pages/splash_page.dart';
 
 void main() {
   runApp(
@@ -19,7 +19,7 @@ class MyApp extends StatelessWidget {
       title: 'SoundCloud',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: const RegisterPage(),
+      home: const SplashPage(),
     );
   }
 }
