@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'features/auth/presentation/pages/register_page.dart';
 
 void main() {
   runApp(
@@ -18,19 +19,7 @@ class MyApp extends StatelessWidget {
       title: 'SoundCloud',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
-      home: const Scaffold(
-        backgroundColor: Color(0xFF111111),
-        body: Center(
-          child: Text(
-            'SoundCloud',
-            style: TextStyle(
-              color: Color(0xFFFF5500),
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ),
+      home: const RegisterPage(),
     );
   }
 }
