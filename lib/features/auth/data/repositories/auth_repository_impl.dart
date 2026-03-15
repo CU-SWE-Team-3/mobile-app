@@ -1,7 +1,7 @@
-import 'package:soundcloud_clone/core/constants/app_config.dart';
-import 'package:soundcloud_clone/features/auth/data/datasources/auth_mock_datasource.dart';
-import 'package:soundcloud_clone/features/auth/domain/entities/user.dart';
-import 'package:soundcloud_clone/features/auth/domain/repositories/auth_repository.dart';
+import '../../../../core/constants/app_config.dart';
+import '../../domain/entities/user.dart';
+import '../../domain/repositories/auth_repository.dart';
+import '../datasources/auth_mock_datasource.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthMockDatasource mockDatasource;
@@ -34,7 +34,10 @@ class AuthRepositoryImpl implements AuthRepository {
     required String password,
   }) async {
     if (AppConfig.useMockData) {
-      return mockDatasource.login(email: email, password: password);
+      return mockDatasource.login(
+        email: email,
+        password: password,
+      );
     }
     throw UnimplementedError('Real API not connected yet');
   }
@@ -56,8 +59,12 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<void> logout() async {}
+  Future<void> logout() async {
+    // Clear local storage when real auth is connected
+  }
 
   @override
-  Future<User?> getCurrentUser() async => null;
+  Future<User?> getCurrentUser() async {
+    return null;
+  }
 }

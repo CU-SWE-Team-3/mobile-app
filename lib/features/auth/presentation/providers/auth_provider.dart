@@ -1,9 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:soundcloud_clone/features/auth/data/datasources/auth_mock_datasource.dart';
-import 'package:soundcloud_clone/features/auth/data/repositories/auth_repository_impl.dart';
-import 'package:soundcloud_clone/features/auth/domain/entities/user.dart';
-import 'package:soundcloud_clone/features/auth/domain/usecases/register_use_case.dart';
+import '../../data/datasources/auth_mock_datasource.dart';
+import '../../data/repositories/auth_repository_impl.dart';
+import '../../domain/entities/user.dart';
+import '../../domain/usecases/register_use_case.dart';
 
+//state class
 class AuthState {
   final User? user;
   final bool isLoading;
@@ -28,10 +29,12 @@ class AuthState {
   }
 }
 
+// notifier
 class AuthNotifier extends StateNotifier<AuthState> {
   final RegisterUseCase registerUseCase;
 
-  AuthNotifier({required this.registerUseCase}) : super(const AuthState());
+  AuthNotifier({required this.registerUseCase})
+      : super(const AuthState());
 
   Future<void> register({
     required String email,
@@ -60,6 +63,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 }
 
+// provider
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final mockDatasource = AuthMockDatasource();
   final repository = AuthRepositoryImpl(mockDatasource: mockDatasource);

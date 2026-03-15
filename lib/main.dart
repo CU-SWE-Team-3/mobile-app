@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'features/auth/presentation/pages/splash_page.dart';
 
-void main() {
+import 'core/router/app_router.dart';
+import 'core/themes/app_theme.dart';
+import 'injection_container.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initDependencies();
   runApp(
     const ProviderScope(
       child: MyApp(),
@@ -15,11 +20,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'SoundCloud',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(),
-      home: const SplashPage(),
+      theme: AppTheme.darkTheme,
+      routerConfig: appRouter,
     );
   }
 }

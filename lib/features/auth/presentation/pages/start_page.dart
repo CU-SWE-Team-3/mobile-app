@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import 'register_page.dart';
+import 'package:go_router/go_router.dart';
 
 class StartPage extends StatelessWidget {
   const StartPage({super.key});
@@ -58,14 +58,7 @@ class StartPage extends StatelessWidget {
                       width: double.infinity,
                       height: 54,
                       child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const RegisterPage(),
-                            ),
-                          );
-                        },
+                        onPressed: () => context.go('/register'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           elevation: 0,

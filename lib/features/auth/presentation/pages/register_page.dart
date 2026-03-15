@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/features/auth/presentation/providers/auth_provider.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
@@ -10,26 +11,78 @@ class RegisterPage extends ConsumerStatefulWidget {
 }
 
 class _RegisterPageState extends ConsumerState<RegisterPage> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   final _displayNameController = TextEditingController();
-  final _ageController = TextEditingController();
+
+  String? _selectedMonth;
+  String? _selectedDay;
+  String? _selectedYear;
+  String? _selectedGender;
+
+  final List<String> _months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  final List<String> _days = List.generate(31, (i) => '${i + 1}');
+  final List<String> _years = List.generate(
+    100, (i) => '${DateTime.now().year - i}');
+  final List<String> _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
     _displayNameController.dispose();
-    _ageController.dispose();
     super.dispose();
   }
 
-  Future<void> _onRegister() async {
+  Future<void> _onContinue() async {
+    if (_displayNameController.text.isEmpty ||
+        _selectedMonth == null ||
+        _selectedDay == null ||
+        _selectedYear == null ||
+        _selectedGender == null) return;
+
+    final age = DateTime.now().year -
+        int.parse(_selectedYear!);
+
     await ref.read(authProvider.notifier).register(
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
+      email: 'temp@email.com',
+      password: 'temppassword',
       displayName: _displayNameController.text.trim(),
-      age: int.tryParse(_ageController.text.trim()) ?? 0,
+      age: age,
+      gender: _selectedGender,
+    );
+  }
+
+  Widget _buildDropdown({
+    required String hint,
+    required String? value,
+    required List<String> items,
+    required void Function(String?) onChanged,
+    double? width,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          hint: Text(hint,
+            style: const TextStyle(color: Color(0xFF999999), fontSize: 14)),
+          dropdownColor: const Color(0xFF2A2A2A),
+          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+          isExpanded: width == null,
+          items: items.map((item) => DropdownMenuItem(
+            value: item,
+            child: Text(item),
+          )).toList(),
+          onChanged: onChanged,
+        ),
+      ),
     );
   }
 
@@ -37,132 +90,158 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
+    ref.listen(authProvider, (previous, next) {
+      if (previous?.user == null && next.user != null) {
+        context.go('/home');
+      }
+    });
+
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Text(
-                'SoundCloud',
-                style: TextStyle(
-                  color: Color(0xFFFF5500),
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Create your account',
-                style: TextStyle(color: Color(0xFF999999), fontSize: 16),
-              ),
-              const SizedBox(height: 40),
-              TextField(
-                controller: _displayNameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Display Name',
-                  hintStyle: TextStyle(color: Color(0xFF999999)),
-                  filled: true,
-                  fillColor: Color(0xFF1F1F1F),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(8)),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Email',
-                  hintStyle: TextStyle(color: Color(0xFF999999)),
-                  filled: true,
-                  fillColor: Color(0xFF1F1F1F),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(8)),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Password',
-                  hintStyle: TextStyle(color: Color(0xFF999999)),
-                  filled: true,
-                  fillColor: Color(0xFF1F1F1F),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(8)),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _ageController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Age',
-                  hintStyle: TextStyle(color: Color(0xFF999999)),
-                  filled: true,
-                  fillColor: Color(0xFF1F1F1F),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(8)),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-              if (authState.error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    authState.error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 14),
-                  ),
-                ),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: authState.isLoading ? null : _onRegister,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF5500),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                  ),
-                  child: authState.isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Create Account',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () {},
-                child: const Text(
-                  'Already have an account? Sign in',
-                  style: TextStyle(color: Color(0xFFFF5500), fontSize: 14),
-                ),
-              ),
-            ],
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => context.go('/start'),
+        ),
+        title: const Text(
+          'Tell us more about you',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
           ),
+        ),
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Display name field
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: TextField(
+                controller: _displayNameController,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                decoration: const InputDecoration(
+                  labelText: 'Display name',
+                  labelStyle: TextStyle(color: Color(0xFF999999), fontSize: 13),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Your display name can be anything you like. Your name\nor artist name are good choices.',
+              style: TextStyle(color: Color(0xFF999999), fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+
+            // Date of birth
+            const Text(
+              'Date of birth (required)',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Month Day Year dropdowns
+            Row(
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: _buildDropdown(
+                    hint: 'Month',
+                    value: _selectedMonth,
+                    items: _months,
+                    onChanged: (v) => setState(() => _selectedMonth = v),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: _buildDropdown(
+                    hint: 'Day',
+                    value: _selectedDay,
+                    items: _days,
+                    onChanged: (v) => setState(() => _selectedDay = v),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 4,
+                  child: _buildDropdown(
+                    hint: 'Year',
+                    value: _selectedYear,
+                    items: _years,
+                    onChanged: (v) => setState(() => _selectedYear = v),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Your date of birth is used to verify your age and is not\nshared publicly.',
+              style: TextStyle(color: Color(0xFF999999), fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+
+            // Gender dropdown
+            _buildDropdown(
+              hint: 'Gender (required)',
+              value: _selectedGender,
+              items: _genders,
+              onChanged: (v) => setState(() => _selectedGender = v),
+            ),
+            const SizedBox(height: 32),
+
+            // Error
+            if (authState.error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  authState.error!,
+                  style: const TextStyle(color: Colors.red, fontSize: 13),
+                ),
+              ),
+
+            // Continue button
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: authState.isLoading ? null : _onContinue,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                child: authState.isLoading
+                    ? const CircularProgressIndicator(color: Colors.black)
+                    : const Text(
+                        'Continue',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     );
