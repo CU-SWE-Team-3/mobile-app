@@ -58,7 +58,7 @@ class StartPage extends StatelessWidget {
                       width: double.infinity,
                       height: 54,
                       child: ElevatedButton(
-                        onPressed: () => context.go('/register'),
+                        onPressed: () => context.go('/onboarding'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
                           elevation: 0,
@@ -83,7 +83,7 @@ class StartPage extends StatelessWidget {
                       width: double.infinity,
                       height: 54,
                       child: ElevatedButton(
-                        onPressed: () {},
+                        onPressed: () => context.go('/onboarding'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFDDDDFF),
                           elevation: 0,

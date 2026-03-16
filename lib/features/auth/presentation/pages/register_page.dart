@@ -10,13 +10,18 @@ class RegisterPage extends ConsumerStatefulWidget {
   ConsumerState<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterPageState extends ConsumerState<RegisterPage> {
+class _RegisterPageState extends ConsumerState<RegisterPage>
+    with SingleTickerProviderStateMixin {
   final _displayNameController = TextEditingController();
 
   String? _selectedMonth;
   String? _selectedDay;
   String? _selectedYear;
   String? _selectedGender;
+  bool _isCaptchaChecked = false;
+
+  late final AnimationController _captchaAnimController;
+  late final Animation<double> _captchaScaleAnim;
 
   final List<String> _months = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -29,20 +34,43 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final List<String> _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
   @override
+  void initState() {
+    super.initState();
+    _captchaAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _captchaScaleAnim = CurvedAnimation(
+      parent: _captchaAnimController,
+      curve: Curves.elasticOut,
+    );
+  }
+
+  @override
   void dispose() {
     _displayNameController.dispose();
+    _captchaAnimController.dispose();
     super.dispose();
   }
 
+  void _onCaptchaTap() {
+    setState(() => _isCaptchaChecked = !_isCaptchaChecked);
+    if (_isCaptchaChecked) {
+      _captchaAnimController.forward();
+    } else {
+      _captchaAnimController.reverse();
+    }
+  }
+
   Future<void> _onContinue() async {
-    if (_displayNameController.text.isEmpty ||
+    if (!_isCaptchaChecked ||
+        _displayNameController.text.isEmpty ||
         _selectedMonth == null ||
         _selectedDay == null ||
         _selectedYear == null ||
         _selectedGender == null) return;
 
-    final age = DateTime.now().year -
-        int.parse(_selectedYear!);
+    final age = DateTime.now().year - int.parse(_selectedYear!);
 
     await ref.read(authProvider.notifier).register(
       email: 'temp@email.com',
@@ -71,7 +99,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         child: DropdownButton<String>(
           value: value,
           hint: Text(hint,
-            style: const TextStyle(color: Color(0xFF999999), fontSize: 14)),
+              style: const TextStyle(color: Color(0xFF999999), fontSize: 14)),
           dropdownColor: const Color(0xFF2A2A2A),
           icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
           style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -86,15 +114,89 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     );
   }
 
+  Widget _buildMockCaptcha() {
+    return GestureDetector(
+      onTap: _onCaptchaTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1F1F1F),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: const Color(0xFF3A3A3A)),
+        ),
+        child: Row(
+          children: [
+            // Animated checkbox
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: _isCaptchaChecked
+                      ? const Color(0xFFFF5500)
+                      : const Color(0xFF999999),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: _isCaptchaChecked
+                  ? ScaleTransition(
+                      scale: _captchaScaleAnim,
+                      child: const Icon(
+                        Icons.check,
+                        color: Color(0xFFFF5500),
+                        size: 18,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 14),
+
+            // "I'm not a robot"
+            const Expanded(
+              child: Text(
+                "I'm not a robot",
+                style: TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ),
+
+            // reCAPTCHA branding
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'reCAPTCHA',
+                  style: TextStyle(
+                    color: Color(0xFF666666),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Privacy - Terms',
+                  style: TextStyle(color: Color(0xFF666666), fontSize: 8),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
 
     ref.listen(authProvider, (previous, next) {
       if (previous?.user == null && next.user != null) {
-        context.go('/home');
+        context.go('/email-verification');
       }
     });
+
+    final canContinue = _isCaptchaChecked && !authState.isLoading;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -204,7 +306,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               items: _genders,
               onChanged: (v) => setState(() => _selectedGender = v),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // Mock CAPTCHA
+            _buildMockCaptcha(),
+            const SizedBox(height: 24),
 
             // Error
             if (authState.error != null)
@@ -221,9 +327,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: authState.isLoading ? null : _onContinue,
+                onPressed: canContinue ? _onContinue : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
+                  backgroundColor: canContinue
+                      ? Colors.white
+                      : const Color(0xFF3A3A3A),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(4),
@@ -231,10 +339,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 ),
                 child: authState.isLoading
                     ? const CircularProgressIndicator(color: Colors.black)
-                    : const Text(
+                    : Text(
                         'Continue',
                         style: TextStyle(
-                          color: Colors.black,
+                          color: canContinue
+                              ? Colors.black
+                              : const Color(0xFF666666),
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
