@@ -75,14 +75,12 @@ class _BottomNavBar extends StatelessWidget {
   }
 }
 
-/// Placeholder for the persistent mini-player (Module 5).
-/// Replace this with the real MiniPlayer widget once Module 5 is implemented.
+// Placeholder for the mini-player in module 5//
 class _MiniPlayerSlot extends StatelessWidget {
   const _MiniPlayerSlot();
 
   @override
   Widget build(BuildContext context) {
-    // Returns empty by default — MiniPlayer will occupy this slot
     return const SizedBox.shrink();
   }
 }
