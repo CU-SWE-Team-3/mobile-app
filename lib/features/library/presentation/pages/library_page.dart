@@ -60,11 +60,17 @@ class LibraryPage extends ConsumerWidget {
                   const SizedBox(width: 1),
 
                   // Grey circle avatar with person icon — no photo
-                  const CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Color(0xFF555555),
-                    child: Icon(Icons.person, color: Colors.white, size: 20),
+                  // Avatar → opens Profile page
+                  GestureDetector(
+                    onTap: () => context.push('/profile'), // 👈 added
+                    child: const CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Color(0xFF2A2A2A),
+                      child:
+                          Icon(Icons.person, color: Colors.white, size: 18),
+                    ),
                   ),
+  
                 ],
               ),
             ),
