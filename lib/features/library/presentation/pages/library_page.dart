@@ -47,6 +47,7 @@ class LibraryPage extends ConsumerWidget {
                         color: Colors.white, size: 22),
                     onPressed: () => Navigator.push(
                       context,
+                      
                       MaterialPageRoute(
                           builder: (_) => const SettingsMainPage()),
                     ),
@@ -54,14 +55,6 @@ class LibraryPage extends ConsumerWidget {
 
                   const SizedBox(width: 1),
 
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 22),
-                    onPressed: () {},
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-
-                  const SizedBox(width: 1),
 
                   // Grey circle avatar with person icon — no photo
                   // Avatar → opens Profile page
