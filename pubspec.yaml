@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   restart_app: ^1.0.1  # 👈 use this insteadpp
+ 
 
 
   # State Management
