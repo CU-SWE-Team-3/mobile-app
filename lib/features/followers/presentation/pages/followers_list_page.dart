@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 // ── Temporary fake data — delete when backend is ready ──
 final List<Map<String, dynamic>> _fakeUsers = [
@@ -9,14 +9,14 @@ final List<Map<String, dynamic>> _fakeUsers = [
   {"name": "Farghaly", "country": "Sheikh Zayed", "followers": 800, "image": "https://i.pravatar.cc/150?img=5"},
 ];
 
-class FollowersListPage extends ConsumerStatefulWidget {
+class FollowersListPage extends StatefulWidget {
   const FollowersListPage({super.key});
 
   @override
-  ConsumerState<FollowersListPage> createState() => _FollowersListPageState();
+  State<FollowersListPage> createState() => _FollowersListPageState();
 }
 
-class _FollowersListPageState extends ConsumerState<FollowersListPage> {
+class _FollowersListPageState extends State<FollowersListPage> {
   final Set<int> _following = {};
 
   @override
@@ -27,7 +27,7 @@ class _FollowersListPageState extends ConsumerState<FollowersListPage> {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
+          onTap: () => context.pop(),  // ← fixed: was Navigator.pop(context)
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -69,7 +69,7 @@ class _FollowersListPageState extends ConsumerState<FollowersListPage> {
                     radius: 28,
                     backgroundColor: Colors.grey[800],
                     backgroundImage: user["image"] != null
-                        ? NetworkImage(user["image"])
+                        ? NetworkImage(user["image"] as String)
                         : null,
                     child: user["image"] == null
                         ? const Icon(Icons.person, color: Colors.white)
@@ -84,7 +84,7 @@ class _FollowersListPageState extends ConsumerState<FollowersListPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          user["name"],
+                          user["name"] as String,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 17,
@@ -93,16 +93,18 @@ class _FollowersListPageState extends ConsumerState<FollowersListPage> {
                         ),
                         if (user["country"] != null)
                           Text(
-                            user["country"],
+                            user["country"] as String,
                             style: const TextStyle(color: Colors.grey),
                           ),
                         Row(
                           children: [
-                            const Icon(Icons.person, color: Colors.grey, size: 16),
+                            const Icon(Icons.person,
+                                color: Colors.grey, size: 16),
                             const SizedBox(width: 5),
                             Text(
                               "${user["followers"]} Followers",
-                              style: const TextStyle(color: Colors.grey, fontSize: 13),
+                              style: const TextStyle(
+                                  color: Colors.grey, fontSize: 13),
                             ),
                           ],
                         ),
@@ -116,7 +118,8 @@ class _FollowersListPageState extends ConsumerState<FollowersListPage> {
                     width: 110,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isFollowing ? Colors.grey[800] : Colors.white,
+                        backgroundColor:
+                            isFollowing ? Colors.grey[800] : Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
