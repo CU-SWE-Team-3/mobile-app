@@ -13,6 +13,10 @@ class RegisterPage extends ConsumerStatefulWidget {
 class _RegisterPageState extends ConsumerState<RegisterPage>
     with SingleTickerProviderStateMixin {
   final _displayNameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
 
   String? _selectedMonth;
   String? _selectedDay;
@@ -29,8 +33,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
   ];
 
   final List<String> _days = List.generate(31, (i) => '${i + 1}');
-  final List<String> _years = List.generate(
-    100, (i) => '${DateTime.now().year - i}');
+  final List<String> _years = List.generate(100, (i) => '${2019 - i}');
   final List<String> _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
   @override
@@ -49,8 +52,18 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
   @override
   void dispose() {
     _displayNameController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _captchaAnimController.dispose();
     super.dispose();
+  }
+
+  bool _isPasswordValid(String password) {
+    if (password.length < 8) return false;
+    if (!password.contains(RegExp(r'[a-zA-Z]'))) return false;
+    if (!password.contains(RegExp(r'[0-9]'))) return false;
+    if (!password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_\-]'))) return false;
+    return true;
   }
 
   void _onCaptchaTap() {
@@ -74,7 +87,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
 
     await ref.read(authProvider.notifier).register(
       email: 'temp@email.com',
-      password: 'temppassword',
+      password: _passwordController.text.trim(),
       displayName: _displayNameController.text.trim(),
       age: age,
       gender: _selectedGender,
@@ -196,7 +209,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
       }
     });
 
-    final canContinue = _isCaptchaChecked && !authState.isLoading;
+    final passwordsMatch = _passwordController.text == _confirmPasswordController.text;
+    final canContinue = _isCaptchaChecked &&
+        !authState.isLoading &&
+        _isPasswordValid(_passwordController.text) &&
+        passwordsMatch &&
+        _confirmPasswordController.text.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -306,6 +324,80 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
               items: _genders,
               onChanged: (v) => setState(() => _selectedGender = v),
             ),
+            const SizedBox(height: 24),
+
+            // Password field
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: TextField(
+                controller: _passwordController,
+                obscureText: !_isPasswordVisible,
+                onChanged: (_) => setState(() {}),
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                decoration: InputDecoration(
+                  labelText: 'Password (min. 8 chars, letter, number, symbol)',
+                  labelStyle: const TextStyle(color: Color(0xFF999999), fontSize: 13),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      color: const Color(0xFF999999),
+                    ),
+                    onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                  ),
+                ),
+              ),
+            ),
+            if (_passwordController.text.isNotEmpty &&
+                !_isPasswordValid(_passwordController.text))
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Must be 8+ characters with a letter, number, and symbol',
+                  style: TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 12),
+
+            // Confirm password field
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: TextField(
+                controller: _confirmPasswordController,
+                obscureText: !_isConfirmPasswordVisible,
+                onChanged: (_) => setState(() {}),
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                decoration: InputDecoration(
+                  labelText: 'Confirm password',
+                  labelStyle: const TextStyle(color: Color(0xFF999999), fontSize: 13),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      color: const Color(0xFF999999),
+                    ),
+                    onPressed: () => setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
+                  ),
+                ),
+              ),
+            ),
+            if (_confirmPasswordController.text.isNotEmpty &&
+                _passwordController.text != _confirmPasswordController.text)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Passwords do not match',
+                  style: TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ),
             const SizedBox(height: 24),
 
             // Mock CAPTCHA
