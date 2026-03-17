@@ -10,7 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
   restart_app: ^1.0.1  # 👈 use this insteadpp
- 
+  path_provider: ^2.1.2  # already in your project most likely
+  webview_flutter: ^4.4.2  # 👈 add it here
 
 
   # State Management
@@ -60,8 +61,7 @@ dev_dependencies:
   freezed: ^2.4.7
   json_serializable: ^6.7.1
   mocktail: ^1.0.3
-  path_provider: ^2.1.2  # already in your project most likely
-  webview_flutter: ^4.4.2  # 👈 add it here
+
 
 
 flutter:

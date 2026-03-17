@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/features/library/presentation/pages/library_albums_page.dart';
+
 import 'package:soundcloud_clone/features/settings/presentation/pages/settings_main_page.dart';
 
 class LibraryPage extends ConsumerWidget {
@@ -16,7 +18,7 @@ class LibraryPage extends ConsumerWidget {
 
             // ── AppBar ─────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
               child: Row(
                 children: [
                   const Text(
@@ -29,6 +31,7 @@ class LibraryPage extends ConsumerWidget {
                   ),
 
                   const Spacer(),
+                  
 
                   const Text(
                     'GET PRO',
@@ -39,7 +42,13 @@ class LibraryPage extends ConsumerWidget {
                       letterSpacing: 0.5,
                     ),
                   ),
+                  
 
+                  const SizedBox(width: 12),
+                  IconButton(
+                  icon: const Icon(Icons.cast_rounded, color: Colors.white, size: 22),
+                           onPressed: () {},
+                  ),
                   const SizedBox(width: 1),
 
                   IconButton(
@@ -47,21 +56,14 @@ class LibraryPage extends ConsumerWidget {
                         color: Colors.white, size: 22),
                     onPressed: () => Navigator.push(
                       context,
+                      
                       MaterialPageRoute(
                           builder: (_) => const SettingsMainPage()),
                     ),
                   ),
 
-                  const SizedBox(width: 1),
+                  const SizedBox(width: 4),
 
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 22),
-                    onPressed: () {},
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-
-                  const SizedBox(width: 1),
 
                   // Grey circle avatar with person icon — no photo
                   // Avatar → opens Profile page
@@ -71,7 +73,7 @@ class LibraryPage extends ConsumerWidget {
                       radius: 18,
                       backgroundColor: Color(0xFF2A2A2A),
                       child:
-                          Icon(Icons.person, color: Colors.white, size: 18),
+                          Icon(Icons.person, color: Colors.white, size: 34),
                     ),
                   ),
   
@@ -88,7 +90,13 @@ class LibraryPage extends ConsumerWidget {
                 children: [
                   _LibraryMenuItem(title: 'Your likes', onTap: () {}),
                   _LibraryMenuItem(title: 'Playlists', onTap: () {}),
-                  _LibraryMenuItem(title: 'Albums', onTap: () {}),
+                  _LibraryMenuItem(
+  title: 'Albums',
+  onTap: () => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => const LibraryAlbumsPage()),
+  ),
+),
                   _LibraryMenuItem(
                     title: 'Following',
                     onTap: () => context.push('/library/following'),
