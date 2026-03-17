@@ -41,7 +41,7 @@ class _BottomNavBar extends StatelessWidget {
     return BottomNavigationBar(
       backgroundColor: const Color(0xFF111111),
       selectedItemColor: AppTheme.primary,
-      unselectedItemColor: Colors.white.withAlpha(179),
+      unselectedItemColor: Colors.white.withAlpha(153),
       currentIndex: currentIndex,
       onTap: onTap,
       type: BottomNavigationBarType.fixed,
@@ -54,14 +54,14 @@ class _BottomNavBar extends StatelessWidget {
           label: 'Home',
         ),
         BottomNavigationBarItem(
+          icon: Icon(Icons.dynamic_feed_outlined),
+          activeIcon: Icon(Icons.dynamic_feed),
+          label: 'Feed',
+        ),
+        BottomNavigationBarItem(
           icon: Icon(Icons.search),
           activeIcon: Icon(Icons.search),
           label: 'Search',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.cloud_upload_outlined),
-          activeIcon: Icon(Icons.cloud_upload),
-          label: 'Upload',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.library_music_outlined),
@@ -69,9 +69,9 @@ class _BottomNavBar extends StatelessWidget {
           label: 'Library',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.person_outline),
-          activeIcon: Icon(Icons.person),
-          label: 'You',
+          icon: Icon(Icons.graphic_eq),
+          activeIcon: Icon(Icons.graphic_eq),
+          label: 'Upgrade',
         ),
       ],
     );
