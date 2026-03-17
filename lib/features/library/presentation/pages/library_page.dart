@@ -82,7 +82,7 @@ class LibraryPage extends ConsumerWidget {
                   _LibraryMenuItem(title: 'Albums', onTap: () {}),
                   _LibraryMenuItem(
                     title: 'Following',
-                    onTap: () => context.push('/profile/following'),
+                    onTap: () => context.push('/library/following'),
                   ),
                   _LibraryMenuItem(title: 'Stations', onTap: () {}),
                   _LibraryMenuItem(title: 'Your insights', onTap: () {}),
