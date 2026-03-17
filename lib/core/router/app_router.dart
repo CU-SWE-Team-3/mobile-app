@@ -100,7 +100,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/start', builder: (_, __) => const StartPage()),
     GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingPage()),
     GoRoute(path: '/register', builder: (_, __) => const RegisterPage()),
-    GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
+    GoRoute(path: '/login', builder: (_, __) =>  LoginPage()),
     GoRoute(
         path: '/forgot-password',
         builder: (_, __) => const ForgotPasswordPage()),
