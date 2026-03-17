@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/features/settings/presentation/pages/settings_main_page.dart';
 
 class LibraryPage extends ConsumerWidget {
   const LibraryPage({super.key});
@@ -45,16 +46,26 @@ class LibraryPage extends ConsumerWidget {
                     onPressed: () {},
                   ),
 
+                  // Settings icon → opens Settings page
                   IconButton(
                     icon: const Icon(Icons.settings_outlined,
                         color: Colors.white, size: 22),
-                    onPressed: () {},
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const SettingsMainPage()),
+                    ),
                   ),
 
-                  const CircleAvatar(
-                    radius: 18,
-                    backgroundColor: Color(0xFF2A2A2A),
-                    child: Icon(Icons.person, color: Colors.white, size: 18),
+                  // Avatar → opens Profile page
+                  GestureDetector(
+                    onTap: () => context.push('/profile'), // 👈 added
+                    child: const CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Color(0xFF2A2A2A),
+                      child:
+                          Icon(Icons.person, color: Colors.white, size: 18),
+                    ),
                   ),
                 ],
               ),
@@ -66,18 +77,13 @@ class LibraryPage extends ConsumerWidget {
             Expanded(
               child: ListView(
                 children: [
-
                   _LibraryMenuItem(title: 'Your likes', onTap: () {}),
                   _LibraryMenuItem(title: 'Playlists', onTap: () {}),
                   _LibraryMenuItem(title: 'Albums', onTap: () {}),
-
                   _LibraryMenuItem(
                     title: 'Following',
-                    onTap: () {
-                      context.push('/profile/following');
-                    },
+                    onTap: () => context.push('/library/following'),
                   ),
-
                   _LibraryMenuItem(title: 'Stations', onTap: () {}),
                   _LibraryMenuItem(title: 'Your insights', onTap: () {}),
                   _LibraryMenuItem(title: 'Your uploads', onTap: () {}),
@@ -103,10 +109,7 @@ class LibraryPage extends ConsumerWidget {
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       'Find all your recently played content here.',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
                     ),
                   ),
 
@@ -131,10 +134,7 @@ class LibraryPage extends ConsumerWidget {
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       "Find all the tracks you've listened to here.",
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
                     ),
                   ),
 
@@ -165,21 +165,15 @@ class _LibraryMenuItem extends StatelessWidget {
         InkWell(
           onTap: onTap,
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Row(
               children: [
-
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 17),
                   ),
                 ),
-
                 const Icon(
                   Icons.arrow_forward_ios,
                   color: Colors.white54,
@@ -189,7 +183,6 @@ class _LibraryMenuItem extends StatelessWidget {
             ),
           ),
         ),
-
         const Divider(
           color: Color(0xFF1F1F1F),
           height: 1,
