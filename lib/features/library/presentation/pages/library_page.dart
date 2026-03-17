@@ -43,10 +43,13 @@ class LibraryPage extends ConsumerWidget {
                   const SizedBox(width: 1),
 
                   IconButton(
-                    icon: const Icon(Icons.cast_outlined, color: Colors.white, size: 22),
-                    onPressed: () {},
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.settings_outlined,
+                        color: Colors.white, size: 22),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const SettingsMainPage()),
+                    ),
                   ),
 
                   const SizedBox(width: 1),
