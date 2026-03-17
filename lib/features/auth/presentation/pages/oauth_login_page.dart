@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class OAuthLoginPage extends ConsumerWidget {
   const OAuthLoginPage({super.key});
@@ -64,6 +65,7 @@ class OAuthLoginPage extends ConsumerWidget {
               GestureDetector(
                   onTap:(){
                     print("Continue"); // checking that its working
+                    context.push("/home");
                   },
                   child: Container(
                     margin: EdgeInsets.only(top: 35),

@@ -162,8 +162,10 @@ class LoginPage extends StatelessWidget {
                       builder: (context, isValied, child){
                         return SizedBox(
                             width: 400,
-                            child: TextButton(
-                              style: TextButton.styleFrom(alignment: Alignment.center),
+                            child: ElevatedButton(
+                              // onPressed: () => context.push('/register'),
+                              style: TextButton.styleFrom( backgroundColor: const Color(0xFF888888),
+                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
                               onPressed: isValied ? () {
                                 print('continue');
                               }: null,

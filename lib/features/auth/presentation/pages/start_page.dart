@@ -34,9 +34,9 @@ class StartPage extends StatelessWidget {
                   children: [
                     // Logo black
                     Image.asset(
-                      'assets/images/soundcloud_logo.png',
-                      width: 52,
-                      color: Colors.black,
+                      'assets/icons/soundcloud_dark_icon.png',
+                      width: 90,
+                      //color: Colors.black,
                     ),
                     const SizedBox(height: 16),
 
