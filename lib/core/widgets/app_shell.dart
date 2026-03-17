@@ -38,36 +38,39 @@ class _BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return NavigationBar(
-      backgroundColor: AppTheme.surface,
-      indicatorColor: AppTheme.primary.withAlpha(51),
-      selectedIndex: currentIndex,
-      onDestinationSelected: onTap,
-      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.home_outlined, color: AppTheme.textSecondary),
-          selectedIcon: Icon(Icons.home, color: AppTheme.primary),
+    return BottomNavigationBar(
+      backgroundColor: const Color(0xFF111111),
+      selectedItemColor: AppTheme.primary,
+      unselectedItemColor: Colors.white.withAlpha(179),
+      currentIndex: currentIndex,
+      onTap: onTap,
+      type: BottomNavigationBarType.fixed,
+      selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+      unselectedLabelStyle: const TextStyle(fontSize: 11),
+      items: const [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.home_outlined),
+          activeIcon: Icon(Icons.home),
           label: 'Home',
         ),
-        NavigationDestination(
-          icon: Icon(Icons.search, color: AppTheme.textSecondary),
-          selectedIcon: Icon(Icons.search, color: AppTheme.primary),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.search),
+          activeIcon: Icon(Icons.search),
           label: 'Search',
         ),
-        NavigationDestination(
-          icon: Icon(Icons.cloud_upload_outlined, color: AppTheme.textSecondary),
-          selectedIcon: Icon(Icons.cloud_upload, color: AppTheme.primary),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.cloud_upload_outlined),
+          activeIcon: Icon(Icons.cloud_upload),
           label: 'Upload',
         ),
-        NavigationDestination(
-          icon: Icon(Icons.library_music_outlined, color: AppTheme.textSecondary),
-          selectedIcon: Icon(Icons.library_music, color: AppTheme.primary),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.library_music_outlined),
+          activeIcon: Icon(Icons.library_music),
           label: 'Library',
         ),
-        NavigationDestination(
-          icon: Icon(Icons.person_outline, color: AppTheme.textSecondary),
-          selectedIcon: Icon(Icons.person, color: AppTheme.primary),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_outline),
+          activeIcon: Icon(Icons.person),
           label: 'You',
         ),
       ],

@@ -205,7 +205,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.go('/start'),
+          onPressed: () => context.pop(),
         ),
         title: const Text(
           'Tell us more about you',

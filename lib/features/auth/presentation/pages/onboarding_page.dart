@@ -73,7 +73,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () => context.go('/oauth-login'),
+                  onPressed: () => context.push('/oauth-login'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2A2A2A),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -144,7 +144,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () => context.go('/register'),
+                  onPressed: () => context.push('/register'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF888888),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
