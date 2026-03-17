@@ -84,10 +84,11 @@ class _LibraryFollowingPageState extends ConsumerState<LibraryFollowingPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
+        // ✅ Cast button updated
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.cast, color: Colors.white),
+            onPressed: () {},
           ),
         ],
       ),
@@ -276,10 +277,11 @@ class _TrueFriendsPageState extends State<TrueFriendsPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
+        // ✅ Cast button updated
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.cast, color: Colors.white),
+            onPressed: () {},
           ),
         ],
       ),
@@ -390,6 +392,7 @@ class _UserTile extends StatelessWidget {
                   backgroundColor:
                       isFollowing ? Colors.grey[800] : Colors.white,
                   elevation: 0,
+                  side: BorderSide.none,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(20),
                   ),

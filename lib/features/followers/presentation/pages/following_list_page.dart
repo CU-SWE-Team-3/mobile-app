@@ -86,10 +86,11 @@ class _FollowingListPageState extends ConsumerState<FollowingListPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
+        // ✅ Cast button updated
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.cast, color: Colors.white),
+            onPressed: () {},
           ),
         ],
       ),
@@ -100,7 +101,6 @@ class _FollowingListPageState extends ConsumerState<FollowingListPage> {
           // ── "People who follow you back" banner ──────────────────
           GestureDetector(
             onTap: () {
-              // Navigate to True Friends screen
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -279,10 +279,11 @@ class _TrueFriendsPageState extends State<TrueFriendsPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
+        // ✅ Cast button updated
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.cast, color: Colors.white),
+            onPressed: () {},
           ),
         ],
       ),
@@ -344,7 +345,6 @@ class _UserTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         child: Row(
           children: [
-            // Avatar
             CircleAvatar(
               radius: 28,
               backgroundColor: Colors.grey[800],
@@ -354,10 +354,7 @@ class _UserTile extends StatelessWidget {
                   ? const Icon(Icons.person, color: Colors.white)
                   : null,
             ),
-
             const SizedBox(width: 15),
-
-            // Name + info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -389,14 +386,11 @@ class _UserTile extends StatelessWidget {
                 ],
               ),
             ),
-
-            // Follow / Following button
             SizedBox(
               height: 36,
               width: 110,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  // ✅ White when not following, grey when following
                   backgroundColor:
                       isFollowing ? Colors.grey[800] : Colors.white,
                   elevation: 0,
@@ -409,7 +403,6 @@ class _UserTile extends StatelessWidget {
                 child: Text(
                   isFollowing ? "Following" : "Follow",
                   style: TextStyle(
-                    // ✅ Black text on white, white text on grey
                     color: isFollowing ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
