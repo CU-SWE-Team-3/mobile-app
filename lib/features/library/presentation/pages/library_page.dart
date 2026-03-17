@@ -15,19 +15,19 @@ class LibraryPage extends ConsumerWidget {
 
             // ── AppBar ─────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
                   const Text(
                     'Library',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 26,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
 
-                  const SizedBox(width: 10),
+                  const Spacer(),
 
                   const Text(
                     'GET PRO',
@@ -35,54 +35,60 @@ class LibraryPage extends ConsumerWidget {
                       color: Color(0xFFFF5500),
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
                     ),
                   ),
 
-                  const Spacer(),
+                  const SizedBox(width: 1),
 
                   IconButton(
-                    icon: const Icon(Icons.cast, color: Colors.white, size: 22),
+                    icon: const Icon(Icons.cast_outlined, color: Colors.white, size: 22),
                     onPressed: () {},
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
+
+                  const SizedBox(width: 1),
 
                   IconButton(
-                    icon: const Icon(Icons.settings_outlined,
-                        color: Colors.white, size: 22),
+                    icon: const Icon(Icons.settings_outlined, color: Colors.white, size: 22),
                     onPressed: () {},
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
 
+                  const SizedBox(width: 1),
+
+                  // Grey circle avatar with person icon — no photo
                   const CircleAvatar(
                     radius: 18,
-                    backgroundColor: Color(0xFF2A2A2A),
-                    child: Icon(Icons.person, color: Colors.white, size: 18),
+                    backgroundColor: Color(0xFF555555),
+                    child: Icon(Icons.person, color: Colors.white, size: 20),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
 
             // ── Menu list ─────────────────────
             Expanded(
               child: ListView(
+                padding: EdgeInsets.zero,
                 children: [
 
                   _LibraryMenuItem(title: 'Your likes', onTap: () {}),
                   _LibraryMenuItem(title: 'Playlists', onTap: () {}),
                   _LibraryMenuItem(title: 'Albums', onTap: () {}),
-
                   _LibraryMenuItem(
                     title: 'Following',
-                    onTap: () {
-                      context.push('/profile/following');
-                    },
+                    onTap: () => context.push('/profile/following'),
                   ),
-
                   _LibraryMenuItem(title: 'Stations', onTap: () {}),
                   _LibraryMenuItem(title: 'Your insights', onTap: () {}),
                   _LibraryMenuItem(title: 'Your uploads', onTap: () {}),
 
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 32),
 
                   // ── Recently played ───────────
                   const Padding(
@@ -91,26 +97,21 @@ class LibraryPage extends ConsumerWidget {
                       'Recently played',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 6),
-
+                  const SizedBox(height: 8),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       'Find all your recently played content here.',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Color(0xFF999999), fontSize: 14),
                     ),
                   ),
 
-                  const SizedBox(height: 26),
+                  const SizedBox(height: 32),
 
                   // ── Listening history ─────────
                   const Padding(
@@ -119,22 +120,17 @@ class LibraryPage extends ConsumerWidget {
                       'Listening history',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 6),
-
+                  const SizedBox(height: 8),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
                       "Find all the tracks you've listened to here.",
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13,
-                      ),
+                      style: TextStyle(color: Color(0xFF999999), fontSize: 14),
                     ),
                   ),
 
@@ -153,49 +149,26 @@ class _LibraryMenuItem extends StatelessWidget {
   final String title;
   final VoidCallback onTap;
 
-  const _LibraryMenuItem({
-    required this.title,
-    required this.onTap,
-  });
+  const _LibraryMenuItem({required this.title, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Row(
-              children: [
-
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                    ),
-                  ),
-                ),
-
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.white54,
-                  size: 15,
-                ),
-              ],
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+              ),
             ),
-          ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 15),
+          ],
         ),
-
-        const Divider(
-          color: Color(0xFF1F1F1F),
-          height: 1,
-          thickness: 1,
-        ),
-      ],
+      ),
     );
   }
 }
