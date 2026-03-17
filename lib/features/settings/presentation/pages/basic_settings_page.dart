@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:restart_app/restart_app.dart'; // 👈 change import
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+
 class BasicSettingsPage extends ConsumerWidget {
   const BasicSettingsPage({super.key});
 
@@ -42,7 +43,6 @@ class BasicSettingsPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-
           const SizedBox(height: 8),
 
           // ── Clear application cache ───────────────────────────
@@ -50,7 +50,8 @@ class BasicSettingsPage extends ConsumerWidget {
             onTap: () => _showClearCacheDialog(context),
             child: const _BasicSettingItem(
               title: 'Clear application cache',
-              subtitle: 'Clear the application cache to free up memory on your device',
+              subtitle:
+                  'Clear the application cache to free up memory on your device',
             ),
           ),
 
@@ -71,7 +72,6 @@ class BasicSettingsPage extends ConsumerWidget {
               subtitle: 'Custom app icons to match your style',
             ),
           ),
-
         ],
       ),
     );
@@ -124,79 +124,79 @@ class BasicSettingsPage extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-                 TextButton(
-  onPressed: () async {
-    Navigator.pop(context); // close confirm dialog
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.pop(context); // close confirm dialog
 
-    // Show loading dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        backgroundColor: const Color(0xFF2A2A2A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Padding(
-          padding: EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Clearing cache',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              SizedBox(height: 20),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 3,
+                      // Show loading dialog
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (_) => Dialog(
+                          backgroundColor: const Color(0xFF2A2A2A),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Clearing cache',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 20),
+                                Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 28,
+                                      height: 28,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 3,
+                                      ),
+                                    ),
+                                    SizedBox(width: 16),
+                                    Text(
+                                      'Deleting cached files...',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+
+                      // Clear cache
+                      await _clearCache();
+
+                      // Wait a moment so user sees the loading
+                      await Future.delayed(const Duration(seconds: 2));
+
+                      // Restart app
+                      Restart.restartApp();
+                    },
+                    child: const Text(
+                      'YES',
+                      style: TextStyle(
+                        color: Color(0xFFFF5500),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                   ),
-                  SizedBox(width: 16),
-                  Text(
-                    'Deleting cached files...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    // Clear cache
-    await _clearCache();
-
-    // Wait a moment so user sees the loading
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Restart app
-    Restart.restartApp();
-  },
-  child: const Text(
-    'YES',
-    style: TextStyle(
-      color: Color(0xFFFF5500),
-      fontWeight: FontWeight.bold,
-      fontSize: 15,
-    ),
-  ),
-),
                 ],
               ),
             ],
@@ -206,6 +206,7 @@ class BasicSettingsPage extends ConsumerWidget {
     );
   }
 }
+
 Future<void> _clearCache() async {
   try {
     // Clear temp directory
@@ -274,15 +275,60 @@ class _AppIconPageState extends State<AppIconPage> {
   String _selectedIcon = 'Default';
 
   final List<Map<String, dynamic>> _icons = [
-    {"name": "Default", "color": Colors.transparent, "locked": false, "isDefault": true},
-    {"name": "OG", "color": const Color(0xFFFF5500), "locked": false, "isDefault": false},
-    {"name": "Chrome", "color": Colors.blueGrey, "locked": true, "isDefault": false},
-    {"name": "Rose Gold", "color": const Color(0xFFB76E79), "locked": true, "isDefault": false},
-    {"name": "Silver", "color": Colors.grey, "locked": true, "isDefault": false},
-    {"name": "Soft Purple", "color": const Color(0xFF9B7FD4), "locked": true, "isDefault": false},
-    {"name": "Hot Pink", "color": const Color(0xFFFF0080), "locked": true, "isDefault": false},
-    {"name": "Tie-Dye", "color": Colors.deepOrange, "locked": true, "isDefault": false},
-    {"name": "Leopard", "color": const Color(0xFFD2691E), "locked": true, "isDefault": false},
+    {
+      "name": "Default",
+      "color": Colors.transparent,
+      "locked": false,
+      "isDefault": true
+    },
+    {
+      "name": "OG",
+      "color": const Color(0xFFFF5500),
+      "locked": false,
+      "isDefault": false
+    },
+    {
+      "name": "Chrome",
+      "color": Colors.blueGrey,
+      "locked": true,
+      "isDefault": false
+    },
+    {
+      "name": "Rose Gold",
+      "color": const Color(0xFFB76E79),
+      "locked": true,
+      "isDefault": false
+    },
+    {
+      "name": "Silver",
+      "color": Colors.grey,
+      "locked": true,
+      "isDefault": false
+    },
+    {
+      "name": "Soft Purple",
+      "color": const Color(0xFF9B7FD4),
+      "locked": true,
+      "isDefault": false
+    },
+    {
+      "name": "Hot Pink",
+      "color": const Color(0xFFFF0080),
+      "locked": true,
+      "isDefault": false
+    },
+    {
+      "name": "Tie-Dye",
+      "color": Colors.deepOrange,
+      "locked": true,
+      "isDefault": false
+    },
+    {
+      "name": "Leopard",
+      "color": const Color(0xFFD2691E),
+      "locked": true,
+      "isDefault": false
+    },
   ];
 
   @override
@@ -340,9 +386,7 @@ class _AppIconPageState extends State<AppIconPage> {
                     width: 60,
                     height: 60,
                     decoration: BoxDecoration(
-                      color: icon["isDefault"]
-                          ? Colors.black
-                          : icon["color"],
+                      color: icon["isDefault"] ? Colors.black : icon["color"],
                       borderRadius: BorderRadius.circular(12),
                       border: icon["isDefault"]
                           ? Border.all(color: Colors.grey[800]!, width: 1)
@@ -350,9 +394,7 @@ class _AppIconPageState extends State<AppIconPage> {
                     ),
                     child: Icon(
                       Icons.cloud,
-                      color: icon["isDefault"]
-                          ? Colors.white
-                          : Colors.white,
+                      color: icon["isDefault"] ? Colors.white : Colors.white,
                       size: 32,
                     ),
                   ),

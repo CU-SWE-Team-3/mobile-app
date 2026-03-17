@@ -2,10 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final List<Map<String, dynamic>> _fakeFollowing = [
-  {"name": "z0z", "country": null, "followers": 3, "image": "https://i.pravatar.cc/150?img=1", "followsYouBack": true},
-  {"name": "Mohamed Alabasy", "country": "Egypt", "followers": 2, "image": null, "followsYouBack": true},
-  {"name": "Khalid", "country": "Egypt", "followers": 10, "image": "https://i.pravatar.cc/150?img=3", "followsYouBack": false},
-  {"name": "Farghaly", "country": "Sheikh Zayed", "followers": 800, "image": "https://i.pravatar.cc/150?img=5", "followsYouBack": false},
+  {
+    "name": "z0z",
+    "country": null,
+    "followers": 3,
+    "image": "https://i.pravatar.cc/150?img=1",
+    "followsYouBack": true
+  },
+  {
+    "name": "Mohamed Alabasy",
+    "country": "Egypt",
+    "followers": 2,
+    "image": null,
+    "followsYouBack": true
+  },
+  {
+    "name": "Khalid",
+    "country": "Egypt",
+    "followers": 10,
+    "image": "https://i.pravatar.cc/150?img=3",
+    "followsYouBack": false
+  },
+  {
+    "name": "Farghaly",
+    "country": "Sheikh Zayed",
+    "followers": 800,
+    "image": "https://i.pravatar.cc/150?img=5",
+    "followsYouBack": false
+  },
 ];
 
 // ─────────────────────────────────────────────
@@ -220,14 +244,12 @@ class _TrueFriendsPageState extends State<TrueFriendsPage> {
     _localFollowing = Set.from(widget.following);
   }
 
-  List<MapEntry<int, Map<String, dynamic>>> get _trueFriends =>
-      _fakeFollowing
-          .asMap()
-          .entries
-          .where((e) =>
-              e.value["followsYouBack"] == true &&
-              _localFollowing.contains(e.key))
-          .toList();
+  List<MapEntry<int, Map<String, dynamic>>> get _trueFriends => _fakeFollowing
+      .asMap()
+      .entries
+      .where((e) =>
+          e.value["followsYouBack"] == true && _localFollowing.contains(e.key))
+      .toList();
 
   @override
   Widget build(BuildContext context) {
