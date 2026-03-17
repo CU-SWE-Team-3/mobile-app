@@ -2,290 +2,219 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
-
-  @override
-  ConsumerState<LoginPage> createState() => _LoginPageState();
-}
-
-class _LoginPageState extends ConsumerState<LoginPage>
-    with SingleTickerProviderStateMixin {
-  final _passwordController = TextEditingController();
-  final _passwordFocusNode = FocusNode();
-
-  bool _isPasswordVisible = false;
-  bool _isCaptchaChecked = false;
-
-  late final AnimationController _captchaAnimController;
-  late final Animation<double> _captchaScaleAnim;
-
-  // Mock — in the real flow this comes from the onboarding/email step
-  static const String _displayEmail = 'soundcloud1234567es@gmail.com';
-
-  @override
-  void initState() {
-    super.initState();
-    _captchaAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _captchaScaleAnim = CurvedAnimation(
-      parent: _captchaAnimController,
-      curve: Curves.elasticOut,
-    );
-  }
-
-  @override
-  void dispose() {
-    _passwordController.dispose();
-    _passwordFocusNode.dispose();
-    _captchaAnimController.dispose();
-    super.dispose();
-  }
-
-  void _onCaptchaTap() {
-    setState(() => _isCaptchaChecked = !_isCaptchaChecked);
-    if (_isCaptchaChecked) {
-      _captchaAnimController.forward();
-    } else {
-      _captchaAnimController.reverse();
-    }
-  }
-
-  void _onContinue() {
-    if (!_isCaptchaChecked || _passwordController.text.isEmpty) return;
-    // TODO: wire to login use case
-  }
-
-  Widget _buildMockCaptcha() {
-    return GestureDetector(
-      onTap: _onCaptchaTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: const Color(0xFF3A3A3A)),
-        ),
-        child: Row(
-          children: [
-            // Animated checkbox
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: _isCaptchaChecked
-                      ? const Color(0xFFFF5500)
-                      : const Color(0xFF999999),
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(2),
-              ),
-              child: _isCaptchaChecked
-                  ? ScaleTransition(
-                      scale: _captchaScaleAnim,
-                      child: const Icon(
-                        Icons.check,
-                        color: Color(0xFFFF5500),
-                        size: 18,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 14),
-
-            // "I'm not a robot"
-            const Expanded(
-              child: Text(
-                "I'm not a robot",
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-
-            // reCAPTCHA branding
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  'reCAPTCHA',
-                  style: TextStyle(
-                    color: Color(0xFF666666),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  'Privacy - Terms',
-                  style: TextStyle(color: Color(0xFF666666), fontSize: 8),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+class LoginPage extends StatelessWidget {
+  final ValueNotifier<bool> _isPasswordValid = ValueNotifier(false);
+  final ValueNotifier<bool> _isPasswordVisible = ValueNotifier(false);
+  final TextEditingController _passwordController = TextEditingController();
+  final ValueNotifier<String?> _errorMessage = ValueNotifier(null);
 
   @override
   Widget build(BuildContext context) {
-    final hasPassword = _passwordController.text.isNotEmpty;
-    final canContinue = _isCaptchaChecked && hasPassword;
-
+    double screenWidth = MediaQuery.of(context).size.width;
+    double screenHeight = MediaQuery.of(context).size.height;
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Back button + title row
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => context.go('/start'),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF2A2A2A),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.chevron_left,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      'Welcome back!',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  // Invisible balance widget so title stays centered
-                  const SizedBox(width: 40),
-                ],
-              ),
-              const SizedBox(height: 36),
+        backgroundColor: Colors.black12,
 
-              // Email display
-              const Text(
-                'Your email address or profile URL',
-                style: TextStyle(color: Color(0xFF999999), fontSize: 13),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                _displayEmail,
-                style: TextStyle(color: Colors.white, fontSize: 16),
-              ),
-              const SizedBox(height: 24),
-
-              // Password field
-              TextField(
-                controller: _passwordController,
-                focusNode: _passwordFocusNode,
-                obscureText: !_isPasswordVisible,
-                cursorColor: const Color(0xFFFF5500),
-                style: const TextStyle(color: Colors.white, fontSize: 15),
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'Your Password (min. 6 characters)',
-                  hintStyle: const TextStyle(
-                    color: Color(0xFF999999),
-                    fontSize: 14,
-                  ),
-                  filled: true,
-                  fillColor: Colors.transparent,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 16,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: const BorderSide(color: Color(0xFF3A3A3A)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    borderSide: const BorderSide(
-                      color: Color(0xFFFF5500),
-                      width: 1.5,
-                    ),
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _isPasswordVisible
-                          ? Icons.visibility
-                          : Icons.visibility_off_outlined,
-                      color: const Color(0xFF999999),
-                      size: 22,
-                    ),
-                    onPressed: () =>
-                        setState(() => _isPasswordVisible = !_isPasswordVisible),
-                  ),
+        appBar: AppBar(
+            centerTitle: true,
+            toolbarHeight: 90,
+            leadingWidth: 90,
+            leading: Padding(
+              padding: EdgeInsets.only(left: 17, top: 30, bottom:10),
+              child: CircleAvatar(
+                backgroundColor: Colors.grey[850],
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back_ios_sharp, color: Colors.white, size: 30),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    print("Back");
+                  },
                 ),
               ),
-              const SizedBox(height: 16),
-
-              // Continue button
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: canContinue ? _onContinue : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: canContinue
-                        ? Colors.white
-                        : const Color(0xFF3A3A3A),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  child: Text(
-                    'Continue',
-                    style: TextStyle(
-                      color: canContinue
-                          ? Colors.black
-                          : const Color(0xFF666666),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+            ),
+            backgroundColor: Colors.black12,
+            title: const Padding(padding:  EdgeInsets.only(top: 20),
+              child: Text("Welcome back!",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 25,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'modern sans-serif font'
                 ),
-              ),
-              const SizedBox(height: 16),
-
-              // Forgot password
-              GestureDetector(
-                onTap: () => context.go('/forgot-password'),
-                child: const Text(
-                  'Forgot your password?',
-                  style: TextStyle(
-                    color: Color(0xFF3D7EFF),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // Mock CAPTCHA
-              _buildMockCaptcha(),
-            ],
-          ),
+              ),)
         ),
-      ),
+
+        body:
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: screenWidth * 0.01,
+            vertical: screenHeight * 0.01,
+          ),
+          child: Container(
+            child:
+            Column(
+                children: [
+                  Container(
+                    margin: EdgeInsets.only(top:40, right: 50),
+                    child: const Text('Your email address or profile URL',
+                      textAlign: TextAlign.start,
+                      style:  TextStyle(
+                          color: Colors.grey,
+                          fontSize: 17
+                      ),
+                    ),
+                  ),
+                  Container(
+                    margin: EdgeInsets.only(right: 30, bottom: 35),
+                    child: const Text('BioBeats1234567@gmail.com',  //Mock
+                      textAlign: TextAlign.left,
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight(450)
+                      ),
+                    ),
+                  ),
+                  ValueListenableBuilder<String?>(
+                    valueListenable: _errorMessage,
+                    builder: (context, errorMsg, child){
+                      return ValueListenableBuilder<bool>(
+                          valueListenable: _isPasswordVisible,
+                          builder: (context, isVisible, child){
+                            // Only show a real error (not null, not blank space)
+                            final String? displayError =
+                            (errorMsg != null && errorMsg.trim().isNotEmpty)
+                                ? errorMsg
+                                : null;
+                            return SizedBox(
+                                width: 380,
+                                child:
+                                TextField(
+                                  controller: _passwordController,
+                                  textAlignVertical: TextAlignVertical.top,
+                                  obscureText: !isVisible, //for hiding the written password
+                                  cursorColor: Colors.orange,
+                                  style:const TextStyle(color: Colors.white),
+                                  onChanged: (Value){
+                                    if(Value.isEmpty){
+                                      _isPasswordValid.value = false;
+                                      _errorMessage.value = null; // null = no error shown
+                                    } else if (Value.length < 8){
+                                      _isPasswordValid.value = false;
+                                      _errorMessage.value = 'Password must contain min 8 characters';
+                                    } else {
+                                      _isPasswordValid.value = true;
+                                      _errorMessage.value = null;
+                                    }
+                                  },
+                                  decoration:
+                                  InputDecoration(
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        vertical: 22, horizontal: 12,
+                                      ),
+                                      labelText: 'Your Password (min. 8 characters)',
+                                      labelStyle: const TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 16
+                                      ),
+                                      floatingLabelBehavior: FloatingLabelBehavior.auto,
+                                      errorText: displayError,
+                                      errorStyle: TextStyle(color: Colors.white, fontSize: 16),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          isVisible
+                                              ? Icons.visibility_off : Icons.visibility,
+                                          size: 30,
+                                          color: Colors.grey,
+                                        ),
+                                        onPressed: (){
+                                          _isPasswordVisible.value = !_isPasswordVisible.value;
+                                        },
+                                      ),
+                                      errorBorder: OutlineInputBorder(
+                                          borderSide: BorderSide(color: Colors.red, width: 1.5),
+                                          borderRadius: BorderRadius.circular(5)
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white24,
+                                      enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(5),
+                                          borderSide: BorderSide(color: Colors.grey, width: 1)
+                                      ),
+                                      border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(5),
+                                          borderSide: BorderSide(color:Colors.grey, width:1)
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(5),
+                                          borderSide: BorderSide(color: Colors.white54, width: 1.5)
+                                      )
+                                  ),
+                                )
+                            );
+                          }
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder<bool>(
+                      valueListenable: _isPasswordValid,
+                      builder: (context, isValied, child){
+                        return SizedBox(
+                            width: 400,
+                            child: TextButton(
+                              style: TextButton.styleFrom(alignment: Alignment.center),
+                              onPressed: isValied ? () {
+                                print('continue');
+                              }: null,
+                              child:
+                              GestureDetector(
+                                child:
+                                Container(
+                                  height: 55,
+                                  decoration: BoxDecoration(
+                                    color: isValied ?
+                                    Colors.white : Colors.grey[400],
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  margin: EdgeInsets.only(top: 10),
+                                  child: Center(
+                                    child: Text('Continue',
+                                      textAlign : TextAlign.center,
+                                      style: TextStyle(
+                                        color: isValied ? Colors.black : Colors.grey[700],
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                        );
+                      }
+                  ),
+                  GestureDetector(
+                    onTap: (){
+                      print("Forgot"); //check
+                    },
+                    child:
+                    Container(
+                        margin: EdgeInsets.only(right: 180, top: 20),
+                        child: const Text("Forgot your password?",
+                          textAlign: TextAlign.left,
+                          style: TextStyle(
+                              color: Colors.lightBlueAccent,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold
+                          ),
+                        )
+                    ),
+                  )
+                ]
+            ),
+          ),
+        )
     );
   }
 }

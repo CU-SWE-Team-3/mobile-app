@@ -9,7 +9,7 @@ class StartPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.black12,
       body: Stack(
         children: [
           // Abstract art background
