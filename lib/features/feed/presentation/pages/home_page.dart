@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:soundcloud_clone/core/themes/app_theme.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 
-// TODO: Module 8 — Kareemeldine Erfan
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 

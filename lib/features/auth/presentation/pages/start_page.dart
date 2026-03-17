@@ -9,7 +9,7 @@ class StartPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.black12,
       body: Stack(
         children: [
           // Abstract art background
@@ -34,9 +34,9 @@ class StartPage extends StatelessWidget {
                   children: [
                     // Logo black
                     Image.asset(
-                      'assets/images/soundcloud_logo.png',
-                      width: 52,
-                      color: Colors.black,
+                      'assets/icons/SoundCloud_Dark_Icon.png',
+                      width: 90,
+                      //color: Colors.black,
                     ),
                     const SizedBox(height: 16),
 

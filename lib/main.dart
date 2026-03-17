@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/auth/presentation/pages/forgot_password_page.dart';
+
 import 'core/router/app_router.dart';
 import 'core/themes/app_theme.dart';
 import 'injection_container.dart';
@@ -10,8 +12,13 @@ void main() async {
 
   runApp(
     const ProviderScope(
-      child: MyApp(),
-    ),
+        child: MyApp(),
+      // child: MaterialApp(
+        // debugShowCheckedModeBanner: false,
+        // home: ForgotPasswordPage(),
+
+      )
+    // ),
   );
 }
 
