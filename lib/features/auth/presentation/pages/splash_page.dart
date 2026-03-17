@@ -25,7 +25,7 @@ class _SplashPageState extends State<SplashPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: Colors.black12,
       body: Center(
         child: Image.asset(
           'assets/images/soundcloud_logo.png',
