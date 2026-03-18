@@ -3,9 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 class EmailVerificationPage extends ConsumerWidget {
-  const EmailVerificationPage({super.key});
-
-  static const String _displayEmail = 'test@example.com';
+  final String email;
+  const EmailVerificationPage({super.key, required this.email});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -72,9 +71,9 @@ class EmailVerificationPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              const Center(
+              Center(
                 child: Text(
-                  _displayEmail,
+                  email,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
