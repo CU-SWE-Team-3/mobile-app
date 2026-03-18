@@ -15,8 +15,8 @@ class AppShell extends StatelessWidget {
       body: Column(
         children: [
           Expanded(child: navigationShell),
-          // TODO: Module 5 (Ziad Awad) — replace with MiniPlayer widget
-          const _MiniPlayerSlot(),
+          // Hidden on Feed tab (index 1) — Feed manages its own mini player
+          _MiniPlayerSlot(currentIndex: navigationShell.currentIndex),
         ],
       ),
       bottomNavigationBar: _BottomNavBar(
@@ -45,7 +45,8 @@ class _BottomNavBar extends StatelessWidget {
       currentIndex: currentIndex,
       onTap: onTap,
       type: BottomNavigationBarType.fixed,
-      selectedLabelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+      selectedLabelStyle:
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
       unselectedLabelStyle: const TextStyle(fontSize: 11),
       items: const [
         BottomNavigationBarItem(
@@ -78,12 +79,78 @@ class _BottomNavBar extends StatelessWidget {
   }
 }
 
-// Placeholder for the mini-player in module 5//
 class _MiniPlayerSlot extends StatelessWidget {
-  const _MiniPlayerSlot();
+  final int currentIndex;
+
+  const _MiniPlayerSlot({required this.currentIndex});
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.shrink();
+    // Feed tab (index 1) manages its own mini player — hide here
+    if (currentIndex == 1) return const SizedBox.shrink();
+    return const _MiniPlayerBar();
+  }
+}
+
+class _MiniPlayerBar extends StatelessWidget {
+  const _MiniPlayerBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(32),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.play_arrow, color: Colors.black, size: 22),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "i'm not okay [peril]",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Dugis',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.person_add_outlined,
+                color: Colors.white, size: 22),
+            onPressed: () {},
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.favorite_border,
+                color: Colors.white, size: 22),
+            onPressed: () {},
+          ),
+        ],
+      ),
+    );
   }
 }

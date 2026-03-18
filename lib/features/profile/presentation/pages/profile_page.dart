@@ -110,7 +110,7 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Row(
           children: [
             _iconBtn(Icons.arrow_back_ios_new_rounded,
-                () => context.canPop() ? context.pop() : null),
+                () => Navigator.of(context).maybePop()),
             const Spacer(),
             _iconBtn(Icons.cast_rounded, () {}),
             const SizedBox(width: 8),
