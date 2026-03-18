@@ -1,17 +1,18 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:soundcloud_clone/features/auth/presentation/providers/auth_provider.dart';
+import '../../../../core/network/dio_client.dart';
+import '../widgets/recaptcha_webview.dart';
 
-class RegisterPage extends ConsumerStatefulWidget {
-  const RegisterPage({super.key});
+class RegisterPage extends StatefulWidget {
+  final String email;
+  const RegisterPage({super.key, required this.email});
 
   @override
-  ConsumerState<RegisterPage> createState() => _RegisterPageState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterPageState extends ConsumerState<RegisterPage>
-    with SingleTickerProviderStateMixin {
+class _RegisterPageState extends State<RegisterPage> {
   final _displayNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -22,40 +23,40 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
   String? _selectedDay;
   String? _selectedYear;
   String? _selectedGender;
-  bool _isCaptchaChecked = false;
   bool _attempted = false;
+  bool _isLoading = false;
 
-  late final AnimationController _captchaAnimController;
-  late final Animation<double> _captchaScaleAnim;
+  final _dio = dioClient.dio;
 
   final List<String> _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
   ];
 
   final List<String> _days = List.generate(31, (i) => '${i + 1}');
   final List<String> _years = List.generate(100, (i) => '${2019 - i}');
-  final List<String> _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
-
-  @override
-  void initState() {
-    super.initState();
-    _captchaAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _captchaScaleAnim = CurvedAnimation(
-      parent: _captchaAnimController,
-      curve: Curves.elasticOut,
-    );
-  }
+  final List<String> _genders = [
+    'Male',
+    'Female',
+    'Other',
+    'Prefer not to say'
+  ];
 
   @override
   void dispose() {
     _displayNameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _captchaAnimController.dispose();
     super.dispose();
   }
 
@@ -72,39 +73,68 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
     return true;
   }
 
-  void _onCaptchaTap() {
-    setState(() => _isCaptchaChecked = !_isCaptchaChecked);
-    if (_isCaptchaChecked) {
-      _captchaAnimController.forward();
-    } else {
-      _captchaAnimController.reverse();
-    }
-  }
-
   Future<void> _onContinue() async {
     setState(() => _attempted = true);
 
     final nameValid = _isDisplayNameValid(_displayNameController.text);
     final passwordValid = _isPasswordValid(_passwordController.text);
-    final passwordsMatch = _passwordController.text == _confirmPasswordController.text;
-    final dobComplete = _selectedMonth != null && _selectedDay != null && _selectedYear != null;
+    final passwordsMatch =
+        _passwordController.text == _confirmPasswordController.text;
+    final dobComplete =
+        _selectedMonth != null && _selectedDay != null && _selectedYear != null;
     final genderSelected = _selectedGender != null;
 
-    if (!nameValid || !passwordValid || !passwordsMatch ||
-        _confirmPasswordController.text.isEmpty || !dobComplete ||
-        !genderSelected || !_isCaptchaChecked) {
+    if (!nameValid ||
+        !passwordValid ||
+        !passwordsMatch ||
+        _confirmPasswordController.text.isEmpty ||
+        !dobComplete ||
+        !genderSelected) {
       return;
     }
 
-    final age = DateTime.now().year - int.parse(_selectedYear!);
+    // Show reCAPTCHA sheet and wait for token
+    final token = await showRecaptchaBottomSheet(context);
+    print('Captcha token: $token');
+    if (token == null || !mounted) return;
 
-    await ref.read(authProvider.notifier).register(
-      email: 'temp@email.com',
-      password: _passwordController.text.trim(),
-      displayName: _displayNameController.text.trim(),
-      age: age,
-      gender: _selectedGender,
-    );
+    setState(() => _isLoading = true);
+
+    try {
+      final age = DateTime.now().year - int.parse(_selectedYear!);
+      print(
+          'Register request: email=${widget.email}, displayName=${_displayNameController.text.trim()}, age=$age, gender=$_selectedGender');
+      await _dio.post('/auth/register', data: {
+        'email': widget.email,
+        'password': _passwordController.text.trim(),
+        'displayName': _displayNameController.text.trim(),
+        'age': age,
+        'gender': _selectedGender,
+        'captchaToken': token,
+      });
+
+      if (mounted) context.go('/email-verification', extra: widget.email);
+    } on DioException catch (e) {
+      print('Error status: ${e.response?.statusCode}');
+      print('Error body: ${e.response?.data}');
+      final status = e.response?.statusCode;
+      final errorMessage = e.response?.data['error'] ?? '';
+
+      if (status == 400 && errorMessage.toString().contains('already registered')) {
+        if (mounted) context.push('/login', extra: widget.email);
+        return;
+      }
+
+      if (!mounted) return;
+      final message = status == 409
+          ? 'An account with this email already exists.'
+          : 'Something went wrong. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Widget _buildDropdown({
@@ -132,82 +162,13 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
           icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
           style: const TextStyle(color: Colors.white, fontSize: 16),
           isExpanded: true,
-          items: items.map((item) => DropdownMenuItem(
-            value: item,
-            child: Text(item),
-          )).toList(),
+          items: items
+              .map((item) => DropdownMenuItem(
+                    value: item,
+                    child: Text(item),
+                  ))
+              .toList(),
           onChanged: onChanged,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMockCaptcha() {
-    final showCaptchaError = _attempted && !_isCaptchaChecked;
-    return GestureDetector(
-      onTap: _onCaptchaTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(
-            color: showCaptchaError ? Colors.red : const Color(0xFF3A3A3A),
-            width: showCaptchaError ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: _isCaptchaChecked
-                      ? const Color(0xFFFF5500)
-                      : const Color(0xFF999999),
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(2),
-              ),
-              child: _isCaptchaChecked
-                  ? ScaleTransition(
-                      scale: _captchaScaleAnim,
-                      child: const Icon(
-                        Icons.check,
-                        color: Color(0xFFFF5500),
-                        size: 18,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 14),
-            const Expanded(
-              child: Text(
-                "I'm not a robot",
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  'reCAPTCHA',
-                  style: TextStyle(
-                    color: Color(0xFF666666),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  'Privacy - Terms',
-                  style: TextStyle(color: Color(0xFF666666), fontSize: 8),
-                ),
-              ],
-            ),
-          ],
         ),
       ),
     );
@@ -215,16 +176,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authProvider);
-
-    ref.listen(authProvider, (previous, next) {
-      if (previous?.user == null && next.user != null) {
-        context.go('/email-verification');
-      }
-    });
-
-    final nameInvalid = _attempted && !_isDisplayNameValid(_displayNameController.text);
-    final passwordInvalid = _attempted && !_isPasswordValid(_passwordController.text);
+    final nameInvalid =
+        _attempted && !_isDisplayNameValid(_displayNameController.text);
+    final passwordInvalid =
+        _attempted && !_isPasswordValid(_passwordController.text);
     final confirmInvalid = _attempted &&
         (_confirmPasswordController.text.isEmpty ||
             _passwordController.text != _confirmPasswordController.text);
@@ -233,8 +188,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
     final yearInvalid = _attempted && _selectedYear == null;
     final genderInvalid = _attempted && _selectedGender == null;
 
-    final canContinue = _isCaptchaChecked &&
-        !authState.isLoading &&
+    final canContinue = !_isLoading &&
         _isPasswordValid(_passwordController.text) &&
         _passwordController.text == _confirmPasswordController.text &&
         _confirmPasswordController.text.isNotEmpty &&
@@ -285,7 +239,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
                   labelText: 'Display name',
                   labelStyle: TextStyle(color: Color(0xFF999999), fontSize: 13),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
               ),
             ),
@@ -384,15 +339,20 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
                 style: const TextStyle(color: Colors.white, fontSize: 16),
                 decoration: InputDecoration(
                   labelText: 'Password (min. 8 chars, letter, number, symbol)',
-                  labelStyle: const TextStyle(color: Color(0xFF999999), fontSize: 13),
+                  labelStyle:
+                      const TextStyle(color: Color(0xFF999999), fontSize: 13),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      _isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                       color: const Color(0xFF999999),
                     ),
-                    onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                    onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible),
                   ),
                 ),
               ),
@@ -424,15 +384,20 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
                 style: const TextStyle(color: Colors.white, fontSize: 16),
                 decoration: InputDecoration(
                   labelText: 'Confirm password',
-                  labelStyle: const TextStyle(color: Color(0xFF999999), fontSize: 13),
+                  labelStyle:
+                      const TextStyle(color: Color(0xFF999999), fontSize: 13),
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _isConfirmPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                      _isConfirmPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                       color: const Color(0xFF999999),
                     ),
-                    onPressed: () => setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
+                    onPressed: () => setState(() =>
+                        _isConfirmPasswordVisible = !_isConfirmPasswordVisible),
                   ),
                 ),
               ),
@@ -448,36 +413,21 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
               ),
             const SizedBox(height: 24),
 
-            // Mock CAPTCHA
-            _buildMockCaptcha(),
-            const SizedBox(height: 24),
-
-            // Error
-            if (authState.error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  authState.error!,
-                  style: const TextStyle(color: Colors.red, fontSize: 13),
-                ),
-              ),
-
-            // Continue button
+            // Continue button — tapping opens reCAPTCHA sheet if fields are valid
             SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
                 onPressed: _onContinue,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: canContinue
-                      ? Colors.white
-                      : const Color(0xFF3A3A3A),
+                  backgroundColor:
+                      canContinue ? Colors.white : const Color(0xFF3A3A3A),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
-                child: authState.isLoading
+                child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.black)
                     : Text(
                         'Continue',
