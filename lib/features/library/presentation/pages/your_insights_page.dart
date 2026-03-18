@@ -173,75 +173,12 @@ class _SoundCloudTab extends StatelessWidget {
         children: [
           const SizedBox(height: 24),
 
-          // ── illustration placeholder ─────────────────────────────
-          Container(
-            width: double.infinity,
-            height: 220,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Orange waveform bars illustration
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: List.generate(18, (i) {
-                    final heights = [
-                      20.0, 35.0, 50.0, 30.0, 60.0, 45.0, 70.0,
-                      55.0, 80.0, 65.0, 90.0, 70.0, 55.0, 40.0,
-                      60.0, 35.0, 25.0, 15.0
-                    ];
-                    final isOrange = i > 8;
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      width: 8,
-                      height: heights[i],
-                      decoration: BoxDecoration(
-                        color: isOrange
-                            ? const Color(0xFFFF5500)
-                            : Colors.white.withOpacity(0.6),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Knobs
-                    for (int i = 0; i < 3; i++) ...[
-                      Container(
-                        width: 28,
-                        height: 28,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF5500),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                              color: Colors.black, width: 2),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    // Slider bar
-                    Container(
-                      width: 80,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF5500),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 32),
+         Image.asset('assets/images/SoundCloud_Insignts.1.png',
+                height: 220,
+                width: double.infinity,
+                fit: BoxFit.contain,
+              ),
+          
 
           // ── headline ─────────────────────────────────────────────
           const Text(
@@ -279,25 +216,29 @@ class _SoundCloudTab extends StatelessWidget {
 
           const SizedBox(height: 28),
 
-          // ── Upload button (button only, no navigation) ────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white24),
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'Upload',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
+          // ── Upload button ────────────────────────────────────────────────
+SizedBox(
+  width: double.infinity,
+  child: OutlinedButton(
+    onPressed: () {},
+    style: OutlinedButton.styleFrom(
+      side: const BorderSide(color: Colors.white),
+      //backgroundColor: const Color(0xFF1E1E1E),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+      ),
+    ),
+    child: const Text(
+      'Upload',
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  ),
+),
 
           const SizedBox(height: 60),
         ],
@@ -317,93 +258,13 @@ class _AllPlatformsTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 24),
-
-          // ── illustration placeholder ─────────────────────────────
-          Container(
-            width: double.infinity,
-            height: 220,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Purple/pink device illustration
-                Container(
-                  width: 130,
-                  height: 130,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2D1B6B),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: const Color(0xFF6B3FA0), width: 2),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Waveform
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: List.generate(8, (i) {
-                          final h = [8.0, 16.0, 12.0, 20.0,
-                              14.0, 18.0, 10.0, 6.0];
-                          return Container(
-                            margin: const EdgeInsets.symmetric(
-                                horizontal: 2),
-                            width: 6,
-                            height: h[i],
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.6),
-                              borderRadius:
-                                  BorderRadius.circular(2),
-                            ),
-                          );
-                        }),
-                      ),
-                      const SizedBox(height: 12),
-                      // Playback controls
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.fast_rewind_rounded,
-                              color: Colors.white.withOpacity(0.7),
-                              size: 20),
-                          const SizedBox(width: 12),
-                          Container(
-                            width: 30,
-                            height: 30,
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.black,
-                                size: 18),
-                          ),
-                          const SizedBox(width: 12),
-                          Icon(Icons.fast_forward_rounded,
-                              color: Colors.white.withOpacity(0.7),
-                              size: 20),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // Pink music note decoration
-                Positioned(
-                  top: 30,
-                  right: 60,
-                  child: Icon(Icons.music_note,
-                      color: Colors.pink[300], size: 40),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 32),
+          
+          Image.asset('assets/images/SoundCloud_Ins.2.png', 
+                height: 220,
+                width: double.infinity,
+                fit: BoxFit.contain,
+              ),
+                        const SizedBox(height: 24),
 
           // ── headline ─────────────────────────────────────────────
           const Text(
@@ -441,27 +302,30 @@ class _AllPlatformsTab extends StatelessWidget {
 
           const SizedBox(height: 28),
 
-          // ── Upgrade to Artist Pro button (button only) ────────────
-          Container(
+          SizedBox(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white24),
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'Upgrade to Artist Pro',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
+            child: OutlinedButton(
+              onPressed: () {},
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.white),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+              child: const Text(
+                'Upgrade to Artist Pro',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
 
           const SizedBox(height: 60),
+
         ],
       ),
     );
