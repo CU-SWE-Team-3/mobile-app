@@ -15,7 +15,6 @@ class LibraryPage extends ConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
-
             // ── AppBar ─────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
@@ -31,7 +30,6 @@ class LibraryPage extends ConsumerWidget {
                   ),
 
                   const Spacer(),
-                  
 
                   const Text(
                     'GET PRO',
@@ -42,12 +40,12 @@ class LibraryPage extends ConsumerWidget {
                       letterSpacing: 0.5,
                     ),
                   ),
-                  
 
                   const SizedBox(width: 12),
                   IconButton(
-                  icon: const Icon(Icons.cast_rounded, color: Colors.white, size: 22),
-                           onPressed: () {},
+                    icon: const Icon(Icons.cast_rounded,
+                        color: Colors.white, size: 22),
+                    onPressed: () {},
                   ),
                   const SizedBox(width: 1),
 
@@ -56,14 +54,12 @@ class LibraryPage extends ConsumerWidget {
                         color: Colors.white, size: 22),
                     onPressed: () => Navigator.push(
                       context,
-                      
                       MaterialPageRoute(
                           builder: (_) => const SettingsMainPage()),
                     ),
                   ),
 
                   const SizedBox(width: 4),
-
 
                   // Grey circle avatar with person icon — no photo
                   // Avatar → opens Profile page
@@ -72,11 +68,9 @@ class LibraryPage extends ConsumerWidget {
                     child: const CircleAvatar(
                       radius: 18,
                       backgroundColor: Color(0xFF2A2A2A),
-                      child:
-                          Icon(Icons.person, color: Colors.white, size: 34),
+                      child: Icon(Icons.person, color: Colors.white, size: 34),
                     ),
                   ),
-  
                 ],
               ),
             ),
@@ -91,19 +85,23 @@ class LibraryPage extends ConsumerWidget {
                   _LibraryMenuItem(title: 'Your likes', onTap: () {}),
                   _LibraryMenuItem(title: 'Playlists', onTap: () {}),
                   _LibraryMenuItem(
-  title: 'Albums',
-  onTap: () => Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => const LibraryAlbumsPage()),
-  ),
-),
+                    title: 'Albums',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const LibraryAlbumsPage()),
+                    ),
+                  ),
                   _LibraryMenuItem(
                     title: 'Following',
                     onTap: () => context.push('/library/following'),
                   ),
                   _LibraryMenuItem(title: 'Stations', onTap: () {}),
                   _LibraryMenuItem(title: 'Your insights', onTap: () {}),
-                  _LibraryMenuItem(title: 'Your uploads', onTap: () {}),
+                  _LibraryMenuItem(
+                    title: 'Your uploads',
+                    onTap: () => context.push('/library/uploads'),
+                  ),
 
                   const SizedBox(height: 32),
 
@@ -182,7 +180,8 @@ class _LibraryMenuItem extends StatelessWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 18),
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 15),
+            const Icon(Icons.arrow_forward_ios,
+                color: Colors.white54, size: 15),
           ],
         ),
       ),
