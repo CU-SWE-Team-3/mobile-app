@@ -1,3 +1,4 @@
+import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -264,24 +265,27 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ── insights (button only, no navigation) ────────────────────────────
-  Widget _insightsRow(BuildContext context) => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(10)),
-        child: Row(
-          children: [
-            const Text('Your insights',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500)),
-            const Spacer(),
-            Icon(Icons.chevron_right_rounded, color: _sub, size: 20),
-          ],
+  // ── insights → navigates to YourInsightsPage ────────────────────────
+  Widget _insightsRow(BuildContext context) => GestureDetector(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YourInsightsPage())),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(10)),
+          child: Row(
+            children: [
+              const Text('Your insights',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500)),
+              const Spacer(),
+              Icon(Icons.chevron_right_rounded, color: _sub, size: 20),
+            ],
+          ),
         ),
       );
 
