@@ -56,14 +56,12 @@ class LibraryPage extends ConsumerWidget {
                         color: Colors.white, size: 22),
                     onPressed: () => Navigator.push(
                       context,
-                      
                       MaterialPageRoute(
                           builder: (_) => const SettingsMainPage()),
                     ),
                   ),
 
                   const SizedBox(width: 4),
-
 
                   // Grey circle avatar with person icon — no photo
                   // Avatar → opens Profile page
@@ -101,13 +99,16 @@ class LibraryPage extends ConsumerWidget {
                     title: 'Following',
                     onTap: () => context.push('/library/following'),
                   ),
-                  // ── Only this line changed ──────────────────────────
                   _LibraryMenuItem(
                     title: 'Stations',
                     onTap: () => context.push('/library/stations'),
                   ),
+                  // ── Only this line changed ──────────────────────────
+                  _LibraryMenuItem(
+                    title: 'Your insights',
+                    onTap: () => context.push('/library/insights'),
+                  ),
                   // ───────────────────────────────────────────────────
-                  _LibraryMenuItem(title: 'Your insights', onTap: () {}),
                   _LibraryMenuItem(title: 'Your uploads', onTap: () {}),
 
                   const SizedBox(height: 32),
