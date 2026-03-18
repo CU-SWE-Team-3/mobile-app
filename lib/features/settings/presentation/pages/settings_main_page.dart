@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/basic_settings_page.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/legal_page.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/sign_out_page.dart';
@@ -68,7 +69,7 @@ class SettingsMainPage extends ConsumerWidget {
           ),
           _SettingsMenuItem(
             title: 'Social settings',
-            onTap: () {},
+            onTap: () => context.push('/settings/social'),
           ),
           _SettingsMenuItem(
             title: 'Inbox',
@@ -187,38 +188,29 @@ class _SettingsMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                    ),
-                  ),
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
                 ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.white54,
-                  size: 15,
-                ),
-              ],
+              ),
             ),
-          ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white54,
+              size: 15,
+            ),
+          ],
         ),
-        const Divider(
-          color: Color(0xFF1F1F1F),
-          height: 1,
-          thickness: 1,
-        ),
-      ],
+      ),
     );
   }
 }

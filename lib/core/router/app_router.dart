@@ -13,7 +13,7 @@ import '../../features/auth/presentation/pages/oauth_login_page.dart';
 import '../../features/feed/presentation/pages/home_page.dart';
 import '../../features/feed/presentation/pages/search_page.dart';
 import '../../features/feed/presentation/pages/discover_page.dart';
-import '../../features/feed/presentation/pages/following_feed_page.dart';
+import '../../features/feed/presentation/pages/feed_page.dart';
 import '../../features/feed/presentation/pages/search_results_tracks_page.dart';
 import '../../features/feed/presentation/pages/search_results_users_page.dart';
 import '../../features/feed/presentation/pages/search_results_playlists_page.dart';
@@ -49,8 +49,6 @@ import '../../features/profile/presentation/pages/avatar_viewer_page.dart';
 import '../../features/followers/presentation/pages/followers_list_page.dart';
 import '../../features/followers/presentation/pages/following_list_page.dart';
 import '../../features/followers/presentation/pages/suggested_users_page.dart';
-
-
 
 import '../../features/player/presentation/pages/full_player_page.dart';
 import '../../features/player/presentation/pages/player_queue_page.dart';
@@ -103,19 +101,14 @@ final appRouter = GoRouter(
     GoRoute(path: '/start', builder: (_, __) => const StartPage()),
     GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingPage()),
     GoRoute(path: '/register', builder: (_, __) => const RegisterPage()),
-<<<<<<< Awad
-    GoRoute(path: '/login', builder: (_, __) =>  LoginPage()),
-    GoRoute(
-        path: '/forgot-password',
-        builder: (_, __) => const ForgotPasswordPage()),
-=======
-    GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
+    GoRoute(path: '/login', builder: (_, __) => LoginPage()),
     GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordPage()),
->>>>>>> main
     GoRoute(path: '/oauth-login', builder: (_, __) => const OAuthLoginPage()),
     GoRoute(path: '/email-verification', builder: (_, __) => const EmailVerificationPage()),
 
-    // ── MAIN SHELL (persistent bottom nav) ───────────────────────────
+    // ── MAIN SHELL ───────────────────────────────────────────────────
+    // 5 branches — must match app_shell.dart tab order exactly:
+    // index 0=Home  1=Feed  2=Search  3=Library  4=Upgrade
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) =>
           AppShell(navigationShell: navigationShell),
@@ -128,7 +121,6 @@ final appRouter = GoRouter(
               builder: (_, __) => const HomePage(),
               routes: [
                 GoRoute(path: 'discover', builder: (_, __) => const DiscoverPage()),
-                GoRoute(path: 'following-feed', builder: (_, __) => const FollowingFeedPage()),
                 GoRoute(path: 'trending', builder: (_, __) => const TrendingChartsPage()),
                 GoRoute(path: 'cast', builder: (_, __) => const CastPage()),
                 GoRoute(path: 'genre/electronic', builder: (_, __) => const ElectronicGenrePage()),
@@ -139,7 +131,17 @@ final appRouter = GoRouter(
           ],
         ),
 
-        // ── Branch 1: SEARCH ────────────────────────────────────────
+        // ── Branch 1: FEED ──────────────────────────────────────────
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/feed',
+              builder: (_, __) => const FeedPage(),
+            ),
+          ],
+        ),
+
+        // ── Branch 2: SEARCH ────────────────────────────────────────
         StatefulShellBranch(
           routes: [
             GoRoute(
@@ -149,21 +151,6 @@ final appRouter = GoRouter(
                 GoRoute(path: 'tracks', builder: (_, __) => const SearchResultsTracksPage()),
                 GoRoute(path: 'users', builder: (_, __) => const SearchResultsUsersPage()),
                 GoRoute(path: 'playlists', builder: (_, __) => const SearchResultsPlaylistsPage()),
-              ],
-            ),
-          ],
-        ),
-
-        // ── Branch 2: UPLOAD ────────────────────────────────────────
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/upload',
-              builder: (_, __) => const UploadPage(),
-              routes: [
-                GoRoute(path: 'metadata', builder: (_, __) => const MetadataInputPage()),
-                GoRoute(path: 'waveform', builder: (_, __) => const WaveformPreviewPage()),
-                GoRoute(path: 'progress', builder: (_, __) => const UploadProgressPage()),
               ],
             ),
           ],
@@ -188,28 +175,49 @@ final appRouter = GoRouter(
           ],
         ),
 
-        // ── Branch 4: PROFILE / YOU ─────────────────────────────────
+        // ── Branch 4: UPGRADE ───────────────────────────────────────
         StatefulShellBranch(
           routes: [
             GoRoute(
-              path: '/profile',
-              builder: (_, __) => const ProfilePage(),
+              path: '/upgrade',
+              builder: (_, __) => const PremiumPaywallPage(),
               routes: [
-                GoRoute(path: 'edit', builder: (_, __) => const EditProfilePage()),
-                GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
-                GoRoute(path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
-                GoRoute(path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
-                GoRoute(path: 'avatar', builder: (_, __) => const AvatarUploadPage()),
-                GoRoute(path: 'avatar-view', builder: (_, __) => const AvatarViewerPage()),
-                GoRoute(path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
-                GoRoute(path: 'followers', builder: (_, __) => const FollowersListPage()),
-                GoRoute(path: 'following', builder: (_, __) => const FollowingListPage()),
-                GoRoute(path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),
-                
+                GoRoute(path: 'pricing', builder: (_, __) => const PricingTiersPage()),
+                GoRoute(path: 'status', builder: (_, __) => const SubscriptionStatusPage()),
+                GoRoute(path: 'offline', builder: (_, __) => const OfflineDownloadPage()),
               ],
             ),
           ],
         ),
+      ],
+    ),
+
+    // ── UPLOAD (global, outside shell) ────────────────────────────────
+    GoRoute(
+      path: '/upload',
+      builder: (_, __) => const UploadPage(),
+      routes: [
+        GoRoute(path: 'metadata', builder: (_, __) => const MetadataInputPage()),
+        GoRoute(path: 'waveform', builder: (_, __) => const WaveformPreviewPage()),
+        GoRoute(path: 'progress', builder: (_, __) => const UploadProgressPage()),
+      ],
+    ),
+
+    // ── PROFILE (global, outside shell) ───────────────────────────────
+    GoRoute(
+      path: '/profile',
+      builder: (_, __) => const ProfilePage(),
+      routes: [
+        GoRoute(path: 'edit', builder: (_, __) => const EditProfilePage()),
+        GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
+        GoRoute(path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
+        GoRoute(path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
+        GoRoute(path: 'avatar', builder: (_, __) => const AvatarUploadPage()),
+        GoRoute(path: 'avatar-view', builder: (_, __) => const AvatarViewerPage()),
+        GoRoute(path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
+        GoRoute(path: 'followers', builder: (_, __) => const FollowersListPage()),
+        GoRoute(path: 'following', builder: (_, __) => const FollowingListPage()),
+        GoRoute(path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),
       ],
     ),
 
@@ -256,17 +264,6 @@ final appRouter = GoRouter(
       builder: (_, __) => const NotificationsPage(),
       routes: [
         GoRoute(path: 'settings', builder: (_, __) => const PushNotificationSettingsPage()),
-      ],
-    ),
-
-    // ── PREMIUM ───────────────────────────────────────────────────────
-    GoRoute(
-      path: '/premium',
-      builder: (_, __) => const PremiumPaywallPage(),
-      routes: [
-        GoRoute(path: 'pricing', builder: (_, __) => const PricingTiersPage()),
-        GoRoute(path: 'status', builder: (_, __) => const SubscriptionStatusPage()),
-        GoRoute(path: 'offline', builder: (_, __) => const OfflineDownloadPage()),
       ],
     ),
 

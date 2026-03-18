@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class OnboardingPage extends ConsumerStatefulWidget {
   const OnboardingPage({super.key});
@@ -11,6 +12,19 @@ class OnboardingPage extends ConsumerStatefulWidget {
 
 class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   final _emailController = TextEditingController();
+  bool _isEmailValid = false;
+
+  bool _validateEmail(String value) =>
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value.trim());
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController.addListener(() {
+      final valid = _validateEmail(_emailController.text);
+      if (valid != _isEmailValid) setState(() => _isEmailValid = valid);
+    });
+  }
 
   @override
   void dispose() {
@@ -139,14 +153,15 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               ),
               const SizedBox(height: 12),
 
-              // Continue button
+              // Continue button — active only when email is valid
               SizedBox(
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: () => context.push('/register'),
+                  onPressed: _isEmailValid ? () => context.push('/register') : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF888888),
+                    backgroundColor: _isEmailValid ? Colors.white : const Color(0xFF888888),
+                    disabledBackgroundColor: const Color(0xFF888888),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
                   child: const Text('Continue',
@@ -156,8 +171,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               const SizedBox(height: 16),
 
               // Need help
-              const Text('Need help?',
-                style: TextStyle(color: Color(0xFF2196F3), fontSize: 14)),
+              GestureDetector(
+                onTap: () => launchUrl(
+                  Uri.parse('https://help.soundcloud.com/hc/en-us/sections/46266771825691'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: const Text('Need help?',
+                  style: TextStyle(color: Color(0xFF2196F3), fontSize: 14)),
+              ),
             ],
           ),
         ),

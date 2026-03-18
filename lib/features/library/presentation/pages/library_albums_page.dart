@@ -43,7 +43,6 @@ class LibraryAlbumsPage extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             const SizedBox(height: 8),
 
             // ── No albums title ───────────────────────────────────
@@ -71,29 +70,27 @@ class LibraryAlbumsPage extends ConsumerWidget {
 
             // ── Search for albums button ──────────────────────────
             GestureDetector(
-  onTap: () {
-    // First pop back to library, then switch to search branch
-    context.go('/search');
-  },
-  child: Container(
-    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(30),
-    ),
-    child: const Text(
-      'Search for albums',
-      style: TextStyle(
-        color: Colors.black,
-        fontWeight: FontWeight.bold,
-        fontSize: 15,
-      ),
-    ),
-  ),
-),
-
-
-
+              onTap: () {
+                // First pop back to library, then switch to search branch
+                context.go('/search');
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: const Text(
+                  'Search for albums',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),

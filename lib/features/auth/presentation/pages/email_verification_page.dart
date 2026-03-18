@@ -125,29 +125,8 @@ class EmailVerificationPage extends ConsumerWidget {
 
               const Spacer(),
 
-              // Continue button
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: () => context.go('/home'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                  child: const Text(
-                    'Continue',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
+              // TODO: deep link handler — when user taps verification link in email,
+              // the app will be re-opened and navigate to /home automatically
               const SizedBox(height: 8),
             ],
           ),

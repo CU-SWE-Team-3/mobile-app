@@ -23,6 +23,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
   String? _selectedYear;
   String? _selectedGender;
   bool _isCaptchaChecked = false;
+  bool _attempted = false;
 
   late final AnimationController _captchaAnimController;
   late final Animation<double> _captchaScaleAnim;
@@ -58,6 +59,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
     super.dispose();
   }
 
+  bool _isDisplayNameValid(String name) {
+    final trimmed = name.trim();
+    return trimmed.length >= 2 && trimmed.length <= 25;
+  }
+
   bool _isPasswordValid(String password) {
     if (password.length < 8) return false;
     if (!password.contains(RegExp(r'[a-zA-Z]'))) return false;
@@ -76,12 +82,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
   }
 
   Future<void> _onContinue() async {
-    if (!_isCaptchaChecked ||
-        _displayNameController.text.isEmpty ||
-        _selectedMonth == null ||
-        _selectedDay == null ||
-        _selectedYear == null ||
-        _selectedGender == null) return;
+    setState(() => _attempted = true);
+
+    final nameValid = _isDisplayNameValid(_displayNameController.text);
+    final passwordValid = _isPasswordValid(_passwordController.text);
+    final passwordsMatch = _passwordController.text == _confirmPasswordController.text;
+    final dobComplete = _selectedMonth != null && _selectedDay != null && _selectedYear != null;
+    final genderSelected = _selectedGender != null;
+
+    if (!nameValid || !passwordValid || !passwordsMatch ||
+        _confirmPasswordController.text.isEmpty || !dobComplete ||
+        !genderSelected || !_isCaptchaChecked) {
+      return;
+    }
 
     final age = DateTime.now().year - int.parse(_selectedYear!);
 
@@ -99,14 +112,16 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
     required String? value,
     required List<String> items,
     required void Function(String?) onChanged,
-    double? width,
+    bool showError = false,
   }) {
     return Container(
-      width: width,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: const Color(0xFF2A2A2A),
         borderRadius: BorderRadius.circular(4),
+        border: showError
+            ? Border.all(color: Colors.red, width: 1.5)
+            : Border.all(color: Colors.transparent),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -116,7 +131,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
           dropdownColor: const Color(0xFF2A2A2A),
           icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white),
           style: const TextStyle(color: Colors.white, fontSize: 16),
-          isExpanded: width == null,
+          isExpanded: true,
           items: items.map((item) => DropdownMenuItem(
             value: item,
             child: Text(item),
@@ -128,6 +143,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
   }
 
   Widget _buildMockCaptcha() {
+    final showCaptchaError = _attempted && !_isCaptchaChecked;
     return GestureDetector(
       onTap: _onCaptchaTap,
       child: Container(
@@ -135,11 +151,13 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
         decoration: BoxDecoration(
           color: const Color(0xFF1F1F1F),
           borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: const Color(0xFF3A3A3A)),
+          border: Border.all(
+            color: showCaptchaError ? Colors.red : const Color(0xFF3A3A3A),
+            width: showCaptchaError ? 1.5 : 1,
+          ),
         ),
         child: Row(
           children: [
-            // Animated checkbox
             Container(
               width: 24,
               height: 24,
@@ -164,16 +182,12 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
                   : null,
             ),
             const SizedBox(width: 14),
-
-            // "I'm not a robot"
             const Expanded(
               child: Text(
                 "I'm not a robot",
                 style: TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
-
-            // reCAPTCHA branding
             const Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -209,12 +223,26 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
       }
     });
 
-    final passwordsMatch = _passwordController.text == _confirmPasswordController.text;
+    final nameInvalid = _attempted && !_isDisplayNameValid(_displayNameController.text);
+    final passwordInvalid = _attempted && !_isPasswordValid(_passwordController.text);
+    final confirmInvalid = _attempted &&
+        (_confirmPasswordController.text.isEmpty ||
+            _passwordController.text != _confirmPasswordController.text);
+    final monthInvalid = _attempted && _selectedMonth == null;
+    final dayInvalid = _attempted && _selectedDay == null;
+    final yearInvalid = _attempted && _selectedYear == null;
+    final genderInvalid = _attempted && _selectedGender == null;
+
     final canContinue = _isCaptchaChecked &&
         !authState.isLoading &&
         _isPasswordValid(_passwordController.text) &&
-        passwordsMatch &&
-        _confirmPasswordController.text.isNotEmpty;
+        _passwordController.text == _confirmPasswordController.text &&
+        _confirmPasswordController.text.isNotEmpty &&
+        _isDisplayNameValid(_displayNameController.text) &&
+        _selectedMonth != null &&
+        _selectedDay != null &&
+        _selectedYear != null &&
+        _selectedGender != null;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -235,7 +263,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
         ),
         centerTitle: true,
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,20 +273,31 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
               decoration: BoxDecoration(
                 color: const Color(0xFF2A2A2A),
                 borderRadius: BorderRadius.circular(4),
+                border: nameInvalid
+                    ? Border.all(color: Colors.red, width: 1.5)
+                    : Border.all(color: Colors.transparent),
               ),
               child: TextField(
                 controller: _displayNameController,
+                onChanged: (_) => setState(() {}),
                 style: const TextStyle(color: Colors.white, fontSize: 16),
                 decoration: const InputDecoration(
                   labelText: 'Display name',
                   labelStyle: TextStyle(color: Color(0xFF999999), fontSize: 13),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 12),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
               ),
             ),
-            const SizedBox(height: 8),
+            if (nameInvalid)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text(
+                  'Display name must be 2–25 characters',
+                  style: TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 6),
             const Text(
               'Your display name can be anything you like. Your name\nor artist name are good choices.',
               style: TextStyle(color: Color(0xFF999999), fontSize: 13),
@@ -276,7 +315,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
             ),
             const SizedBox(height: 10),
 
-            // Month Day Year dropdowns
             Row(
               children: [
                 Expanded(
@@ -285,6 +323,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
                     hint: 'Month',
                     value: _selectedMonth,
                     items: _months,
+                    showError: monthInvalid,
                     onChanged: (v) => setState(() => _selectedMonth = v),
                   ),
                 ),
@@ -295,6 +334,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
                     hint: 'Day',
                     value: _selectedDay,
                     items: _days,
+                    showError: dayInvalid,
                     onChanged: (v) => setState(() => _selectedDay = v),
                   ),
                 ),
@@ -305,6 +345,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
                     hint: 'Year',
                     value: _selectedYear,
                     items: _years,
+                    showError: yearInvalid,
                     onChanged: (v) => setState(() => _selectedYear = v),
                   ),
                 ),
@@ -322,6 +363,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
               hint: 'Gender (required)',
               value: _selectedGender,
               items: _genders,
+              showError: genderInvalid,
               onChanged: (v) => setState(() => _selectedGender = v),
             ),
             const SizedBox(height: 24),
@@ -331,6 +373,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
               decoration: BoxDecoration(
                 color: const Color(0xFF2A2A2A),
                 borderRadius: BorderRadius.circular(4),
+                border: passwordInvalid
+                    ? Border.all(color: Colors.red, width: 1.5)
+                    : Border.all(color: Colors.transparent),
               ),
               child: TextField(
                 controller: _passwordController,
@@ -368,6 +413,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
               decoration: BoxDecoration(
                 color: const Color(0xFF2A2A2A),
                 borderRadius: BorderRadius.circular(4),
+                border: confirmInvalid
+                    ? Border.all(color: Colors.red, width: 1.5)
+                    : Border.all(color: Colors.transparent),
               ),
               child: TextField(
                 controller: _confirmPasswordController,
@@ -419,7 +467,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: canContinue ? _onContinue : null,
+                onPressed: _onContinue,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: canContinue
                       ? Colors.white
@@ -443,6 +491,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage>
                       ),
               ),
             ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
