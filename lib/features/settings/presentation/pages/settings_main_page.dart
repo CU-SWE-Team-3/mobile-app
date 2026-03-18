@@ -50,10 +50,12 @@ class SettingsMainPage extends ConsumerWidget {
             title: 'Import my music',
             onTap: () {},
           ),
+          // ── Only this line changed ──────────────────────────────────
           _SettingsMenuItem(
             title: 'Account',
-            onTap: () {},
+            onTap: () => context.push('/settings/account'),
           ),
+          // ───────────────────────────────────────────────────────────
           _SettingsMenuItem(
             title: 'Upload',
             onTap: () {},
@@ -111,11 +113,11 @@ class SettingsMainPage extends ConsumerWidget {
 
           const SizedBox(height: 32),
 
-          // ── Sign out button → now opens SignOutPage ───────────
+          // ── Sign out button → opens SignOutPage ───────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: GestureDetector(
-              onTap: () => Navigator.push( // 👈 changed from dialog to page
+              onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => const SignOutPage(),
