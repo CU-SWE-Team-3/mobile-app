@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/network/dio_client.dart';
 
 class EditProfilePage extends StatefulWidget {
   // Initial values passed from ProfilePage via route extra
@@ -24,6 +26,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   String _country = '';
   String _bio = '';
+  bool _isLoading = false;
 
   // ── colors ──────────────────────────────────────────────────────────
   static const _bg = Color(0xFF111111);
@@ -43,7 +46,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
     super.initState();
     // Read initial values passed from ProfilePage
     final d = widget.initialData ?? {};
-    _initUsername = d['username'] ?? 'SUNDER';
+    _initUsername = d['displayName'] ?? 'SUNDER';
     _initCity = d['city'] ?? '';
     _initCountry = d['country'] ?? '';
     _initBio = d['bio'] ?? '';
@@ -139,16 +142,41 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ),
       );
 
-  // ── save: pop result back to ProfilePage ─────────────────────────────
-  void _save() {
-    context.pop<Map<String, String>>({
-      'username': _nameCtrl.text.trim().isEmpty
-          ? _initUsername
-          : _nameCtrl.text.trim(),
-      'city': _cityCtrl.text.trim(),
-      'country': _country,
-      'bio': _bio,
-    });
+  // ── save: PATCH /profile/me ───────────────────────────────────────────
+  Future<void> _save() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    try {
+      await dioClient.dio.patch('/profile/update', data: {
+        'displayName': _nameCtrl.text.trim().isEmpty
+            ? _initUsername
+            : _nameCtrl.text.trim(),
+        'bio': _bio,
+        'country': _country,
+        'city': _cityCtrl.text.trim(),
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile updated!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      context.pop();
+    } on DioException catch (e) {
+      print('Save error: $e');
+      print('Status: ${e.response?.statusCode}');
+      print('Body: ${e.response?.data}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to update profile'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   // ── country picker ───────────────────────────────────────────────────
@@ -306,18 +334,25 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     fontWeight: FontWeight.w600)),
             const Spacer(),
             GestureDetector(
-              onTap: _save,
+              onTap: _isLoading ? null : _save,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 22, vertical: 10),
                 decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(30)),
-                child: const Text('Save',
-                    style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15)),
+                child: _isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.black),
+                      )
+                    : const Text('Save',
+                        style: TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15)),
               ),
             ),
           ],

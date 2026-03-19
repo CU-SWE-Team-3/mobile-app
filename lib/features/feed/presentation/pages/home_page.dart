@@ -73,7 +73,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _fetchFeed() async {
     setState(() { _isLoading = true; _hasError = false; });
     try {
-      final response = await dioClient.dio.get('/feed');
+      final response = await dioClient.dio.get('/network/feed');
       final List<dynamic> data = response.data['data'] as List<dynamic>;
       if (mounted) {
         setState(() {
