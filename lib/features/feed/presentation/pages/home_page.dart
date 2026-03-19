@@ -1,36 +1,91 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/core/themes/app_theme.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 
-class HomePage extends StatefulWidget {
+// ── Model ─────────────────────────────────────────────────────────────────────
+
+class _FeedTrack {
+  final String id;
+  final String title;
+  final String artistName;
+  final String? artworkUrl;
+  final int playCount;
+
+  _FeedTrack({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    required this.artworkUrl,
+    required this.playCount,
+  });
+
+  factory _FeedTrack.fromJson(Map<String, dynamic> json) {
+    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    return _FeedTrack(
+      id: json['_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      artistName: artist['displayName'] as String? ?? '',
+      artworkUrl: json['artworkUrl'] as String?,
+      playCount: json['playCount'] as int? ?? 0,
+    );
+  }
+}
+
+String _formatPlayCount(int count) {
+  if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M plays';
+  if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K plays';
+  return '$count plays';
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends ConsumerState<HomePage> {
   static const List<String> _genres = [
     'Electronic', 'Folk', 'House', 'Techno', 'Pop',
     'Hip-Hop', 'Jazz', 'Classical', 'R&B', 'Metal',
   ];
 
-  static const List<_MockTrack> _tracks = [
-    _MockTrack('Your Loving Arms (FREE DL)', 'Phase Two'),
-    _MockTrack('Hera', 'Ömer Bükülmezoğlu'),
-    _MockTrack('Black Aura - Freedom (Original...)', 'Take It Easy Records'),
-    _MockTrack('Midnight Drive', 'Nocturnals'),
-    _MockTrack('Solar Flare', 'Astral Collective'),
-  ];
-
   int _selectedGenreIndex = 0;
+
+  List<_FeedTrack> _tracks = [];
+  bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
+    _fetchFeed();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showSuggestedDialog(context);
     });
+  }
+
+  Future<void> _fetchFeed() async {
+    setState(() { _isLoading = true; _hasError = false; });
+    try {
+      final response = await dioClient.dio.get('/feed');
+      final List<dynamic> data = response.data['data'] as List<dynamic>;
+      if (mounted) {
+        setState(() {
+          _tracks = data
+              .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+              .toList();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _isLoading = false; _hasError = true; });
+    }
   }
 
   void _showSuggestedDialog(BuildContext context) {
@@ -72,6 +127,58 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTrackSection() {
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+        ),
+      );
+    }
+
+    if (_hasError) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: Column(
+            children: [
+              const Text(
+                'Couldn\'t load feed',
+                style: TextStyle(color: Colors.white, fontSize: 15),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _fetchFeed,
+                child: const Text(
+                  'Retry',
+                  style: TextStyle(color: Color(0xFFFF5500), fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_tracks.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: Text(
+            'Follow some artists to see their tracks here',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF999999), fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: _tracks.map((track) => _TrackRow(track: track)).toList(),
     );
   }
 
@@ -177,8 +284,8 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 24),
 
-          // Section 2 — Track list
-          ..._tracks.map((track) => _TrackRow(track: track)),
+          // Section 2 — Feed tracks
+          _buildTrackSection(),
           const SizedBox(height: 24),
 
           // Section 3 — Suggested users
@@ -190,8 +297,10 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
+// ── Track row ─────────────────────────────────────────────────────────────────
+
 class _TrackRow extends StatelessWidget {
-  final _MockTrack track;
+  final _FeedTrack track;
 
   const _TrackRow({required this.track});
 
@@ -201,7 +310,7 @@ class _TrackRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          // Album art placeholder
+          // Artwork
           Container(
             width: 60,
             height: 60,
@@ -209,15 +318,20 @@ class _TrackRow extends StatelessWidget {
               color: const Color(0xFF2A2A2A),
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Icon(
-              Icons.music_note,
-              color: Color(0xFF666666),
-              size: 28,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: track.artworkUrl != null && track.artworkUrl!.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: track.artworkUrl!,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
+                    )
+                  : const _ArtworkPlaceholder(),
             ),
           ),
           const SizedBox(width: 12),
 
-          // Title + artist
+          // Title + artist + play count
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -232,14 +346,22 @@ class _TrackRow extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
-                  track.artist,
+                  track.artistName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Color(0xFF999999),
                     fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatPlayCount(track.playCount),
+                  style: const TextStyle(
+                    color: Color(0xFF666666),
+                    fontSize: 11,
                   ),
                 ),
               ],
@@ -261,9 +383,16 @@ class _TrackRow extends StatelessWidget {
   }
 }
 
-class _MockTrack {
-  final String title;
-  final String artist;
+class _ArtworkPlaceholder extends StatelessWidget {
+  const _ArtworkPlaceholder();
 
-  const _MockTrack(this.title, this.artist);
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: Color(0xFF2A2A2A),
+      child: Center(
+        child: Icon(Icons.music_note, color: Color(0xFF666666), size: 28),
+      ),
+    );
+  }
 }

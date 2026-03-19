@@ -64,7 +64,7 @@ class LibraryPage extends ConsumerWidget {
                   // Grey circle avatar with person icon — no photo
                   // Avatar → opens Profile page
                   GestureDetector(
-                    onTap: () => context.push('/profile'), // 👈 added
+                    onTap: () => context.push('/profile'),
                     child: const CircleAvatar(
                       radius: 18,
                       backgroundColor: Color(0xFF2A2A2A),
@@ -96,8 +96,16 @@ class LibraryPage extends ConsumerWidget {
                     title: 'Following',
                     onTap: () => context.push('/library/following'),
                   ),
-                  _LibraryMenuItem(title: 'Stations', onTap: () {}),
-                  _LibraryMenuItem(title: 'Your insights', onTap: () {}),
+                  _LibraryMenuItem(
+                    title: 'Stations',
+                    onTap: () => context.push('/library/stations'),
+                  ),
+                  // ── Only this line changed ──────────────────────────
+                  _LibraryMenuItem(
+                    title: 'Your insights',
+                    onTap: () => context.push('/library/insights'),
+                  ),
+                  // ───────────────────────────────────────────────────
                   _LibraryMenuItem(
                     title: 'Your uploads',
                     onTap: () => context.push('/library/uploads'),

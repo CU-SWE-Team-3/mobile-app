@@ -1,3 +1,4 @@
+import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,6 +30,12 @@ class _ProfilePageState extends State<ProfilePage> {
   ];
 
   final _playlists = const [_Playlist('my songs', 'SUNDER')];
+
+  final _reposts = const [
+    _Repost('Nasser _ ناصر', 'wigexpress', '1M', '2:52', Color(0xFF1A1A2E)),
+    _Repost('ZIAD ZAZA - SAM3 AKHINA | ... زياد', 'Abouelhassan', '1.7M', '2:13', Color(0xFFB03A2E)),
+    _Repost('ZIAD ZAZA - EMSHI | زياد ظاظا - إمشي', 'Maro mafia', '2.3M', '3:40', Color(0xFF1F618D)),
+  ];
 
   // ── colors ───────────────────────────────────────────────────────────
   static const _bg = Color(0xFF111111);
@@ -81,9 +88,12 @@ class _ProfilePageState extends State<ProfilePage> {
                         onSeeAll: () => context.push('/profile/tracks')),
                     ..._tracks.map((t) => _TrackTile(
                           track: t,
-                          onTap: () => context.push('/player'),
+                          onTap: () {},
                           onMore: () {},
                         )),
+                    _sectionHeader('Reposts',
+                        onSeeAll: () => context.push('/profile/reposts')),
+                    _repostsList(),
                     _sectionHeader('Playlists'),
                     _playlistRow(context),
                     _sectionHeader('Likes', onSeeAll: () {}),
@@ -110,7 +120,7 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Row(
           children: [
             _iconBtn(Icons.arrow_back_ios_new_rounded,
-                () => Navigator.of(context).maybePop()),
+                () => context.canPop() ? context.pop() : null),
             const Spacer(),
             _iconBtn(Icons.cast_rounded, () {}),
             const SizedBox(width: 8),
@@ -255,24 +265,27 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // ── insights (button only, no navigation) ────────────────────────────
-  Widget _insightsRow(BuildContext context) => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-            color: _surface,
-            borderRadius: BorderRadius.circular(10)),
-        child: Row(
-          children: [
-            const Text('Your insights',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500)),
-            const Spacer(),
-            Icon(Icons.chevron_right_rounded, color: _sub, size: 20),
-          ],
+  // ── insights → navigates to YourInsightsPage ────────────────────────
+  Widget _insightsRow(BuildContext context) => GestureDetector(
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YourInsightsPage())),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+              color: _surface,
+              borderRadius: BorderRadius.circular(10)),
+          child: Row(
+            children: [
+              const Text('Your insights',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500)),
+              const Spacer(),
+              Icon(Icons.chevron_right_rounded, color: _sub, size: 20),
+            ],
+          ),
         ),
       );
 
@@ -340,6 +353,66 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
           ],
         ),
+      );
+
+  // ── reposts list ─────────────────────────────────────────────────────
+  Widget _repostsList() => Column(
+        children: _reposts.take(3).map((r) {
+          final sub = Colors.white.withOpacity(0.55);
+          return GestureDetector(
+            onTap: () {},
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      color: r.imageColor,
+                      child: const Icon(Icons.music_note,
+                          color: Colors.white38, size: 24),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(r.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text(r.artist,
+                            style: TextStyle(color: sub, fontSize: 13)),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.play_arrow_rounded,
+                                size: 13, color: sub),
+                            Text('  \${r.plays} · \${r.duration}',
+                                style: TextStyle(
+                                    color: sub, fontSize: 11)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {},
+                    child: Icon(Icons.more_vert_rounded,
+                        color: sub, size: 20),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
       );
 
   // ── playlist row ─────────────────────────────────────────────────────
@@ -424,7 +497,7 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
   Widget _playCircle(BuildContext context) => GestureDetector(
-        onTap: () => context.push('/player'),
+        onTap: () {},
         child: Container(
           width: 52,
           height: 52,
@@ -449,6 +522,15 @@ class _Playlist {
   final String name;
   final String owner;
   const _Playlist(this.name, this.owner);
+}
+
+class _Repost {
+  final String title;
+  final String artist;
+  final String plays;
+  final String duration;
+  final Color imageColor;
+  const _Repost(this.title, this.artist, this.plays, this.duration, this.imageColor);
 }
 
 // ── track tile ───────────────────────────────────────────────────────────

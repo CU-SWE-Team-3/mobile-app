@@ -9,6 +9,8 @@ import '../../features/auth/presentation/pages/onboarding_page.dart';
 import '../../features/auth/presentation/pages/email_verification_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/oauth_login_page.dart';
+import '../../features/auth/presentation/pages/login_screen.dart';
+import '../../features/auth/presentation/pages/register_screen.dart';
 
 import '../../features/feed/presentation/pages/home_page.dart';
 import '../../features/feed/presentation/pages/search_page.dart';
@@ -100,11 +102,13 @@ final appRouter = GoRouter(
     GoRoute(path: '/splash', builder: (_, __) => const SplashPage()),
     GoRoute(path: '/start', builder: (_, __) => const StartPage()),
     GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingPage()),
-    GoRoute(path: '/register', builder: (_, __) => const RegisterPage()),
-    GoRoute(path: '/login', builder: (_, __) => LoginPage()),
+    GoRoute(path: '/register', builder: (_, state) => RegisterPage(email: state.extra as String? ?? '')),
+    GoRoute(path: '/login', builder: (_, state) => LoginPage(email: state.extra as String? ?? '')),
     GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordPage()),
     GoRoute(path: '/oauth-login', builder: (_, __) => const OAuthLoginPage()),
-    GoRoute(path: '/email-verification', builder: (_, __) => const EmailVerificationPage()),
+    GoRoute(path: '/email-verification', builder: (_, state) => EmailVerificationPage(email: state.extra as String? ?? '')),
+    GoRoute(path: '/login-screen', builder: (_, state) => LoginScreen(email: state.extra as String? ?? '')),
+    GoRoute(path: '/register-screen', builder: (_, state) => RegisterScreen(email: state.extra as String? ?? '')),
 
     // ── MAIN SHELL ───────────────────────────────────────────────────
     // 5 branches — must match app_shell.dart tab order exactly:

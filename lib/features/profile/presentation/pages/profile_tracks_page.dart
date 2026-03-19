@@ -94,7 +94,7 @@ class ProfileTracksPage extends StatelessWidget {
                   const SizedBox(width: 12),
                   // Play
                   GestureDetector(
-                    onTap: () => context.push('/player'),
+                    onTap: () {},
                     child: Container(
                       width: 52,
                       height: 52,
@@ -135,7 +135,7 @@ class _TrackTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final sub = Colors.white.withOpacity(0.55);
     return GestureDetector(
-      onTap: () => context.push('/player'),
+      onTap: () {},
       child: Padding(
         padding:
             const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
