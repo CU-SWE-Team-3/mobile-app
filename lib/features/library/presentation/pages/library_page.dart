@@ -105,7 +105,6 @@ class LibraryPage extends ConsumerWidget {
                     title: 'Your insights',
                     onTap: () => context.push('/library/insights'),
                   ),
-                  // ───────────────────────────────────────────────────
                   _LibraryMenuItem(
                     title: 'Your uploads',
                     onTap: () => context.push('/library/uploads'),
