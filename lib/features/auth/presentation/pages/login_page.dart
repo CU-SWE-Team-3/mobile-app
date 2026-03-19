@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 
 class LoginPage extends StatefulWidget {
@@ -32,11 +33,16 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      await _dio.post('/auth/login', data: {
+      final response = await _dio.post('/auth/login', data: {
         'email': widget.email,
         'password': _passwordController.text.trim(),
       });
-
+      final user = response.data['user'];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userId', user['_id'] ?? '');
+      await prefs.setString('displayName', user['displayName'] ?? '');
+      await prefs.setString('role', user['role'] ?? '');
+      await prefs.setString('permalink', user['permalink'] ?? '');
       if (mounted) context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;

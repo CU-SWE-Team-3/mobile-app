@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/network/user_session.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/basic_settings_page.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/legal_page.dart';
 
@@ -46,7 +48,10 @@ class SettingsMainPage extends ConsumerWidget {
           const SizedBox(height: 8),
 
           _SettingsMenuItem(title: 'Import my music', onTap: () {}),
-          _SettingsMenuItem(title: 'Account', onTap: () {}),
+          _SettingsMenuItem(
+            title: 'Account',
+            onTap: () => context.push('/settings/account'),
+          ),
           _SettingsMenuItem(title: 'Upload', onTap: () {}),
           _SettingsMenuItem(
             title: 'Basic settings',
@@ -164,9 +169,14 @@ class SettingsMainPage extends ConsumerWidget {
             ),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext); // close dialog
-              context.go('/splash');        // sign out
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              try {
+                await dioClient.dio.post('/auth/logout');
+              } catch (_) {}
+              await UserSession.clear();
+              dioClient.dio.options.headers.remove('Authorization');
+              if (context.mounted) context.go('/start');
             },
             child: const Text(
               'OK',

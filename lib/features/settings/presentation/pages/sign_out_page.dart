@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../../core/network/user_session.dart';
 
 class SignOutPage extends ConsumerStatefulWidget {
   const SignOutPage({super.key});
@@ -53,9 +55,14 @@ class _SignOutPageState extends ConsumerState<SignOutPage> {
             ),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context); // close dialog
-              context.go('/splash'); // sign out → go to splash
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await dioClient.dio.post('/auth/logout');
+              } catch (_) {}
+              await UserSession.clear();
+              dioClient.dio.options.headers.remove('Authorization');
+              if (context.mounted) context.go('/start');
             },
             child: const Text(
               'OK',
