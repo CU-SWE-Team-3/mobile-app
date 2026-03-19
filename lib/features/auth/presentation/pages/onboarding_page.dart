@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class OnboardingPage extends ConsumerStatefulWidget {
+class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
   @override
-  ConsumerState<OnboardingPage> createState() => _OnboardingPageState();
+  State<OnboardingPage> createState() => _OnboardingPageState();
 }
 
-class _OnboardingPageState extends ConsumerState<OnboardingPage> {
+class _OnboardingPageState extends State<OnboardingPage> {
   final _emailController = TextEditingController();
   bool _isEmailValid = false;
 
   bool _validateEmail(String value) =>
       RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value.trim());
+
+  void _onContinue() {
+    final email = _emailController.text.trim();
+    context.push('/register', extra: email);
+  }
 
   @override
   void initState() {
@@ -158,14 +162,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _isEmailValid ? () => context.push('/register') : null,
+                  onPressed: _isEmailValid ? _onContinue : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isEmailValid ? Colors.white : const Color(0xFF888888),
                     disabledBackgroundColor: const Color(0xFF888888),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
                   child: const Text('Continue',
-                    style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+                          style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 16),

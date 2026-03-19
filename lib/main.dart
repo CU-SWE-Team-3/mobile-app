@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 
+import 'core/network/dio_client.dart';
 import 'core/router/app_router.dart';
 import 'core/themes/app_theme.dart';
 import 'injection_container.dart';
@@ -9,6 +10,7 @@ import 'injection_container.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initDependencies();
+  await dioClient.init();
 
   runApp(
     const ProviderScope(

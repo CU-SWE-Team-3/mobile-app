@@ -15,6 +15,7 @@ class LibraryPage extends ConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
+
             // ── AppBar ─────────────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
@@ -30,6 +31,7 @@ class LibraryPage extends ConsumerWidget {
                   ),
 
                   const Spacer(),
+                  
 
                   const Text(
                     'GET PRO',
@@ -40,12 +42,12 @@ class LibraryPage extends ConsumerWidget {
                       letterSpacing: 0.5,
                     ),
                   ),
+                  
 
                   const SizedBox(width: 12),
                   IconButton(
-                    icon: const Icon(Icons.cast_rounded,
-                        color: Colors.white, size: 22),
-                    onPressed: () {},
+                  icon: const Icon(Icons.cast_rounded, color: Colors.white, size: 22),
+                           onPressed: () {},
                   ),
                   const SizedBox(width: 1),
 
@@ -64,13 +66,15 @@ class LibraryPage extends ConsumerWidget {
                   // Grey circle avatar with person icon — no photo
                   // Avatar → opens Profile page
                   GestureDetector(
-                    onTap: () => context.push('/profile'), // 👈 added
+                    onTap: () => context.push('/profile'),
                     child: const CircleAvatar(
                       radius: 18,
                       backgroundColor: Color(0xFF2A2A2A),
-                      child: Icon(Icons.person, color: Colors.white, size: 34),
+                      child:
+                          Icon(Icons.person, color: Colors.white, size: 34),
                     ),
                   ),
+  
                 ],
               ),
             ),
@@ -88,20 +92,24 @@ class LibraryPage extends ConsumerWidget {
                     title: 'Albums',
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                          builder: (_) => const LibraryAlbumsPage()),
+                      MaterialPageRoute(builder: (_) => const LibraryAlbumsPage()),
                     ),
                   ),
                   _LibraryMenuItem(
                     title: 'Following',
                     onTap: () => context.push('/library/following'),
                   ),
-                  _LibraryMenuItem(title: 'Stations', onTap: () {}),
-                  _LibraryMenuItem(title: 'Your insights', onTap: () {}),
                   _LibraryMenuItem(
-                    title: 'Your uploads',
-                    onTap: () => context.push('/library/uploads'),
+                    title: 'Stations',
+                    onTap: () => context.push('/library/stations'),
                   ),
+                  // ── Only this line changed ──────────────────────────
+                  _LibraryMenuItem(
+                    title: 'Your insights',
+                    onTap: () => context.push('/library/insights'),
+                  ),
+                  // ───────────────────────────────────────────────────
+                  _LibraryMenuItem(title: 'Your uploads', onTap: () {}),
 
                   const SizedBox(height: 32),
 
@@ -180,8 +188,7 @@ class _LibraryMenuItem extends StatelessWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 18),
               ),
             ),
-            const Icon(Icons.arrow_forward_ios,
-                color: Colors.white54, size: 15),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 15),
           ],
         ),
       ),

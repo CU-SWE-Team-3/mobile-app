@@ -4,16 +4,17 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/dio_client.dart';
 import '../widgets/recaptcha_webview.dart';
 
-class RegisterPage extends StatefulWidget {
+class RegisterScreen extends StatefulWidget {
   final String email;
-  const RegisterPage({super.key, required this.email});
+  const RegisterScreen({super.key, this.email = ''});
 
   @override
-  State<RegisterPage> createState() => _RegisterPageState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterPageState extends State<RegisterPage> {
+class _RegisterScreenState extends State<RegisterScreen> {
   final _displayNameController = TextEditingController();
+  late final TextEditingController _emailController;
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isPasswordVisible = false;
@@ -26,102 +27,88 @@ class _RegisterPageState extends State<RegisterPage> {
   bool _attempted = false;
   bool _isLoading = false;
 
-  final _dio = dioClient.dio;
-
   final List<String> _months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December'
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
   ];
-
   final List<String> _days = List.generate(31, (i) => '${i + 1}');
-  final List<String> _years = List.generate(100, (i) => '${2019 - i}');
-  final List<String> _genders = [
-    'Male',
-    'Female',
-    'Other',
-    'Prefer not to say'
-  ];
+  final List<String> _years = List.generate(100, (i) => '${2010 - i}');
+  final List<String> _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.email);
+    _displayNameController.addListener(() => setState(() {}));
+    _emailController.addListener(() => setState(() {}));
+    _passwordController.addListener(() => setState(() {}));
+    _confirmPasswordController.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
     _displayNameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  bool _isDisplayNameValid(String name) {
-    final trimmed = name.trim();
-    return trimmed.length >= 2 && trimmed.length <= 25;
+  bool _isDisplayNameValid(String v) {
+    final t = v.trim();
+    return t.length >= 2 && t.length <= 25;
   }
 
-  bool _isPasswordValid(String password) {
-    if (password.length < 8) return false;
-    if (!password.contains(RegExp(r'[a-zA-Z]'))) return false;
-    if (!password.contains(RegExp(r'[0-9]'))) return false;
-    if (!password.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_\-]'))) return false;
+  bool _isPasswordValid(String v) {
+    if (v.length < 8) return false;
+    if (!v.contains(RegExp(r'[a-zA-Z]'))) return false;
+    if (!v.contains(RegExp(r'[0-9]'))) return false;
+    if (!v.contains(RegExp(r'[!@#$%^&*(),.?":{}|<>_\-]'))) return false;
     return true;
   }
+
+  bool get _canContinue =>
+      !_isLoading &&
+      _isDisplayNameValid(_displayNameController.text) &&
+      _emailController.text.trim().isNotEmpty &&
+      _isPasswordValid(_passwordController.text) &&
+      _passwordController.text == _confirmPasswordController.text &&
+      _confirmPasswordController.text.isNotEmpty &&
+      _selectedMonth != null &&
+      _selectedDay != null &&
+      _selectedYear != null &&
+      _selectedGender != null;
 
   Future<void> _onContinue() async {
     setState(() => _attempted = true);
 
-    final nameValid = _isDisplayNameValid(_displayNameController.text);
-    final passwordValid = _isPasswordValid(_passwordController.text);
-    final passwordsMatch =
-        _passwordController.text == _confirmPasswordController.text;
-    final dobComplete =
-        _selectedMonth != null && _selectedDay != null && _selectedYear != null;
-    final genderSelected = _selectedGender != null;
+    if (!_canContinue) return;
 
-    if (!nameValid ||
-        !passwordValid ||
-        !passwordsMatch ||
-        _confirmPasswordController.text.isEmpty ||
-        !dobComplete ||
-        !genderSelected) {
-      return;
-    }
-
-    // Show reCAPTCHA sheet and wait for token
     final token = await showRecaptchaBottomSheet(context);
     print('Captcha token: $token');
     if (token == null || !mounted) return;
 
     setState(() => _isLoading = true);
-
     try {
       final age = DateTime.now().year - int.parse(_selectedYear!);
-      print(
-          'Register request: email=${widget.email}, displayName=${_displayNameController.text.trim()}, age=$age, gender=$_selectedGender');
-      await _dio.post('/auth/register', data: {
-        'email': widget.email,
-        'password': _passwordController.text.trim(),
+      await dioClient.dio.post('/auth/register', data: {
+        'email': _emailController.text.trim(),
+        'password': _passwordController.text,
         'displayName': _displayNameController.text.trim(),
         'age': age,
         'gender': _selectedGender,
         'captchaToken': token,
       });
-
-      if (mounted) context.go('/email-verification', extra: widget.email);
+      if (mounted) context.go('/email-verification', extra: _emailController.text.trim());
     } on DioException catch (e) {
       print('Error status: ${e.response?.statusCode}');
       print('Error body: ${e.response?.data}');
       final status = e.response?.statusCode;
       final errorMessage = e.response?.data['error'] ?? '';
 
-      if (status == 400 && errorMessage.toString().contains('already registered')) {
-        if (mounted) context.push('/login', extra: widget.email);
+      if (status == 400 &&
+          errorMessage.toString().contains('already registered')) {
+        if (mounted) context.push('/login-screen', extra: _emailController.text.trim());
         return;
       }
 
@@ -163,10 +150,7 @@ class _RegisterPageState extends State<RegisterPage> {
           style: const TextStyle(color: Colors.white, fontSize: 16),
           isExpanded: true,
           items: items
-              .map((item) => DropdownMenuItem(
-                    value: item,
-                    child: Text(item),
-                  ))
+              .map((item) => DropdownMenuItem(value: item, child: Text(item)))
               .toList(),
           onChanged: onChanged,
         ),
@@ -178,6 +162,8 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     final nameInvalid =
         _attempted && !_isDisplayNameValid(_displayNameController.text);
+    final emailInvalid =
+        _attempted && _emailController.text.trim().isEmpty;
     final passwordInvalid =
         _attempted && !_isPasswordValid(_passwordController.text);
     final confirmInvalid = _attempted &&
@@ -188,27 +174,24 @@ class _RegisterPageState extends State<RegisterPage> {
     final yearInvalid = _attempted && _selectedYear == null;
     final genderInvalid = _attempted && _selectedGender == null;
 
-    final canContinue = !_isLoading &&
-        _isPasswordValid(_passwordController.text) &&
-        _passwordController.text == _confirmPasswordController.text &&
-        _confirmPasswordController.text.isNotEmpty &&
-        _isDisplayNameValid(_displayNameController.text) &&
-        _selectedMonth != null &&
-        _selectedDay != null &&
-        _selectedYear != null &&
-        _selectedGender != null;
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.pop(),
+        leading: GestureDetector(
+          onTap: () => context.pop(),
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            decoration: const BoxDecoration(
+              color: Color(0xFF2A2A2A),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+          ),
         ),
         title: const Text(
-          'Tell us more about you',
+          'Create your account',
           style: TextStyle(
             color: Colors.white,
             fontSize: 18,
@@ -218,58 +201,128 @@ class _RegisterPageState extends State<RegisterPage> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Display name field
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(4),
-                border: nameInvalid
-                    ? Border.all(color: Colors.red, width: 1.5)
-                    : Border.all(color: Colors.transparent),
-              ),
-              child: TextField(
-                controller: _displayNameController,
-                onChanged: (_) => setState(() {}),
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                decoration: const InputDecoration(
-                  labelText: 'Display name',
-                  labelStyle: TextStyle(color: Color(0xFF999999), fontSize: 13),
-                  border: InputBorder.none,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            // ── Social buttons ────────────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.facebook, color: Colors.white),
+                label: const Text('Continue with Facebook',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1877F2),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4)),
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: () => context.push('/oauth-login'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2A2A2A),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.network(
+                      'https://www.google.com/favicon.ico',
+                      width: 20,
+                      height: 20,
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.g_mobiledata, color: Colors.white),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Continue with Google',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.apple, color: Colors.white),
+                label: const Text('Continue with Apple',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    side: const BorderSide(color: Color(0xFF444444)),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // ── Or with email ─────────────────────────────────────────
+            const Text('Or with email',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+
+            // Display name
+            _buildTextField(
+              controller: _displayNameController,
+              label: 'Display name',
+              showError: nameInvalid,
             ),
             if (nameInvalid)
               const Padding(
                 padding: EdgeInsets.only(top: 4),
-                child: Text(
-                  'Display name must be 2–25 characters',
-                  style: TextStyle(color: Colors.red, fontSize: 12),
-                ),
+                child: Text('Display name must be 2–25 characters',
+                    style: TextStyle(color: Colors.red, fontSize: 12)),
               ),
             const SizedBox(height: 6),
             const Text(
-              'Your display name can be anything you like. Your name\nor artist name are good choices.',
+              'Your display name can be anything you like.',
               style: TextStyle(color: Color(0xFF999999), fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+
+            // Email
+            _buildTextField(
+              controller: _emailController,
+              label: 'Email address',
+              showError: emailInvalid,
+              keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 24),
 
             // Date of birth
-            const Text(
-              'Date of birth (required)',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            const Text('Date of birth (required)',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-
             Row(
               children: [
                 Expanded(
@@ -308,12 +361,12 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Your date of birth is used to verify your age and is not\nshared publicly.',
+              'Your date of birth is used to verify your age.',
               style: TextStyle(color: Color(0xFF999999), fontSize: 13),
             ),
             const SizedBox(height: 24),
 
-            // Gender dropdown
+            // Gender
             _buildDropdown(
               hint: 'Gender (required)',
               value: _selectedGender,
@@ -323,7 +376,7 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
             const SizedBox(height: 24),
 
-            // Password field
+            // Password
             Container(
               decoration: BoxDecoration(
                 color: const Color(0xFF2A2A2A),
@@ -335,7 +388,6 @@ class _RegisterPageState extends State<RegisterPage> {
               child: TextField(
                 controller: _passwordController,
                 obscureText: !_isPasswordVisible,
-                onChanged: (_) => setState(() {}),
                 style: const TextStyle(color: Colors.white, fontSize: 16),
                 decoration: InputDecoration(
                   labelText: 'Password (min. 8 chars, letter, number, symbol)',
@@ -368,7 +420,7 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
             const SizedBox(height: 12),
 
-            // Confirm password field
+            // Confirm password
             Container(
               decoration: BoxDecoration(
                 color: const Color(0xFF2A2A2A),
@@ -380,7 +432,6 @@ class _RegisterPageState extends State<RegisterPage> {
               child: TextField(
                 controller: _confirmPasswordController,
                 obscureText: !_isConfirmPasswordVisible,
-                onChanged: (_) => setState(() {}),
                 style: const TextStyle(color: Colors.white, fontSize: 16),
                 decoration: InputDecoration(
                   labelText: 'Confirm password',
@@ -406,14 +457,12 @@ class _RegisterPageState extends State<RegisterPage> {
                 _passwordController.text != _confirmPasswordController.text)
               const Padding(
                 padding: EdgeInsets.only(top: 6),
-                child: Text(
-                  'Passwords do not match',
-                  style: TextStyle(color: Colors.red, fontSize: 12),
-                ),
+                child: Text('Passwords do not match',
+                    style: TextStyle(color: Colors.red, fontSize: 12)),
               ),
             const SizedBox(height: 24),
 
-            // Continue button — tapping opens reCAPTCHA sheet if fields are valid
+            // Continue button
             SizedBox(
               width: double.infinity,
               height: 54,
@@ -421,18 +470,17 @@ class _RegisterPageState extends State<RegisterPage> {
                 onPressed: _onContinue,
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
-                      canContinue ? Colors.white : const Color(0xFF3A3A3A),
+                      _canContinue ? Colors.white : const Color(0xFF3A3A3A),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                      borderRadius: BorderRadius.circular(4)),
                 ),
                 child: _isLoading
                     ? const CircularProgressIndicator(color: Colors.black)
                     : Text(
                         'Continue',
                         style: TextStyle(
-                          color: canContinue
+                          color: _canContinue
                               ? Colors.black
                               : const Color(0xFF666666),
                           fontSize: 16,
@@ -442,7 +490,60 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
             ),
             const SizedBox(height: 24),
+
+            // Already have an account?
+            Center(
+              child: GestureDetector(
+                onTap: () => context.push('/login-screen'),
+                child: RichText(
+                  text: const TextSpan(
+                    style: TextStyle(color: Color(0xFF999999), fontSize: 14),
+                    children: [
+                      TextSpan(text: 'Already have an account?  '),
+                      TextSpan(
+                        text: 'Log in',
+                        style: TextStyle(
+                          color: Color(0xFFFF5500),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    bool showError = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2A2A),
+        borderRadius: BorderRadius.circular(4),
+        border: showError
+            ? Border.all(color: Colors.red, width: 1.5)
+            : Border.all(color: Colors.transparent),
+      ),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(color: Colors.white, fontSize: 16),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle:
+              const TextStyle(color: Color(0xFF999999), fontSize: 13),
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         ),
       ),
     );
