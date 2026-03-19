@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../../core/network/dio_client.dart';
 
 class AvatarUploadPage extends StatefulWidget {
   const AvatarUploadPage({super.key});
@@ -14,6 +16,7 @@ class AvatarUploadPage extends StatefulWidget {
 class _AvatarUploadPageState extends State<AvatarUploadPage> {
   File? _pickedImage;
   final _picker = ImagePicker();
+  bool _isUploading = false;
 
   static const _bg = Color(0xFF1A1A1A);
 
@@ -43,9 +46,34 @@ class _AvatarUploadPageState extends State<AvatarUploadPage> {
     context.canPop() ? context.pop() : context.go('/profile/edit');
   }
 
-  void _handleSave() {
-    // TODO: dispatch save avatar event with _pickedImage
-    context.canPop() ? context.pop() : context.go('/profile/edit');
+  Future<void> _handleSave() async {
+    if (_pickedImage == null || _isUploading) return;
+    setState(() => _isUploading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(
+          _pickedImage!.path,
+          filename: 'avatar.jpg',
+        ),
+      });
+      await dioClient.dio.patch('/profile/upload-images', data: formData);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Avatar updated!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      if (mounted) context.canPop() ? context.pop() : context.go('/profile/edit');
+    } on DioException {
+      setState(() => _isUploading = false);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Failed to upload avatar'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -122,7 +150,7 @@ class _AvatarUploadPageState extends State<AvatarUploadPage> {
                         // Save
                         Expanded(
                           child: GestureDetector(
-                            onTap: _handleSave,
+                            onTap: _isUploading ? null : _handleSave,
                             child: Container(
                               padding:
                                   const EdgeInsets.symmetric(vertical: 14),
@@ -131,13 +159,21 @@ class _AvatarUploadPageState extends State<AvatarUploadPage> {
                                 borderRadius: BorderRadius.circular(30),
                               ),
                               alignment: Alignment.center,
-                              child: const Text(
-                                'Save',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700),
-                              ),
+                              child: _isUploading
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white),
+                                    )
+                                  : const Text(
+                                      'Save',
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700),
+                                    ),
                             ),
                           ),
                         ),

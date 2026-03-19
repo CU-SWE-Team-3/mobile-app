@@ -48,7 +48,10 @@ class SettingsMainPage extends ConsumerWidget {
           const SizedBox(height: 8),
 
           _SettingsMenuItem(title: 'Import my music', onTap: () {}),
-          _SettingsMenuItem(title: 'Account', onTap: () {}),
+          _SettingsMenuItem(
+            title: 'Account',
+            onTap: () => context.push('/settings/account'),
+          ),
           _SettingsMenuItem(title: 'Upload', onTap: () {}),
           _SettingsMenuItem(
             title: 'Basic settings',
@@ -168,6 +171,9 @@ class SettingsMainPage extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
+              try {
+                await dioClient.dio.post('/auth/logout');
+              } catch (_) {}
               await UserSession.clear();
               dioClient.dio.options.headers.remove('Authorization');
               if (context.mounted) context.go('/start');

@@ -124,26 +124,17 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  // ── navigate to edit and receive result ──────────────────────────────
+  // ── navigate to edit, then re-fetch to show latest data ─────────────
   Future<void> _openEdit() async {
-    final result = await context.push<Map<String, String>>(
-      '/profile/edit',
-      extra: {
-        'username': _username,
-        'city': _city,
-        'country': _country,
-        'bio': _bio,
-      },
-    );
-    // If edit page returned data → update profile
-    if (result != null && mounted) {
-      setState(() {
-        _username = result['username'] ?? _username;
-        _city = result['city'] ?? _city;
-        _country = result['country'] ?? _country;
-        _bio = result['bio'] ?? _bio;
-      });
-    }
+    await context.push('/profile/edit', extra: {
+      'displayName': _username,
+      'bio': _bio,
+      'country': _country,
+      'city': _city,
+      'avatarUrl': _avatarUrl,
+      'coverUrl': '',
+    });
+    if (mounted) _fetchProfile();
   }
 
   // ─────────────────────────────────────────────────────────────────────

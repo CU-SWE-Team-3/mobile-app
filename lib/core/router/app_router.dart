@@ -212,7 +212,7 @@ final appRouter = GoRouter(
       path: '/profile',
       builder: (_, __) => const ProfilePage(),
       routes: [
-        GoRoute(path: 'edit', builder: (_, __) => const EditProfilePage()),
+        GoRoute(path: 'edit', builder: (_, state) => EditProfilePage(initialData: (state.extra as Map?)?.cast<String, String>())),
         GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
         GoRoute(path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
         GoRoute(path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
