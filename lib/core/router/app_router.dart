@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/presentation/pages/splash_page.dart';
@@ -7,9 +8,6 @@ import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/onboarding_page.dart';
 import '../../features/auth/presentation/pages/email_verification_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
-import '../../features/auth/presentation/pages/reset_password_page.dart';
-import '../../features/auth/presentation/pages/verify_email_deep_link_page.dart';
-import '../../features/auth/presentation/pages/confirm_email_update_page.dart';
 import '../../features/auth/presentation/pages/oauth_login_page.dart';
 import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/register_screen.dart';
@@ -27,13 +25,15 @@ import '../../features/feed/presentation/pages/pop_genre_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
 
-import '../../features/library/presentation/pages/upload_edit_page.dart';
-import '../../features/library/presentation/pages/upload_progress_page.dart';
-import '../../features/library/presentation/pages/library_uploads_page.dart';
+import '../../features/upload/presentation/pages/upload_page.dart';
+import '../../features/upload/presentation/pages/upload_progress_page.dart';
+import '../../features/upload/presentation/pages/metadata_input_page.dart';
+import '../../features/upload/presentation/pages/waveform_preview_page.dart';
 
 import '../../features/library/presentation/pages/library_page.dart';
 import '../../features/library/presentation/pages/library_albums_page.dart';
 import '../../features/library/presentation/pages/library_stations_page.dart';
+import '../../features/library/presentation/pages/library_uploads_page.dart';
 import '../../features/library/presentation/pages/library_playlists_page.dart';
 import '../../features/library/presentation/pages/library_likes_page.dart';
 import '../../features/library/presentation/pages/your_insights_page.dart';
@@ -47,8 +47,6 @@ import '../../features/profile/presentation/pages/profile_insights_page.dart';
 import '../../features/profile/presentation/pages/avatar_upload_page.dart';
 import '../../features/profile/presentation/pages/cover_photo_upload_page.dart';
 import '../../features/profile/presentation/pages/avatar_viewer_page.dart';
-import '../../features/profile/presentation/pages/public_profile_page.dart';
-import '../../features/profile/presentation/pages/other_user_profile_page.dart';
 
 import '../../features/followers/presentation/pages/followers_list_page.dart';
 import '../../features/followers/presentation/pages/following_list_page.dart';
@@ -104,41 +102,13 @@ final appRouter = GoRouter(
     GoRoute(path: '/splash', builder: (_, __) => const SplashPage()),
     GoRoute(path: '/start', builder: (_, __) => const StartPage()),
     GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingPage()),
-    GoRoute(
-        path: '/register',
-        builder: (_, state) =>
-            RegisterPage(email: state.extra as String? ?? '')),
-    GoRoute(
-        path: '/login',
-        builder: (_, state) => LoginPage(email: state.extra as String? ?? '')),
-    GoRoute(
-        path: '/forgot-password',
-        builder: (_, __) => const ForgotPasswordPage()),
-    GoRoute(
-        path: '/reset-password',
-        builder: (_, state) =>
-            ResetPasswordPage(token: state.extra as String? ?? '')),
+    GoRoute(path: '/register', builder: (_, state) => RegisterPage(email: state.extra as String? ?? '')),
+    GoRoute(path: '/login', builder: (_, state) => LoginPage(email: state.extra as String? ?? '')),
+    GoRoute(path: '/forgot-password', builder: (_, __) => const ForgotPasswordPage()),
     GoRoute(path: '/oauth-login', builder: (_, __) => const OAuthLoginPage()),
-    GoRoute(
-        path: '/verify-email-deep-link',
-        builder: (_, state) =>
-            VerifyEmailDeepLinkPage(token: state.extra as String? ?? '')),
-    GoRoute(
-        path: '/confirm-email-update',
-        builder: (_, state) =>
-            ConfirmEmailUpdatePage(token: state.extra as String? ?? '')),
-    GoRoute(
-        path: '/email-verification',
-        builder: (_, state) =>
-            EmailVerificationPage(email: state.extra as String? ?? '')),
-    GoRoute(
-        path: '/login-screen',
-        builder: (_, state) =>
-            LoginScreen(email: state.extra as String? ?? '')),
-    GoRoute(
-        path: '/register-screen',
-        builder: (_, state) =>
-            RegisterScreen(email: state.extra as String? ?? '')),
+    GoRoute(path: '/email-verification', builder: (_, state) => EmailVerificationPage(email: state.extra as String? ?? '')),
+    GoRoute(path: '/login-screen', builder: (_, state) => LoginScreen(email: state.extra as String? ?? '')),
+    GoRoute(path: '/register-screen', builder: (_, state) => RegisterScreen(email: state.extra as String? ?? '')),
 
     // ── MAIN SHELL ───────────────────────────────────────────────────
     // 5 branches — must match app_shell.dart tab order exactly:
@@ -154,21 +124,12 @@ final appRouter = GoRouter(
               path: '/home',
               builder: (_, __) => const HomePage(),
               routes: [
-                GoRoute(
-                    path: 'discover', builder: (_, __) => const DiscoverPage()),
-                GoRoute(
-                    path: 'trending',
-                    builder: (_, __) => const TrendingChartsPage()),
+                GoRoute(path: 'discover', builder: (_, __) => const DiscoverPage()),
+                GoRoute(path: 'trending', builder: (_, __) => const TrendingChartsPage()),
                 GoRoute(path: 'cast', builder: (_, __) => const CastPage()),
-                GoRoute(
-                    path: 'genre/electronic',
-                    builder: (_, __) => const ElectronicGenrePage()),
-                GoRoute(
-                    path: 'genre/hiphop',
-                    builder: (_, __) => const HiphopGenrePage()),
-                GoRoute(
-                    path: 'genre/pop',
-                    builder: (_, __) => const PopGenrePage()),
+                GoRoute(path: 'genre/electronic', builder: (_, __) => const ElectronicGenrePage()),
+                GoRoute(path: 'genre/hiphop', builder: (_, __) => const HiphopGenrePage()),
+                GoRoute(path: 'genre/pop', builder: (_, __) => const PopGenrePage()),
               ],
             ),
           ],
@@ -191,15 +152,9 @@ final appRouter = GoRouter(
               path: '/search',
               builder: (_, __) => const SearchPage(),
               routes: [
-                GoRoute(
-                    path: 'tracks',
-                    builder: (_, __) => const SearchResultsTracksPage()),
-                GoRoute(
-                    path: 'users',
-                    builder: (_, __) => const SearchResultsUsersPage()),
-                GoRoute(
-                    path: 'playlists',
-                    builder: (_, __) => const SearchResultsPlaylistsPage()),
+                GoRoute(path: 'tracks', builder: (_, __) => const SearchResultsTracksPage()),
+                GoRoute(path: 'users', builder: (_, __) => const SearchResultsUsersPage()),
+                GoRoute(path: 'playlists', builder: (_, __) => const SearchResultsPlaylistsPage()),
               ],
             ),
           ],
@@ -212,35 +167,13 @@ final appRouter = GoRouter(
               path: '/library',
               builder: (_, __) => const LibraryPage(),
               routes: [
-                GoRoute(
-                    path: 'albums',
-                    builder: (_, __) => const LibraryAlbumsPage()),
-                GoRoute(
-                    path: 'stations',
-                    builder: (_, __) => const LibraryStationsPage()),
-                GoRoute(
-                    path: 'uploads',
-                    builder: (_, __) => const LibraryUploadsPage(),
-                    routes: [
-                      GoRoute(
-                          path: 'edit',
-                          builder: (_, __) => const UploadEditPage()),
-                      GoRoute(
-                          path: 'progress',
-                          builder: (_, __) => const UploadProgressPage()),
-                    ]),
-                GoRoute(
-                    path: 'playlists',
-                    builder: (_, __) => const LibraryPlaylistsPage()),
-                GoRoute(
-                    path: 'likes',
-                    builder: (_, __) => const LibraryLikesPage()),
-                GoRoute(
-                    path: 'insights',
-                    builder: (_, __) => const YourInsightsPage()),
-                GoRoute(
-                    path: 'following',
-                    builder: (_, __) => const LibraryFollowingPage()),
+                GoRoute(path: 'albums', builder: (_, __) => const LibraryAlbumsPage()),
+                GoRoute(path: 'stations', builder: (_, __) => const LibraryStationsPage()),
+                GoRoute(path: 'uploads', builder: (_, __) => const LibraryUploadsPage()),
+                GoRoute(path: 'playlists', builder: (_, __) => const LibraryPlaylistsPage()),
+                GoRoute(path: 'likes', builder: (_, __) => const LibraryLikesPage()),
+                GoRoute(path: 'insights', builder: (_, __) => const YourInsightsPage()),
+                GoRoute(path: 'following', builder: (_, __) => const LibraryFollowingPage()),
               ],
             ),
           ],
@@ -253,15 +186,9 @@ final appRouter = GoRouter(
               path: '/upgrade',
               builder: (_, __) => const PremiumPaywallPage(),
               routes: [
-                GoRoute(
-                    path: 'pricing',
-                    builder: (_, __) => const PricingTiersPage()),
-                GoRoute(
-                    path: 'status',
-                    builder: (_, __) => const SubscriptionStatusPage()),
-                GoRoute(
-                    path: 'offline',
-                    builder: (_, __) => const OfflineDownloadPage()),
+                GoRoute(path: 'pricing', builder: (_, __) => const PricingTiersPage()),
+                GoRoute(path: 'status', builder: (_, __) => const SubscriptionStatusPage()),
+                GoRoute(path: 'offline', builder: (_, __) => const OfflineDownloadPage()),
               ],
             ),
           ],
@@ -272,10 +199,11 @@ final appRouter = GoRouter(
     // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─
     GoRoute(
       path: '/upload',
-      builder: (_, __) => const UploadEditPage(),
+      builder: (_, __) => const UploadPage(),
       routes: [
-        GoRoute(
-            path: 'progress', builder: (_, __) => const UploadProgressPage()),
+        GoRoute(path: 'metadata', builder: (_, __) => const MetadataInputPage()),
+        GoRoute(path: 'waveform', builder: (_, __) => const WaveformPreviewPage()),
+        GoRoute(path: 'progress', builder: (_, __) => const UploadProgressPage()),
       ],
     ),
 
@@ -284,58 +212,17 @@ final appRouter = GoRouter(
       path: '/profile',
       builder: (_, __) => const ProfilePage(),
       routes: [
-        GoRoute(
-            path: 'edit',
-            builder: (_, state) => EditProfilePage(
-                initialData: (state.extra as Map?)?.cast<String, String>())),
+        GoRoute(path: 'edit', builder: (_, state) => EditProfilePage(initialData: (state.extra as Map?)?.cast<String, String>())),
         GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
-        GoRoute(
-            path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
-        GoRoute(
-            path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
+        GoRoute(path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
+        GoRoute(path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
         GoRoute(path: 'avatar', builder: (_, __) => const AvatarUploadPage()),
-        GoRoute(
-            path: 'avatar-view', builder: (_, __) => const AvatarViewerPage()),
-        GoRoute(
-            path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
-        GoRoute(
-          path: 'followers',
-          builder: (_, state) {
-            final extra = state.extra as Map<String, dynamic>?;
-            return FollowersListPage(
-                targetUserId: extra?['targetUserId'] as String?);
-          },
-        ),
-        GoRoute(
-          path: 'following',
-          builder: (_, state) {
-            final extra = state.extra as Map<String, dynamic>?;
-            return FollowingListPage(
-                targetUserId: extra?['targetUserId'] as String?);
-          },
-        ),
-        GoRoute(
-            path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),
-        GoRoute(
-          path: 'user/:permalink',
-          builder: (_, state) => PublicProfilePage(
-            permalink: state.pathParameters['permalink']!,
-          ),
-        ),
+        GoRoute(path: 'avatar-view', builder: (_, __) => const AvatarViewerPage()),
+        GoRoute(path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
+        GoRoute(path: 'followers', builder: (_, __) => const FollowersListPage()),
+        GoRoute(path: 'following', builder: (_, __) => const FollowingListPage()),
+        GoRoute(path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),
       ],
-    ),
-
-    // ── OTHER USER PROFILE (global, short URL) ────────────────────────
-    GoRoute(
-      path: '/user/:permalink',
-      builder: (context, state) {
-        final extra = state.extra as Map<String, dynamic>? ?? {};
-        return OtherUserProfilePage(
-          permalink: state.pathParameters['permalink']!,
-          initialDisplayName: extra['displayName'] as String? ?? '',
-          initialUserId: extra['userId'] as String? ?? '',
-        );
-      },
     ),
 
     // ── PLAYER (global, accessible from anywhere) ─────────────────────
@@ -345,26 +232,12 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: 'queue', builder: (_, __) => const PlayerQueuePage()),
         GoRoute(path: 'recent', builder: (_, __) => const RecentlyPlayedPage()),
-        GoRoute(
-            path: 'history', builder: (_, __) => const ListeningHistoryPage()),
+        GoRoute(path: 'history', builder: (_, __) => const ListeningHistoryPage()),
       ],
     ),
 
     // ── ENGAGEMENT ────────────────────────────────────────────────────
-    GoRoute(
-      path: '/comments',
-      builder: (_, state) {
-        final extra = state.extra as Map<String, dynamic>? ?? {};
-        return CommentsSheet(
-          trackId: extra['trackId'] as String?,
-          trackTitle: extra['trackTitle'] as String?,
-          trackArtist: extra['trackArtist'] as String?,
-          trackArtworkUrl: extra['trackArtworkUrl'] as String?,
-          currentPositionSeconds:
-              extra['currentPositionSeconds'] as int? ?? 0,
-        );
-      },
-    ),
+    GoRoute(path: '/comments', builder: (_, __) => const CommentsSheet()),
     GoRoute(path: '/likers', builder: (_, __) => const LikersListPage()),
     GoRoute(path: '/reposters', builder: (_, __) => const RepostersListPage()),
 
@@ -375,8 +248,7 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(path: 'create', builder: (_, __) => const CreatePlaylistPage()),
         GoRoute(path: 'edit', builder: (_, __) => const EditPlaylistPage()),
-        GoRoute(
-            path: 'privacy', builder: (_, __) => const PlaylistPrivacyPage()),
+        GoRoute(path: 'privacy', builder: (_, __) => const PlaylistPrivacyPage()),
         GoRoute(path: 'share', builder: (_, __) => const SharePlaylistPage()),
       ],
     ),
@@ -395,9 +267,7 @@ final appRouter = GoRouter(
       path: '/notifications',
       builder: (_, __) => const NotificationsPage(),
       routes: [
-        GoRoute(
-            path: 'settings',
-            builder: (_, __) => const PushNotificationSettingsPage()),
+        GoRoute(path: 'settings', builder: (_, __) => const PushNotificationSettingsPage()),
       ],
     ),
 
@@ -406,32 +276,14 @@ final appRouter = GoRouter(
       path: '/settings',
       builder: (_, __) => const SettingsMainPage(),
       routes: [
-        GoRoute(
-            path: 'account', builder: (_, __) => const AccountSettingsPage()),
+        GoRoute(path: 'account', builder: (_, __) => const AccountSettingsPage()),
         GoRoute(path: 'basic', builder: (_, __) => const BasicSettingsPage()),
         GoRoute(path: 'social', builder: (_, __) => const SocialSettingsPage()),
-        GoRoute(
-            path: 'notifications',
-            builder: (_, __) => const NotificationsSettingsPage()),
-        GoRoute(
-            path: 'privacy', builder: (_, __) => const PrivacySettingsPage()),
-        GoRoute(
-            path: 'communications',
-            builder: (_, __) => const CommunicationsSettingsPage()),
-        GoRoute(
-            path: 'advertising',
-            builder: (_, __) => const AdvertisingSettingsPage()),
-        GoRoute(
-            path: 'import-music',
-            builder: (_, __) => const ImportMusicPage(),
-            routes: [
-              GoRoute(
-                  path: 'import',
-                  builder: (_, __) => const ImportFromAppPage()),
-              GoRoute(
-                  path: 'manage',
-                  builder: (_, __) => const ManageImportedLikesPage()),
-            ]),
+        GoRoute(path: 'notifications', builder: (_, __) => const NotificationsSettingsPage()),
+        GoRoute(path: 'privacy', builder: (_, __) => const PrivacySettingsPage()),
+        GoRoute(path: 'communications', builder: (_, __) => const CommunicationsSettingsPage()),
+        GoRoute(path: 'advertising', builder: (_, __) => const AdvertisingSettingsPage()),
+        GoRoute(path: 'import-music', builder: (_, __) => const ImportMusicPage()),
         GoRoute(path: 'inbox', builder: (_, __) => const InboxSettingsPage()),
         GoRoute(path: 'legal', builder: (_, __) => const LegalPage()),
         GoRoute(path: 'add-widget', builder: (_, __) => const AddWidgetPage()),

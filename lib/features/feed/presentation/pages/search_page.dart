@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/themes/app_theme.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -58,7 +59,7 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppTheme.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -103,13 +104,7 @@ class _SearchPageState extends State<SearchPage> {
 
             // ── Body ────────────────────────────────────────────────
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: () async {
-                  if (_hasSearched && _lastQuery.isNotEmpty) await _search(_lastQuery);
-                },
-                color: const Color(0xFFFF5500),
-                backgroundColor: const Color(0xFF1A1A1A),
-                child: _isLoading
+              child: _isLoading
                   ? const Center(
                       child: CircularProgressIndicator(
                           color: Color(0xFFFF5500)))
@@ -262,7 +257,6 @@ class _SearchPageState extends State<SearchPage> {
                                     );
                                   },
                                 ),
-              ),
             ),
           ],
         ),

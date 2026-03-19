@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 
 class EditProfilePage extends StatefulWidget {
@@ -143,40 +142,19 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ),
       );
 
-  // ── save: PATCH /profile/update ──────────────────────────────────────
+  // ── save: PATCH /profile/me ───────────────────────────────────────────
   Future<void> _save() async {
     if (_isLoading) return;
     setState(() => _isLoading = true);
     try {
-      final body = {
+      await dioClient.dio.patch('/profile/update', data: {
         'displayName': _nameCtrl.text.trim().isEmpty
             ? _initUsername
             : _nameCtrl.text.trim(),
         'bio': _bio,
         'country': _country,
         'city': _cityCtrl.text.trim(),
-      };
-      // ignore: avoid_print
-      print('[EditProfile] Sending: $body');
-      final response = await dioClient.dio.patch('/profile/update', data: body);
-      // ignore: avoid_print
-      print('[EditProfile] Response status: ${response.statusCode}');
-      // ignore: avoid_print
-      print('[EditProfile] Response data: ${response.data}');
-      // Prefer server-returned values; fall back to what we sent
-      final prefs = await SharedPreferences.getInstance();
-      final responseData = response.data['data']?['user'] as Map<String, dynamic>?;
-      final savedDisplayName = (responseData?['displayName'] as String?) ?? (body['displayName'] as String);
-      final savedBio         = (responseData?['bio']         as String?) ?? (body['bio']         as String);
-      final savedCity        = (responseData?['city']        as String?) ?? (body['city']        as String);
-      final savedCountry     = (responseData?['country']     as String?) ?? (body['country']     as String);
-      await prefs.setString('displayName', savedDisplayName);
-      await prefs.setString('bio',         savedBio);
-      await prefs.setString('city',        savedCity);
-      await prefs.setString('country',     savedCountry);
-      if (responseData?['permalink'] != null) {
-        await prefs.setString('permalink', responseData!['permalink'] as String);
-      }
+      });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -184,18 +162,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
           backgroundColor: Colors.green,
         ),
       );
-      await Future.delayed(const Duration(milliseconds: 800));
-      if (context.mounted) context.pop(<String, String>{
-        'displayName': savedDisplayName,
-        'bio': savedBio,
-        'city': savedCity,
-        'country': savedCountry,
-      });
+      context.pop();
     } on DioException catch (e) {
-      // ignore: avoid_print
-      print('[EditProfile] Error status: ${e.response?.statusCode}');
-      // ignore: avoid_print
-      print('[EditProfile] Error data: ${e.response?.data}');
+      print('Save error: $e');
+      print('Status: ${e.response?.statusCode}');
+      print('Body: ${e.response?.data}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

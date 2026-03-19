@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 
@@ -255,16 +254,6 @@ class _LibraryFollowingPageState extends ConsumerState<LibraryFollowingPage> {
                                   isFollowing: isFollowing,
                                   isButtonLoading: isButtonLoading,
                                   onToggle: () => _toggleFollow(id),
-                                  onTap: () {
-                                    final permalink =
-                                        user['permalink'] as String? ?? '';
-                                    if (permalink.isNotEmpty) {
-                                      context.push('/user/$permalink', extra: {
-                                        'userId': id,
-                                        'displayName': displayName,
-                                      });
-                                    }
-                                  },
                                 );
                               },
                             ),
@@ -336,7 +325,6 @@ class _UserTile extends StatelessWidget {
   final bool isFollowing;
   final bool isButtonLoading;
   final VoidCallback onToggle;
-  final VoidCallback? onTap;
 
   const _UserTile({
     required this.displayName,
@@ -347,14 +335,11 @@ class _UserTile extends StatelessWidget {
     required this.isFollowing,
     required this.isButtonLoading,
     required this.onToggle,
-    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
       child: Row(
         children: [
@@ -447,7 +432,6 @@ class _UserTile extends StatelessWidget {
           ),
         ],
       ),
-    ),
     );
   }
 }

@@ -57,6 +57,9 @@ class _SignOutPageState extends ConsumerState<SignOutPage> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              try {
+                await dioClient.dio.post('/auth/logout');
+              } catch (_) {}
               await UserSession.clear();
               dioClient.dio.options.headers.remove('Authorization');
               if (context.mounted) context.go('/start');
