@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/core/network/user_session.dart';
+import 'package:soundcloud_clone/features/settings/presentation/pages/basic_settings_page.dart';
+import 'package:soundcloud_clone/features/settings/presentation/pages/legal_page.dart';
 
 class SettingsMainPage extends ConsumerWidget {
   const SettingsMainPage({super.key});
@@ -42,63 +44,33 @@ class SettingsMainPage extends ConsumerWidget {
       ),
       body: ListView(
         children: [
+
           const SizedBox(height: 8),
 
-          _SettingsMenuItem(
-            title: 'Import my music',
-            onTap: () => context.push('/settings/import-music'),
-          ),
-          _SettingsMenuItem(
-            title: 'Account',
-            onTap: () => context.push('/settings/account'),
-          ),
-          _SettingsMenuItem(
-            title: 'Upload',
-            onTap: () => context.push('/settings/upload'),
-          ),
+          _SettingsMenuItem(title: 'Import my music', onTap: () {}),
+          _SettingsMenuItem(title: 'Account', onTap: () {}),
+          _SettingsMenuItem(title: 'Upload', onTap: () {}),
           _SettingsMenuItem(
             title: 'Basic settings',
-            onTap: () => context.push('/settings/basic'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BasicSettingsPage()),
+            ),
           ),
-          _SettingsMenuItem(
-            title: 'Social settings',
-            onTap: () => context.push('/settings/social'),
-          ),
-          _SettingsMenuItem(
-            title: 'Inbox',
-            onTap: () => context.push('/settings/inbox'),
-          ),
-          _SettingsMenuItem(
-            title: 'Notifications',
-            onTap: () => context.push('/settings/notifications'),
-          ),
-          _SettingsMenuItem(
-            title: 'Add widgets',
-            onTap: () => context.push('/settings/add-widget'),
-          ),
-          _SettingsMenuItem(
-            title: 'Analytics',
-            onTap: () => context.push('/settings/analytics'),
-          ),
-          _SettingsMenuItem(
-            title: 'Communications',
-            onTap: () => context.push('/settings/communications'),
-          ),
-          _SettingsMenuItem(
-            title: 'Advertising',
-            onTap: () => context.push('/settings/advertising'),
-          ),
-          _SettingsMenuItem(
-            title: 'Support',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Support coming soon')),
-              );
-            },
-          ),
+          _SettingsMenuItem(title: 'Social settings', onTap: () {}),
+          _SettingsMenuItem(title: 'Inbox', onTap: () {}),
+          _SettingsMenuItem(title: 'Notifications', onTap: () {}),
+          _SettingsMenuItem(title: 'Add widgets', onTap: () {}),
+          _SettingsMenuItem(title: 'Analytics', onTap: () {}),
+          _SettingsMenuItem(title: 'Communications', onTap: () {}),
+          _SettingsMenuItem(title: 'Advertising', onTap: () {}),
+          _SettingsMenuItem(title: 'Support', onTap: () {}),
           _SettingsMenuItem(
             title: 'Legal',
-            onTap: () => context.push('/settings/legal'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LegalPage()),
+            ),
           ),
 
           const SizedBox(height: 32),
@@ -196,9 +168,6 @@ class SettingsMainPage extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              try {
-                await dioClient.dio.post('/auth/logout');
-              } catch (_) {}
               await UserSession.clear();
               dioClient.dio.options.headers.remove('Authorization');
               if (context.mounted) context.go('/start');
@@ -256,4 +225,3 @@ class _SettingsMenuItem extends StatelessWidget {
     );
   }
 }
-

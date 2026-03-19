@@ -6,9 +6,7 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 
 class FollowersListPage extends StatefulWidget {
-  final String? targetUserId;
-
-  const FollowersListPage({super.key, this.targetUserId});
+  const FollowersListPage({super.key});
 
   @override
   State<FollowersListPage> createState() => _FollowersListPageState();
@@ -33,30 +31,13 @@ class _FollowersListPageState extends State<FollowersListPage> {
       _hasError = false;
     });
     try {
-      final myId = await UserSession.getUserId();
-      if (myId == null) throw Exception('Not logged in');
-
-      // When targetUserId is provided, show that user's followers.
-      // Always use myId for the "am I following them?" check.
-      final targetId = widget.targetUserId ?? myId;
-
-      final results = await Future.wait([
-        dioClient.dio.get('/network/$targetId/followers?page=1&limit=20'),
-        dioClient.dio.get('/network/$myId/following?page=1&limit=999'),
-      ]);
-
-      final followersData = results[0].data['data'] as List;
-      final followingData = results[1].data['data'] as List;
-
-      final followingIds = followingData
-          .map((u) => u['_id'] as String?)
-          .whereType<String>()
-          .toSet();
-
+      final userId = await UserSession.getUserId();
+      if (userId == null) throw Exception('Not logged in');
+      final response = await dioClient.dio
+          .get('/network/$userId/followers?page=1&limit=20');
+      final data = response.data['data'] as List;
       setState(() {
-        _users = followersData.cast<Map<String, dynamic>>();
-        _followingIds.clear();
-        _followingIds.addAll(followingIds);
+        _users = data.cast<Map<String, dynamic>>();
         _isLoading = false;
       });
     } on DioException {
@@ -153,7 +134,8 @@ class _FollowersListPageState extends State<FollowersListPage> {
                   ? Center(
                       child: Text(
                         'No followers yet',
-                        style: TextStyle(color: Colors.grey[600], fontSize: 15),
+                        style:
+                            TextStyle(color: Colors.grey[600], fontSize: 15),
                       ),
                     )
                   : ListView.builder(
@@ -190,22 +172,15 @@ class _FollowerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final displayName = user['displayName'] as String? ?? '';
     final avatarUrl = user['avatarUrl'] as String?;
-    final followerCount = _safeInt(user['followerCount']);
-    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+    final followerCount = user['followerCount'] as int? ?? 0;
+    final initial =
+        displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     final isDefaultAvatar = avatarUrl == null ||
         avatarUrl.isEmpty ||
         avatarUrl.contains('default-avatar');
 
     return InkWell(
-      onTap: () {
-        final permalink = user['permalink'] as String? ?? '';
-        final userId = user['_id'] as String? ?? '';
-        final displayName = user['displayName'] as String? ?? '';
-        if (permalink.isNotEmpty) {
-          context.push('/user/$permalink',
-              extra: {'userId': userId, 'displayName': displayName});
-        }
-      },
+      onTap: () {},
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         child: Row(
@@ -252,8 +227,8 @@ class _FollowerTile extends StatelessWidget {
                       const SizedBox(width: 5),
                       Text(
                         '$followerCount Followers',
-                        style:
-                            const TextStyle(color: Colors.grey, fontSize: 13),
+                        style: const TextStyle(
+                            color: Colors.grey, fontSize: 13),
                       ),
                     ],
                   ),
@@ -296,11 +271,4 @@ class _FollowerTile extends StatelessWidget {
       ),
     );
   }
-}
-
-int _safeInt(dynamic val) {
-  if (val == null) return 0;
-  if (val is int) return val;
-  if (val is double) return val.toInt();
-  return int.tryParse(val.toString()) ?? 0;
 }
