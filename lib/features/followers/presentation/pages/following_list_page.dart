@@ -1,67 +1,83 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../../core/network/user_session.dart';
 
-final List<Map<String, dynamic>> _fakeFollowing = [
-  {
-    "name": "z0z",
-    "country": null,
-    "followers": 3,
-    "image": "https://i.pravatar.cc/150?img=1",
-    "followsYouBack": true
-  },
-  {
-    "name": "Mohamed Alabasy",
-    "country": "Egypt",
-    "followers": 2,
-    "image": null,
-    "followsYouBack": true
-  },
-  {
-    "name": "Khalid",
-    "country": "Egypt",
-    "followers": 10,
-    "image": "https://i.pravatar.cc/150?img=3",
-    "followsYouBack": false
-  },
-  {
-    "name": "Farghaly",
-    "country": "Sheikh Zayed",
-    "followers": 800,
-    "image": "https://i.pravatar.cc/150?img=5",
-    "followsYouBack": false
-  },
-];
-
-// ─────────────────────────────────────────────
-//  FOLLOWING LIST PAGE
-// ─────────────────────────────────────────────
-class FollowingListPage extends ConsumerStatefulWidget {
+class FollowingListPage extends StatefulWidget {
   const FollowingListPage({super.key});
 
   @override
-  ConsumerState<FollowingListPage> createState() => _FollowingListPageState();
+  State<FollowingListPage> createState() => _FollowingListPageState();
 }
 
-class _FollowingListPageState extends ConsumerState<FollowingListPage> {
-  late Set<int> _following;
+class _FollowingListPageState extends State<FollowingListPage> {
+  List<Map<String, dynamic>> _users = [];
+  // All users in the following list are already followed by definition
+  final Set<String> _followingIds = {};
+  final Set<String> _loadingIds = {};
+  bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    _following = Set.from(List.generate(_fakeFollowing.length, (i) => i));
+    _fetchFollowing();
   }
 
-  bool _isTrueFriend(int index) =>
-      _fakeFollowing[index]["followsYouBack"] == true &&
-      _following.contains(index);
+  Future<void> _fetchFollowing() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+    try {
+      final userId = await UserSession.getUserId();
+      if (userId == null) throw Exception('Not logged in');
+      final response = await dioClient.dio
+          .get('/network/$userId/following?page=1&limit=20');
+      final data = response.data['data'] as List;
+      final users = data.cast<Map<String, dynamic>>();
+      setState(() {
+        _users = users;
+        _followingIds.addAll(users.map((u) => u['_id'] as String));
+        _isLoading = false;
+      });
+    } on DioException {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    }
+  }
 
-  int get _trueFriendsCount =>
-      _fakeFollowing.asMap().entries.where((e) => _isTrueFriend(e.key)).length;
+  Future<void> _toggleFollow(String userId) async {
+    if (_loadingIds.contains(userId)) return;
+    final isFollowing = _followingIds.contains(userId);
+    setState(() => _loadingIds.add(userId));
+    try {
+      if (isFollowing) {
+        await dioClient.dio.delete('/network/$userId/follow');
+        setState(() => _followingIds.remove(userId));
+      } else {
+        await dioClient.dio.post('/network/$userId/follow');
+        setState(() => _followingIds.add(userId));
+      }
+    } on DioException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action failed. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingIds.remove(userId));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final displayList = _fakeFollowing.asMap().entries.toList();
-
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
@@ -75,7 +91,8 @@ class _FollowingListPageState extends ConsumerState<FollowingListPage> {
               color: Colors.grey[900],
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+            child:
+                const Icon(Icons.arrow_back, color: Colors.white, size: 20),
           ),
         ),
         title: const Text(
@@ -86,7 +103,6 @@ class _FollowingListPageState extends ConsumerState<FollowingListPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        // ✅ Cast button updated
         actions: [
           IconButton(
             icon: const Icon(Icons.cast, color: Colors.white),
@@ -94,167 +110,125 @@ class _FollowingListPageState extends ConsumerState<FollowingListPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          const SizedBox(height: 12),
-
-          // ── "People who follow you back" banner ──────────────────
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => TrueFriendsPage(
-                    following: _following,
-                    onToggleFollow: (index) {
-                      setState(() {
-                        if (_following.contains(index)) {
-                          _following.remove(index);
-                          _fakeFollowing[index]["followers"]--;
-                        } else {
-                          _following.add(index);
-                          _fakeFollowing[index]["followers"]++;
-                        }
-                      });
-                    },
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF5500)))
+          : _hasError
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Couldn't load following",
+                        style: TextStyle(color: Colors.grey[400], fontSize: 15),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _fetchFollowing,
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF5500)),
+                        child: const Text('Retry',
+                            style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
                   ),
+                )
+              : Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    // "True friends" banner
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const _TrueFriendsPage()),
+                      ),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 15),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[900],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: Colors.white54, width: 1.5),
+                              ),
+                              child: const Icon(Icons.people_outline,
+                                  color: Colors.white, size: 22),
+                            ),
+                            const SizedBox(width: 14),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'People who follow you back',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  Text(
+                                    'see your true friends',
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward_ios,
+                                color: Colors.white54, size: 16),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: _users.isEmpty
+                          ? Center(
+                              child: Text(
+                                "You're not following anyone yet",
+                                style: TextStyle(
+                                    color: Colors.grey[600], fontSize: 15),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _users.length,
+                              itemBuilder: (context, i) {
+                                final user = _users[i];
+                                final id = user['_id'] as String;
+                                return _UserTile(
+                                  user: user,
+                                  isFollowing: _followingIds.contains(id),
+                                  isLoading: _loadingIds.contains(id),
+                                  onToggle: () => _toggleFollow(id),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-              );
-            },
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 15),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.grey[900],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white54, width: 1.5),
-                    ),
-                    child: const Icon(
-                      Icons.people_outline,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'People who follow you back',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                        Text(
-                          'see your true friends',
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.arrow_forward_ios,
-                    color: Colors.white54,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // ── Following list ───────────────────────────────────────
-          Expanded(
-            child: displayList.isEmpty
-                ? Center(
-                    child: Text(
-                      'Not following anyone yet',
-                      style: TextStyle(color: Colors.grey[600], fontSize: 15),
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: displayList.length,
-                    itemBuilder: (context, i) {
-                      final index = displayList[i].key;
-                      final user = displayList[i].value;
-                      final bool isFollowing = _following.contains(index);
-
-                      return _UserTile(
-                        user: user,
-                        isFollowing: isFollowing,
-                        onToggle: () {
-                          setState(() {
-                            if (isFollowing) {
-                              _following.remove(index);
-                              _fakeFollowing[index]["followers"]--;
-                            } else {
-                              _following.add(index);
-                              _fakeFollowing[index]["followers"]++;
-                            }
-                          });
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
     );
   }
 }
 
 // ─────────────────────────────────────────────
-//  TRUE FRIENDS PAGE
+//  TRUE FRIENDS PAGE (mutual followers)
 // ─────────────────────────────────────────────
-class TrueFriendsPage extends StatefulWidget {
-  final Set<int> following;
-  final void Function(int index) onToggleFollow;
-
-  const TrueFriendsPage({
-    super.key,
-    required this.following,
-    required this.onToggleFollow,
-  });
-
-  @override
-  State<TrueFriendsPage> createState() => _TrueFriendsPageState();
-}
-
-class _TrueFriendsPageState extends State<TrueFriendsPage> {
-  late Set<int> _localFollowing;
-
-  @override
-  void initState() {
-    super.initState();
-    _localFollowing = Set.from(widget.following);
-  }
-
-  List<MapEntry<int, Map<String, dynamic>>> get _trueFriends => _fakeFollowing
-      .asMap()
-      .entries
-      .where((e) =>
-          e.value["followsYouBack"] == true && _localFollowing.contains(e.key))
-      .toList();
+class _TrueFriendsPage extends StatelessWidget {
+  const _TrueFriendsPage();
 
   @override
   Widget build(BuildContext context) {
-    final friends = _trueFriends;
-
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
@@ -265,60 +239,28 @@ class _TrueFriendsPageState extends State<TrueFriendsPage> {
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.grey[900],
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                color: Colors.grey[900], shape: BoxShape.circle),
+            child:
+                const Icon(Icons.arrow_back, color: Colors.white, size: 20),
           ),
         ),
         title: const Text(
           'Your true friends',
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
-          ),
+              color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
         ),
-        // ✅ Cast button updated
         actions: [
           IconButton(
-            icon: const Icon(Icons.cast, color: Colors.white),
-            onPressed: () {},
-          ),
+              icon: const Icon(Icons.cast, color: Colors.white),
+              onPressed: () {}),
         ],
       ),
-      body: friends.isEmpty
-          ? Center(
-              child: Text(
-                'No mutual followers yet',
-                style: TextStyle(color: Colors.grey[600], fontSize: 15),
-              ),
-            )
-          : ListView.builder(
-              itemCount: friends.length,
-              itemBuilder: (context, i) {
-                final index = friends[i].key;
-                final user = friends[i].value;
-                final bool isFollowing = _localFollowing.contains(index);
-
-                return _UserTile(
-                  user: user,
-                  isFollowing: isFollowing,
-                  onToggle: () {
-                    setState(() {
-                      if (isFollowing) {
-                        _localFollowing.remove(index);
-                        _fakeFollowing[index]["followers"]--;
-                      } else {
-                        _localFollowing.add(index);
-                        _fakeFollowing[index]["followers"]++;
-                      }
-                    });
-                    widget.onToggleFollow(index);
-                  },
-                );
-              },
-            ),
+      body: Center(
+        child: Text(
+          'No mutual followers yet',
+          style: TextStyle(color: Colors.grey[600], fontSize: 15),
+        ),
+      ),
     );
   }
 }
@@ -329,16 +271,27 @@ class _TrueFriendsPageState extends State<TrueFriendsPage> {
 class _UserTile extends StatelessWidget {
   final Map<String, dynamic> user;
   final bool isFollowing;
+  final bool isLoading;
   final VoidCallback onToggle;
 
   const _UserTile({
     required this.user,
     required this.isFollowing,
+    required this.isLoading,
     required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final displayName = user['displayName'] as String? ?? '';
+    final avatarUrl = user['avatarUrl'] as String?;
+    final followerCount = user['followerCount'] as int? ?? 0;
+    final initial =
+        displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+    final isDefaultAvatar = avatarUrl == null ||
+        avatarUrl.isEmpty ||
+        avatarUrl.contains('default-avatar');
+
     return InkWell(
       onTap: () {},
       child: Padding(
@@ -348,11 +301,25 @@ class _UserTile extends StatelessWidget {
             CircleAvatar(
               radius: 28,
               backgroundColor: Colors.grey[800],
-              backgroundImage:
-                  user["image"] != null ? NetworkImage(user["image"]) : null,
-              child: user["image"] == null
-                  ? const Icon(Icons.person, color: Colors.white)
-                  : null,
+              child: isDefaultAvatar
+                  ? Text(initial,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18))
+                  : ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: avatarUrl,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Text(initial,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18)),
+                      ),
+                    ),
             ),
             const SizedBox(width: 15),
             Expanded(
@@ -360,26 +327,21 @@ class _UserTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    user["name"],
+                    displayName,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 17,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  if (user["country"] != null)
-                    Text(
-                      user["country"],
-                      style: const TextStyle(color: Colors.grey),
-                    ),
                   Row(
                     children: [
                       const Icon(Icons.person, color: Colors.grey, size: 16),
                       const SizedBox(width: 5),
                       Text(
-                        "${user["followers"]} Followers",
-                        style:
-                            const TextStyle(color: Colors.grey, fontSize: 13),
+                        '$followerCount Followers',
+                        style: const TextStyle(
+                            color: Colors.grey, fontSize: 13),
                       ),
                     ],
                   ),
@@ -394,20 +356,27 @@ class _UserTile extends StatelessWidget {
                   backgroundColor:
                       isFollowing ? Colors.grey[800] : Colors.white,
                   elevation: 0,
-                  side: BorderSide.none,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                      borderRadius: BorderRadius.circular(20)),
                 ),
-                onPressed: onToggle,
-                child: Text(
-                  isFollowing ? "Following" : "Follow",
-                  style: TextStyle(
-                    color: isFollowing ? Colors.white : Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
+                onPressed: isLoading ? null : onToggle,
+                child: isLoading
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: isFollowing ? Colors.white : Colors.black,
+                        ),
+                      )
+                    : Text(
+                        isFollowing ? 'Following' : 'Follow',
+                        style: TextStyle(
+                          color: isFollowing ? Colors.white : Colors.black,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
               ),
             ),
           ],

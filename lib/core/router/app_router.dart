@@ -196,7 +196,7 @@ final appRouter = GoRouter(
       ],
     ),
 
-    // ── UPLOAD (global, outside shell) ────────────────────────────────
+    // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─
     GoRoute(
       path: '/upload',
       builder: (_, __) => const UploadPage(),
