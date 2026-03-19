@@ -10,10 +10,6 @@ class AccountSettingsPage extends StatelessWidget {
   static const _bg = Color(0xFF111111);
   static const _surface = Color(0xFF1E1E1E);
 
-  // Mock email — replace with real auth data later
-  static const _email =
-      'no-address-provided-eid-111291170693​42​61@nosend.soundcloudmail.com';
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -64,35 +60,6 @@ class AccountSettingsPage extends StatelessWidget {
                       ),
                       child: const Icon(Icons.cast_rounded,
                           color: Colors.white, size: 18),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── Email address ─────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Email address',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _email,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.55),
-                      fontSize: 14,
-                      height: 1.4,
                     ),
                   ),
                 ],

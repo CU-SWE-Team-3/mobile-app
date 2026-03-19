@@ -1,6 +1,9 @@
-import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -10,12 +13,17 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  // ── mutable profile data (updated when edit page saves) ──────────────
-  String _username = 'SUNDER';
-  String _bio = 'I know that it is thunder not sunder';
+  // ── profile data ─────────────────────────────────────────────────────
+  String _username = '';
+  String _bio = '';
   String _city = '';
   String _country = '';
+  String _avatarUrl = '';
+  int _followerCount = 0;
+  int _followingCount = 0;
   bool _bioExpanded = false;
+  bool _isLoading = true;
+  bool _hasError = false;
 
   final _tracks = const [
     _Track('It_is_realme.mp3', 'SUNDER', '1:20'),
@@ -43,26 +51,90 @@ class _ProfilePageState extends State<ProfilePage> {
   static const _orange = Color(0xFFFF5500);
   static final _sub = Colors.white.withOpacity(0.55);
 
-  // ── navigate to edit and receive result ──────────────────────────────
-  Future<void> _openEdit() async {
-    final result = await context.push<Map<String, String>>(
-      '/profile/edit',
-      extra: {
-        'username': _username,
-        'city': _city,
-        'country': _country,
-        'bio': _bio,
-      },
-    );
-    // If edit page returned data → update profile
-    if (result != null && mounted) {
-      setState(() {
-        _username = result['username'] ?? _username;
-        _city = result['city'] ?? _city;
-        _country = result['country'] ?? _country;
-        _bio = result['bio'] ?? _bio;
-      });
+  @override
+  void initState() {
+    super.initState();
+    _fetchProfile();
+  }
+
+  Future<void> _fetchProfile() async {
+    setState(() { _isLoading = true; _hasError = false; });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String permalink = prefs.getString('permalink') ?? '';
+
+      // If no permalink cached, try /auth/refresh to get the full user object
+      if (permalink.isEmpty) {
+        final storedRefresh = prefs.getString('refreshToken') ?? '';
+        if (storedRefresh.isNotEmpty) {
+          try {
+            final refreshResponse = await dioClient.dio.post(
+              '/auth/refresh',
+              data: {'refreshToken': storedRefresh},
+            );
+            // Update accessToken from Set-Cookie if present
+            final setCookie = refreshResponse.headers['set-cookie'];
+            if (setCookie != null) {
+              for (final cookie in setCookie) {
+                if (cookie.startsWith('accessToken=')) {
+                  final newToken = cookie.split(';')[0].split('=')[1];
+                  dioClient.setAuthToken(newToken);
+                  await prefs.setString('accessToken', newToken);
+                  break;
+                }
+              }
+            }
+            final fullUser = refreshResponse.data['data']?['user'] as Map<String, dynamic>?;
+            permalink = fullUser?['permalink'] as String? ?? '';
+            if (permalink.isNotEmpty) {
+              await prefs.setString('permalink', permalink);
+            }
+          } catch (_) {}
+        }
+      }
+
+      // If still no permalink, show cached displayName at minimum
+      if (permalink.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _username = prefs.getString('displayName') ?? '';
+            _isLoading = false;
+          });
+        }
+        return;
+      }
+
+      final response = await dioClient.dio.get('/profile/$permalink');
+      print('Profile data: ${response.data}');
+      final data = response.data['data']['user'] as Map<String, dynamic>;
+      if (mounted) {
+        setState(() {
+          _username = data['displayName'] as String? ?? '';
+          _bio = data['bio'] as String? ?? '';
+          _city = data['city'] as String? ?? '';
+          _country = data['country'] as String? ?? '';
+          _avatarUrl = data['avatarUrl'] as String? ?? '';
+          _followerCount = data['followerCount'] as int? ?? 0;
+          _followingCount = data['followingCount'] as int? ?? 0;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
+  }
+
+  // ── navigate to edit, then re-fetch to show latest data ─────────────
+  Future<void> _openEdit() async {
+    await context.push('/profile/edit', extra: {
+      'displayName': _username,
+      'bio': _bio,
+      'country': _country,
+      'city': _city,
+      'avatarUrl': _avatarUrl,
+      'coverUrl': '',
+    });
+    if (mounted) _fetchProfile();
   }
 
   // ─────────────────────────────────────────────────────────────────────
@@ -74,8 +146,36 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Column(
           children: [
             _topBar(context),
+            if (_isLoading)
+              const Expanded(
+                child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+                ),
+              )
+            else if (_hasError)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Couldn\'t load profile',
+                          style: TextStyle(color: Colors.white, fontSize: 15)),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: _fetchProfile,
+                        child: const Text('Retry',
+                            style: TextStyle(color: Color(0xFFFF5500))),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
             Expanded(
-              child: SingleChildScrollView(
+              child: RefreshIndicator(
+                onRefresh: _fetchProfile,
+                color: const Color(0xFFFF5500),
+                child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,6 +208,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
             ),
+          ),
           ],
         ),
       ),
@@ -145,11 +246,17 @@ class _ProfilePageState extends State<ProfilePage> {
                   shape: BoxShape.circle,
                   border: Border.all(color: _orange, width: 2.5),
                 ),
-                child: const CircleAvatar(
-                  radius: 42,
-                  backgroundColor: Color(0xFF6699BB),
-                  child:
-                      Icon(Icons.person, size: 48, color: Colors.white70),
+                child: ClipOval(
+                  child: _avatarUrl.isNotEmpty &&
+                          !_avatarUrl.contains('default-avatar')
+                      ? CachedNetworkImage(
+                          imageUrl: _avatarUrl,
+                          width: 84,
+                          height: 84,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => const _AvatarFallback(),
+                        )
+                      : const _AvatarFallback(),
                 ),
               ),
             ),
@@ -181,14 +288,15 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 GestureDetector(
                   onTap: () => context.push('/profile/followers'),
-                  child: Text('1 Follower',
+                  child: Text(
+                      '$_followerCount ${_followerCount == 1 ? 'Follower' : 'Followers'}',
                       style: TextStyle(color: _sub, fontSize: 13)),
                 ),
                 Text('  ·  ',
                     style: TextStyle(color: _sub, fontSize: 13)),
                 GestureDetector(
                   onTap: () => context.push('/profile/following'),
-                  child: Text('2 Following',
+                  child: Text('$_followingCount Following',
                       style: TextStyle(color: _sub, fontSize: 13)),
                 ),
               ],
@@ -233,7 +341,16 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // ── bio ──────────────────────────────────────────────────────────────
   Widget _bioSection() {
-    if (_bio.isEmpty) return const SizedBox(height: 8);
+    if (_bio.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        child: Text('No bio yet',
+            style: TextStyle(
+                color: _sub.withValues(alpha: 0.5),
+                fontSize: 14,
+                fontStyle: FontStyle.italic)),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Column(
@@ -507,6 +624,21 @@ class _ProfilePageState extends State<ProfilePage> {
               color: Colors.black, size: 28),
         ),
       );
+}
+
+// ── avatar fallback ───────────────────────────────────────────────────────
+class _AvatarFallback extends StatelessWidget {
+  const _AvatarFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 84,
+      height: 84,
+      color: const Color(0xFF2A2A2A),
+      child: const Icon(Icons.person, size: 48, color: Colors.white38),
+    );
+  }
 }
 
 // ── data models ──────────────────────────────────────────────────────────
