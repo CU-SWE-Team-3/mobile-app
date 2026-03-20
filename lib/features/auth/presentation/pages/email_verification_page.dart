@@ -14,13 +14,54 @@ class EmailVerificationPage extends StatefulWidget {
 
 class _EmailVerificationPageState extends State<EmailVerificationPage> {
   bool _isResending = false;
+  bool _isVerifying = false;
+  bool _showTokenField = false;
+  final _tokenController = TextEditingController();
   int _cooldown = 0;
   Timer? _cooldownTimer;
 
   @override
   void dispose() {
     _cooldownTimer?.cancel();
+    _tokenController.dispose();
     super.dispose();
+  }
+
+  // Extracts the token whether the user pastes the full URL or just the token
+  String _extractToken(String input) {
+    final uri = Uri.tryParse(input.trim());
+    if (uri != null && uri.queryParameters.containsKey('token')) {
+      return uri.queryParameters['token']!;
+    }
+    return input.trim();
+  }
+
+  Future<void> _onVerify() async {
+    final token = _extractToken(_tokenController.text);
+    if (token.isEmpty) return;
+    setState(() => _isVerifying = true);
+    try {
+      await dioClient.dio.post('/auth/verify-email', data: {'token': token});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Email verified! Please log in.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        context.go('/login-screen');
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        final msg = e.response?.data?['message'] as String? ??
+            'Invalid or expired token.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
+    }
   }
 
   Future<void> _onResend() async {
@@ -196,25 +237,69 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
 
               const Spacer(),
 
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () => context.go('/login-screen'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF5500),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(4)),
-                  ),
-                  child: const Text(
-                    'Already verified? Login here',
+              // Manual token entry (copy link from email, paste here)
+              GestureDetector(
+                onTap: () => setState(() => _showTokenField = !_showTokenField),
+                child: const Center(
+                  child: Text(
+                    "Can't open the link? Paste it here instead",
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold),
+                      color: Color(0xFFFF5500),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
+              if (_showTokenField) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _tokenController,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: 'Paste the full link or just the token',
+                    hintStyle: const TextStyle(
+                        color: Color(0xFF666666), fontSize: 13),
+                    filled: true,
+                    fillColor: const Color(0xFF1A1A1A),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isVerifying ? null : _onVerify,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF5500),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(4)),
+                    ),
+                    child: _isVerifying
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text(
+                            'Verify',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold),
+                          ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
             ],
           ),

@@ -44,7 +44,6 @@ class SettingsMainPage extends ConsumerWidget {
       ),
       body: ListView(
         children: [
-
           const SizedBox(height: 8),
 
           _SettingsMenuItem(title: 'Import my music', onTap: () {}),
@@ -60,7 +59,10 @@ class SettingsMainPage extends ConsumerWidget {
               MaterialPageRoute(builder: (_) => const BasicSettingsPage()),
             ),
           ),
-          _SettingsMenuItem(title: 'Social settings', onTap: () {}),
+          _SettingsMenuItem(
+            title: 'Social settings',
+            onTap: () => context.push('/settings/social'),
+          ),
           _SettingsMenuItem(title: 'Inbox', onTap: () {}),
           _SettingsMenuItem(title: 'Notifications', onTap: () {}),
           _SettingsMenuItem(title: 'Add widgets', onTap: () {}),

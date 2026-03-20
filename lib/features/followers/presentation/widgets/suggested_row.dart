@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 
@@ -69,26 +68,15 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final myId = prefs.getString('userId') ?? '';
-
-      final results = await Future.wait([
-        dioClient.dio.get('/network/suggested',
-            queryParameters: {'page': 1, 'limit': 20}),
-        dioClient.dio.get('/network/blocked-users'),
-      ]);
-
-      final raw = results[0].data['data'];
+      final response = await dioClient.dio
+          .get('/network/suggested', queryParameters: {'page': 1, 'limit': 20});
+      final raw = response.data['data'];
       final List<dynamic> data = (raw is List) ? raw : [];
-
-      final blockedRaw = results[1].data['data'];
-      final blockedIds = (blockedRaw is List)
-          ? blockedRaw.map((u) => u['_id'] as String).toSet()
-          : <String>{};
-
       if (mounted) {
         setState(() {
           _users = data
               .map((e) => _SuggestedUser.fromJson(e as Map<String, dynamic>))
-              .where((u) => u.id != myId && !blockedIds.contains(u.id))
+              .where((u) => u.id != myId)
               .toList();
           _isLoading = false;
         });
@@ -204,11 +192,7 @@ class _UserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final showImage = !_isDefaultAvatar(user.avatarUrl);
 
-    return GestureDetector(
-      onTap: user.permalink.isNotEmpty
-          ? () => context.push('/user/${user.permalink}')
-          : null,
-      child: Container(
+    return Container(
       width: 130,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -324,7 +308,6 @@ class _UserCard extends StatelessWidget {
           ),
         ],
       ),
-    ),
     );
   }
 }
