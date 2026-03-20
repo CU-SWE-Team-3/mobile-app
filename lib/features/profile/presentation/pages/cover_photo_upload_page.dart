@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../../../core/network/dio_client.dart';
 
 class CoverPhotoUploadPage extends StatefulWidget {
   const CoverPhotoUploadPage({super.key});
@@ -14,6 +16,7 @@ class CoverPhotoUploadPage extends StatefulWidget {
 class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
   File? _pickedImage;
   final _picker = ImagePicker();
+  bool _isUploading = false;
 
   static const Color _bg = Color(0xFF111111);
   static const Color _orange = Color(0xFFFF5500);
@@ -43,9 +46,34 @@ class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
     context.canPop() ? context.pop() : context.go('/profile/edit');
   }
 
-  void _handleSave() {
-    // TODO: dispatch save cover photo event with _pickedImage
-    context.canPop() ? context.pop() : context.go('/profile/edit');
+  Future<void> _handleSave() async {
+    if (_pickedImage == null || _isUploading) return;
+    setState(() => _isUploading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final formData = FormData.fromMap({
+        'cover': await MultipartFile.fromFile(
+          _pickedImage!.path,
+          filename: 'cover.jpg',
+        ),
+      });
+      await dioClient.dio.patch('/profile/upload-images', data: formData);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Cover photo updated!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      if (mounted) context.canPop() ? context.pop() : context.go('/profile/edit');
+    } on DioException {
+      setState(() => _isUploading = false);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Failed to upload cover photo'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -86,7 +114,7 @@ class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
                   const Spacer(),
                   if (_pickedImage != null)
                     GestureDetector(
-                      onTap: _handleSave,
+                      onTap: _isUploading ? null : _handleSave,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 22, vertical: 10),
@@ -94,14 +122,22 @@ class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: const Text(
-                          'Save',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        alignment: Alignment.center,
+                        child: _isUploading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.black),
+                              )
+                            : const Text(
+                                'Save',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                       ),
                     ),
                 ],

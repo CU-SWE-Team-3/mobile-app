@@ -1,6 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+<<<<<<< HEAD
+=======
+import 'package:shared_preferences/shared_preferences.dart';
+>>>>>>> main
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/network/dio_client.dart';
 
@@ -42,10 +46,49 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_canContinue) return;
     setState(() => _isLoading = true);
     try {
+<<<<<<< HEAD
       await dioClient.dio.post('/auth/login', data: {
         'email': _emailController.text.trim(),
         'password': _passwordController.text,
       });
+=======
+      final response = await dioClient.dio.post('/auth/login', data: {
+        'email': _emailController.text.trim(),
+        'password': _passwordController.text,
+      });
+      final user = response.data['user'];
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userId', user['_id'] ?? '');
+      await prefs.setString('displayName', user['displayName'] ?? '');
+      await prefs.setString('role', user['role'] ?? '');
+      await prefs.setString('permalink', user['permalink'] ?? '');
+      // Extract accessToken and refreshToken from Set-Cookie header
+      String? refreshToken;
+      final setCookie = response.headers['set-cookie'];
+      if (setCookie != null) {
+        for (final cookie in setCookie) {
+          if (cookie.startsWith('accessToken=')) {
+            final token = cookie.split(';')[0].split('=')[1];
+            dioClient.setAuthToken(token);
+            await prefs.setString('accessToken', token);
+          } else if (cookie.startsWith('refreshToken=')) {
+            refreshToken = cookie.split(';')[0].split('=')[1];
+            await prefs.setString('refreshToken', refreshToken);
+          }
+        }
+      }
+      // Call /auth/refresh to get full user data (including permalink)
+      if (refreshToken != null) {
+        try {
+          final refreshResponse = await dioClient.dio.post('/auth/refresh',
+              data: {'refreshToken': refreshToken});
+          final fullUser = refreshResponse.data['data']?['user'] as Map<String, dynamic>?;
+          if (fullUser != null) {
+            await prefs.setString('permalink', fullUser['permalink'] as String? ?? '');
+          }
+        } catch (_) {}
+      }
+>>>>>>> main
       if (mounted) context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;

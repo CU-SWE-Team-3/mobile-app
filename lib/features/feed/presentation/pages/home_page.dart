@@ -2,7 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+<<<<<<< HEAD
 import 'package:soundcloud_clone/core/themes/app_theme.dart';
+=======
+>>>>>>> main
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
@@ -73,7 +76,11 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _fetchFeed() async {
     setState(() { _isLoading = true; _hasError = false; });
     try {
+<<<<<<< HEAD
       final response = await dioClient.dio.get('/feed');
+=======
+      final response = await dioClient.dio.get('/network/feed');
+>>>>>>> main
       final List<dynamic> data = response.data['data'] as List<dynamic>;
       if (mounted) {
         setState(() {
@@ -185,7 +192,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
@@ -234,7 +241,11 @@ class _HomePageState extends ConsumerState<HomePage> {
           const SizedBox(width: 4),
         ],
       ),
-      body: ListView(
+      body: RefreshIndicator(
+        onRefresh: _fetchFeed,
+        color: const Color(0xFFFF5500),
+        backgroundColor: const Color(0xFF1A1A1A),
+        child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         children: [
           // Section 1 — Trending by genre
@@ -292,6 +303,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           const SuggestedRow(),
           const SizedBox(height: 24),
         ],
+        ),
       ),
     );
   }

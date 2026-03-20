@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/network/user_session.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/basic_settings_page.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/legal_page.dart';
-import 'package:soundcloud_clone/features/settings/presentation/pages/sign_out_page.dart';
 
 class SettingsMainPage extends ConsumerWidget {
   const SettingsMainPage({super.key});
@@ -43,86 +44,47 @@ class SettingsMainPage extends ConsumerWidget {
       ),
       body: ListView(
         children: [
-
           const SizedBox(height: 8),
 
-          _SettingsMenuItem(
-            title: 'Import my music',
-            onTap: () {},
-          ),
-          // ── Only this line changed ──────────────────────────────────
+          _SettingsMenuItem(title: 'Import my music', onTap: () {}),
           _SettingsMenuItem(
             title: 'Account',
             onTap: () => context.push('/settings/account'),
           ),
-          // ───────────────────────────────────────────────────────────
-          _SettingsMenuItem(
-            title: 'Upload',
-            onTap: () {},
-          ),
+          _SettingsMenuItem(title: 'Upload', onTap: () {}),
           _SettingsMenuItem(
             title: 'Basic settings',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const BasicSettingsPage(),
-              ),
+              MaterialPageRoute(builder: (_) => const BasicSettingsPage()),
             ),
           ),
           _SettingsMenuItem(
             title: 'Social settings',
             onTap: () => context.push('/settings/social'),
           ),
-          _SettingsMenuItem(
-            title: 'Inbox',
-            onTap: () {},
-          ),
-          _SettingsMenuItem(
-            title: 'Notifications',
-            onTap: () {},
-          ),
-          _SettingsMenuItem(
-            title: 'Add widgets',
-            onTap: () {},
-          ),
-          _SettingsMenuItem(
-            title: 'Analytics',
-            onTap: () {},
-          ),
-          _SettingsMenuItem(
-            title: 'Communications',
-            onTap: () {},
-          ),
-          _SettingsMenuItem(
-            title: 'Advertising',
-            onTap: () {},
-          ),
-          _SettingsMenuItem(
-            title: 'Support',
-            onTap: () {},
-          ),
+          _SettingsMenuItem(title: 'Inbox', onTap: () {}),
+          _SettingsMenuItem(title: 'Notifications', onTap: () {}),
+          _SettingsMenuItem(title: 'Add widgets', onTap: () {}),
+          _SettingsMenuItem(title: 'Analytics', onTap: () {}),
+          _SettingsMenuItem(title: 'Communications', onTap: () {}),
+          _SettingsMenuItem(title: 'Advertising', onTap: () {}),
+          _SettingsMenuItem(title: 'Support', onTap: () {}),
           _SettingsMenuItem(
             title: 'Legal',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const LegalPage(),
-              ),
+              MaterialPageRoute(builder: (_) => const LegalPage()),
             ),
           ),
 
           const SizedBox(height: 32),
 
-          // ── Sign out button → opens SignOutPage ───────────
+          // ── Sign out button ──────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SignOutPage(),
-                ),
-              ),
+              onTap: () => _showSignOutDialog(context),
               child: Container(
                 height: 52,
                 decoration: BoxDecoration(
@@ -171,6 +133,61 @@ class SettingsMainPage extends ConsumerWidget {
           ),
 
           const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  // ── Sign out dialog ───────────────────────────────────────────────────────
+  void _showSignOutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Text(
+          'Clear user data?',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        content: const Text(
+          'You will have to reconnect your SoundCloud account.',
+          style: TextStyle(color: Colors.grey, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            // ✅ uses dialogContext — only closes dialog, stays on settings
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              try {
+                await dioClient.dio.post('/auth/logout');
+              } catch (_) {}
+              await UserSession.clear();
+              dioClient.dio.options.headers.remove('Authorization');
+              if (context.mounted) context.go('/start');
+            },
+            child: const Text(
+              'OK',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
         ],
       ),
     );

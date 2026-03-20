@@ -2,6 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+<<<<<<< HEAD
+=======
+import 'package:shared_preferences/shared_preferences.dart';
+>>>>>>> main
 import '../../../../core/network/dio_client.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
@@ -21,6 +25,7 @@ class _SuggestedUser {
     required this.followerCount,
   });
 
+<<<<<<< HEAD
   factory _SuggestedUser.fromJson(Map<String, dynamic> json) => _SuggestedUser(
         id: json['_id'] as String,
         displayName: json['displayName'] as String? ?? '',
@@ -28,6 +33,18 @@ class _SuggestedUser {
         avatarUrl: json['avatarUrl'] as String?,
         followerCount: json['followerCount'] as int? ?? 0,
       );
+=======
+  factory _SuggestedUser.fromJson(Map<String, dynamic> json) {
+    final fc = json['followerCount'];
+    return _SuggestedUser(
+      id: json['_id'] as String? ?? '',
+      displayName: json['displayName'] as String? ?? '',
+      permalink: json['permalink'] as String? ?? '',
+      avatarUrl: json['avatarUrl'] as String?,
+      followerCount: fc is int ? fc : int.tryParse(fc?.toString() ?? '') ?? 0,
+    );
+  }
+>>>>>>> main
 }
 
 String _formatCount(int count) {
@@ -62,18 +79,37 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
 
   Future<void> _fetchSuggested() async {
     try {
+<<<<<<< HEAD
       final response = await dioClient.dio
           .get('/network/suggested', queryParameters: {'page': 1, 'limit': 10});
       final List<dynamic> data = response.data['data'] as List<dynamic>;
+=======
+      final prefs = await SharedPreferences.getInstance();
+      final myId = prefs.getString('userId') ?? '';
+      final response = await dioClient.dio
+          .get('/network/suggested', queryParameters: {'page': 1, 'limit': 20});
+      final raw = response.data['data'];
+      final List<dynamic> data = (raw is List) ? raw : [];
+>>>>>>> main
       if (mounted) {
         setState(() {
           _users = data
               .map((e) => _SuggestedUser.fromJson(e as Map<String, dynamic>))
+<<<<<<< HEAD
+=======
+              .where((u) => u.id != myId)
+>>>>>>> main
               .toList();
           _isLoading = false;
         });
       }
+<<<<<<< HEAD
     } catch (e) {
+=======
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('=== SUGGESTED FETCH ERROR: $e\n$st');
+>>>>>>> main
       if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
   }
