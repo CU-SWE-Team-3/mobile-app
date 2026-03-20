@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:restart_app/restart_app.dart'; // 👈 change import
-import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 class BasicSettingsPage extends ConsumerWidget {

@@ -85,7 +85,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_canContinue) return;
 
     final token = await showRecaptchaBottomSheet(context);
-    print('Captcha token: $token');
     if (token == null || !mounted) return;
 
     setState(() => _isLoading = true);
@@ -101,8 +100,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       });
       if (mounted) context.go('/email-verification', extra: _emailController.text.trim());
     } on DioException catch (e) {
-      print('Error status: ${e.response?.statusCode}');
-      print('Error body: ${e.response?.data}');
       final status = e.response?.statusCode;
       final errorMessage = e.response?.data['error'] ?? '';
 

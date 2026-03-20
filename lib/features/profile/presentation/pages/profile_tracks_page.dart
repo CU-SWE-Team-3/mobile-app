@@ -5,7 +5,6 @@ class ProfileTracksPage extends StatelessWidget {
   const ProfileTracksPage({super.key});
 
   static const _bg = Color(0xFF111111);
-  static final _sub = Colors.white.withOpacity(0.55);
 
   // Mock tracks — replace with real data later
   static const _tracks = [
@@ -129,7 +128,7 @@ class ProfileTracksPage extends StatelessWidget {
 // ── track tile ───────────────────────────────────────────────────────
 class _TrackTile extends StatelessWidget {
   final _Track track;
-  const _TrackTile({super.key, required this.track});
+  const _TrackTile({required this.track});
 
   @override
   Widget build(BuildContext context) {
