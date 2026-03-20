@@ -12,7 +12,6 @@ class _YourInsightsPageState extends State<YourInsightsPage> {
   int _selectedTab = 0; // 0 = SoundCloud, 1 = All Platforms
 
   static const _bg = Color(0xFF111111);
-  static const _orange = Color(0xFFFF5500);
 
   @override
   Widget build(BuildContext context) {
@@ -220,7 +219,7 @@ class _SoundCloudTab extends StatelessWidget {
 SizedBox(
   width: double.infinity,
   child: OutlinedButton(
-    onPressed: () {},
+    onPressed: () => context.push('/upload'),
     style: OutlinedButton.styleFrom(
       side: const BorderSide(color: Colors.white),
       //backgroundColor: const Color(0xFF1E1E1E),

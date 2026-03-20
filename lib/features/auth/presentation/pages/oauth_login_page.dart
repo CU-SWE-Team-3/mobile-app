@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import '../../../../core/constants/app_constants.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 
 class OAuthLoginPage extends ConsumerStatefulWidget {
@@ -48,10 +48,16 @@ class _OAuthLoginPageState extends ConsumerState<OAuthLoginPage> {
         data: {'idToken': idToken},
       );
 
-      final token = response.data['data']['token'];
-      final refreshToken = response.data['data']['refreshToken'];
-
-      // TODO: Save token and refreshToken using your app's storage solution
+      final token = response.data['data']['token'] as String? ?? '';
+      final refreshToken = response.data['data']['refreshToken'] as String? ?? '';
+      final user = response.data['data']['user'] as Map<String, dynamic>? ?? {};
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('accessToken', token);
+      await prefs.setString('refreshToken', refreshToken);
+      await prefs.setString('userId', user['_id'] as String? ?? '');
+      await prefs.setString('displayName', user['displayName'] as String? ?? '');
+      await prefs.setString('role', user['role'] as String? ?? '');
+      dioClient.setAuthToken(token);
 
       if (mounted) {
         context.go('/home');

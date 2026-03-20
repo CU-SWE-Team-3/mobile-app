@@ -52,6 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await prefs.setString('userId', user['_id'] ?? '');
       await prefs.setString('displayName', user['displayName'] ?? '');
       await prefs.setString('role', user['role'] ?? '');
+      await prefs.setString('permalink', user['permalink'] ?? '');
       // Extract accessToken and refreshToken from Set-Cookie header
       String? refreshToken;
       final setCookie = response.headers['set-cookie'];

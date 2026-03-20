@@ -41,8 +41,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   final _reposts = const [
     _Repost('Nasser _ ناصر', 'wigexpress', '1M', '2:52', Color(0xFF1A1A2E)),
-    _Repost('ZIAD ZAZA - SAM3 AKHINA | ... زياد', 'Abouelhassan', '1.7M', '2:13', Color(0xFFB03A2E)),
-    _Repost('ZIAD ZAZA - EMSHI | زياد ظاظا - إمشي', 'Maro mafia', '2.3M', '3:40', Color(0xFF1F618D)),
+    _Repost('ZIAD ZAZA - SAM3 AKHINA | ... زياد', 'Abouelhassan', '1.7M',
+        '2:13', Color(0xFFB03A2E)),
+    _Repost('ZIAD ZAZA - EMSHI | زياد ظاظا - إمشي', 'Maro mafia', '2.3M',
+        '3:40', Color(0xFF1F618D)),
   ];
 
   // ── colors ───────────────────────────────────────────────────────────
@@ -50,6 +52,13 @@ class _ProfilePageState extends State<ProfilePage> {
   static const _surface = Color(0xFF1E1E1E);
   static const _orange = Color(0xFFFF5500);
   static final _sub = Colors.white.withOpacity(0.55);
+
+  static int _parseInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is int) return val;
+    if (val is double) return val.toInt();
+    return int.tryParse(val.toString()) ?? 0;
+  }
 
   @override
   void initState() {
@@ -61,61 +70,50 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() { _isLoading = true; _hasError = false; });
     try {
       final prefs = await SharedPreferences.getInstance();
-      String permalink = prefs.getString('permalink') ?? '';
+      final String permalink = prefs.getString('permalink') ?? '';
 
-      // If no permalink cached, try /auth/refresh to get the full user object
-      if (permalink.isEmpty) {
-        final storedRefresh = prefs.getString('refreshToken') ?? '';
-        if (storedRefresh.isNotEmpty) {
-          try {
-            final refreshResponse = await dioClient.dio.post(
-              '/auth/refresh',
-              data: {'refreshToken': storedRefresh},
-            );
-            // Update accessToken from Set-Cookie if present
-            final setCookie = refreshResponse.headers['set-cookie'];
-            if (setCookie != null) {
-              for (final cookie in setCookie) {
-                if (cookie.startsWith('accessToken=')) {
-                  final newToken = cookie.split(';')[0].split('=')[1];
-                  dioClient.setAuthToken(newToken);
-                  await prefs.setString('accessToken', newToken);
-                  break;
-                }
-              }
-            }
-            final fullUser = refreshResponse.data['data']?['user'] as Map<String, dynamic>?;
-            permalink = fullUser?['permalink'] as String? ?? '';
-            if (permalink.isNotEmpty) {
-              await prefs.setString('permalink', permalink);
-            }
-          } catch (_) {}
+      if (permalink.isNotEmpty) {
+        // Happy path: permalink cached — use proper GET endpoint
+        try {
+          final response = await dioClient.dio.get('/profile/$permalink');
+          final responseData = response.data['data'] as Map<String, dynamic>;
+          final data = (responseData['user'] as Map<String, dynamic>?) ?? responseData;
+          if (mounted) {
+            setState(() {
+              _username       = data['displayName'] as String? ?? '';
+              _bio            = data['bio']         as String? ?? '';
+              _city           = data['city']        as String? ?? '';
+              _country        = data['country']     as String? ?? '';
+              _avatarUrl      = data['avatarUrl']   as String? ?? '';
+              _followerCount  = _parseInt(data['followerCount']);
+              _followingCount = _parseInt(data['followingCount']);
+              _isLoading = false;
+            });
+          }
+          return;
+        } catch (_) {
+          // Permalink may have changed after an edit — clear it and re-fetch via PATCH
+          await prefs.remove('permalink');
         }
       }
 
-      // If still no permalink, show cached displayName at minimum
-      if (permalink.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _username = prefs.getString('displayName') ?? '';
-            _isLoading = false;
-          });
-        }
-        return;
+      // No permalink yet — use PATCH /profile/update {} to bootstrap all profile data
+      // (PATCH with empty body is a no-op that returns the full user object including permalink)
+      final patchResponse = await dioClient.dio.patch('/profile/update', data: {});
+      final data = patchResponse.data['data'] as Map<String, dynamic>;
+      final fetchedPermalink = data['permalink'] as String? ?? '';
+      if (fetchedPermalink.isNotEmpty) {
+        await prefs.setString('permalink', fetchedPermalink);
       }
-
-      final response = await dioClient.dio.get('/profile/$permalink');
-      print('Profile data: ${response.data}');
-      final data = response.data['data']['user'] as Map<String, dynamic>;
       if (mounted) {
         setState(() {
-          _username = data['displayName'] as String? ?? '';
-          _bio = data['bio'] as String? ?? '';
-          _city = data['city'] as String? ?? '';
-          _country = data['country'] as String? ?? '';
-          _avatarUrl = data['avatarUrl'] as String? ?? '';
-          _followerCount = data['followerCount'] as int? ?? 0;
-          _followingCount = data['followingCount'] as int? ?? 0;
+          _username       = data['displayName'] as String? ?? '';
+          _bio            = data['bio']         as String? ?? '';
+          _city           = data['city']        as String? ?? '';
+          _country        = data['country']     as String? ?? '';
+          _avatarUrl      = data['avatarUrl']   as String? ?? '';
+          _followerCount  = _parseInt(data['followerCount']);
+          _followingCount = _parseInt(data['followingCount']);
           _isLoading = false;
         });
       }
@@ -171,44 +169,44 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               )
             else
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _fetchProfile,
-                color: const Color(0xFFFF5500),
-                child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _heroSection(context),
-                    _bioSection(),
-                    _insightsRow(context),
-                    _spotlight(),
-                    _sectionHeader('Tracks',
-                        onSeeAll: () => context.push('/profile/tracks')),
-                    ..._tracks.map((t) => _TrackTile(
-                          track: t,
-                          onTap: () {},
-                          onMore: () {},
-                        )),
-                    _sectionHeader('Reposts',
-                        onSeeAll: () => context.push('/profile/reposts')),
-                    _repostsList(),
-                    _sectionHeader('Playlists'),
-                    _playlistRow(context),
-                    _sectionHeader('Likes', onSeeAll: () {}),
-                    ..._likes.map((t) => _TrackTile(
-                          track: t,
-                          onTap: () {},
-                          onMore: () {},
-                          showHeart: true,
-                        )),
-                    const SizedBox(height: 120),
-                  ],
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _fetchProfile,
+                  color: const Color(0xFFFF5500),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _heroSection(context),
+                        _bioSection(),
+                        _insightsRow(context),
+                        _spotlight(),
+                        _sectionHeader('Tracks',
+                            onSeeAll: () => context.push('/profile/tracks')),
+                        ..._tracks.map((t) => _TrackTile(
+                              track: t,
+                              onTap: () {},
+                              onMore: () {},
+                            )),
+                        _sectionHeader('Reposts',
+                            onSeeAll: () => context.push('/profile/reposts')),
+                        _repostsList(),
+                        _sectionHeader('Playlists'),
+                        _playlistRow(context),
+                        _sectionHeader('Likes', onSeeAll: () {}),
+                        ..._likes.map((t) => _TrackTile(
+                              track: t,
+                              onTap: () {},
+                              onMore: () {},
+                              showHeart: true,
+                            )),
+                        const SizedBox(height: 120),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
           ],
         ),
       ),
@@ -277,9 +275,7 @@ class _ProfilePageState extends State<ProfilePage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
-                  [_city, _country]
-                      .where((s) => s.isNotEmpty)
-                      .join(', '),
+                  [_city, _country].where((s) => s.isNotEmpty).join(', '),
                   style: TextStyle(color: _sub, fontSize: 13),
                 ),
               ),
@@ -292,8 +288,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       '$_followerCount ${_followerCount == 1 ? 'Follower' : 'Followers'}',
                       style: TextStyle(color: _sub, fontSize: 13)),
                 ),
-                Text('  ·  ',
-                    style: TextStyle(color: _sub, fontSize: 13)),
+                Text('  ·  ', style: TextStyle(color: _sub, fontSize: 13)),
                 GestureDetector(
                   onTap: () => context.push('/profile/following'),
                   child: Text('$_followingCount Following',
@@ -309,8 +304,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 GestureDetector(
                   onTap: _openEdit,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.white38),
                       borderRadius: BorderRadius.circular(20),
@@ -322,8 +317,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             color: Colors.white, size: 16),
                         SizedBox(width: 6),
                         Text('Edit',
-                            style: TextStyle(
-                                color: Colors.white, fontSize: 13)),
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 13)),
                       ],
                     ),
                   ),
@@ -360,17 +355,14 @@ class _ProfilePageState extends State<ProfilePage> {
             _bio,
             maxLines: _bioExpanded ? null : 2,
             overflow: _bioExpanded ? null : TextOverflow.ellipsis,
-            style:
-                TextStyle(color: _sub, fontSize: 14, height: 1.5),
+            style: TextStyle(color: _sub, fontSize: 14, height: 1.5),
           ),
           if (_bio.length > 60)
             GestureDetector(
-              onTap: () =>
-                  setState(() => _bioExpanded = !_bioExpanded),
+              onTap: () => setState(() => _bioExpanded = !_bioExpanded),
               child: Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                    _bioExpanded ? 'Show less' : 'Show more',
+                child: Text(_bioExpanded ? 'Show less' : 'Show more',
                     style: TextStyle(
                         color: Colors.blue[400],
                         fontSize: 13,
@@ -384,14 +376,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // ── insights → navigates to YourInsightsPage ────────────────────────
   Widget _insightsRow(BuildContext context) => GestureDetector(
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YourInsightsPage())),
+        onTap: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => const YourInsightsPage())),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-              color: _surface,
-              borderRadius: BorderRadius.circular(10)),
+              color: _surface, borderRadius: BorderRadius.circular(10)),
           child: Row(
             children: [
               const Text('Your insights',
@@ -423,14 +414,13 @@ class _ProfilePageState extends State<ProfilePage> {
                 GestureDetector(
                   onTap: () {},
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
                         color: _surface,
                         borderRadius: BorderRadius.circular(20)),
                     child: const Text('Edit',
-                        style: TextStyle(
-                            color: Colors.white, fontSize: 13)),
+                        style: TextStyle(color: Colors.white, fontSize: 13)),
                   ),
                 ),
               ],
@@ -443,8 +433,7 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
   // ── section header ───────────────────────────────────────────────────
-  Widget _sectionHeader(String title, {VoidCallback? onSeeAll}) =>
-      Padding(
+  Widget _sectionHeader(String title, {VoidCallback? onSeeAll}) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
         child: Row(
           children: [
@@ -458,14 +447,12 @@ class _ProfilePageState extends State<ProfilePage> {
               GestureDetector(
                 onTap: onSeeAll,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
-                      color: _surface,
-                      borderRadius: BorderRadius.circular(20)),
+                      color: _surface, borderRadius: BorderRadius.circular(20)),
                   child: const Text('See All',
-                      style: TextStyle(
-                          color: Colors.white, fontSize: 13)),
+                      style: TextStyle(color: Colors.white, fontSize: 13)),
                 ),
               ),
           ],
@@ -513,8 +500,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             Icon(Icons.play_arrow_rounded,
                                 size: 13, color: sub),
                             Text('  \${r.plays} · \${r.duration}',
-                                style: TextStyle(
-                                    color: sub, fontSize: 11)),
+                                style: TextStyle(color: sub, fontSize: 11)),
                           ],
                         ),
                       ],
@@ -522,8 +508,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   GestureDetector(
                     onTap: () {},
-                    child: Icon(Icons.more_vert_rounded,
-                        color: sub, size: 20),
+                    child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
                   ),
                 ],
               ),
@@ -594,21 +579,18 @@ class _ProfilePageState extends State<ProfilePage> {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              shape: BoxShape.circle),
+              color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
           child: Icon(icon, color: Colors.white, size: 18),
         ),
       );
 
-  Widget _iconCircle(IconData icon, VoidCallback onTap) =>
-      GestureDetector(
+  Widget _iconCircle(IconData icon, VoidCallback onTap) => GestureDetector(
         onTap: onTap,
         child: Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              shape: BoxShape.circle),
+              color: Colors.white.withOpacity(0.1), shape: BoxShape.circle),
           child: Icon(icon, color: Colors.white, size: 20),
         ),
       );
@@ -618,8 +600,8 @@ class _ProfilePageState extends State<ProfilePage> {
         child: Container(
           width: 52,
           height: 52,
-          decoration: const BoxDecoration(
-              color: Colors.white, shape: BoxShape.circle),
+          decoration:
+              const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
           child: const Icon(Icons.play_arrow_rounded,
               color: Colors.black, size: 28),
         ),
@@ -662,7 +644,8 @@ class _Repost {
   final String plays;
   final String duration;
   final Color imageColor;
-  const _Repost(this.title, this.artist, this.plays, this.duration, this.imageColor);
+  const _Repost(
+      this.title, this.artist, this.plays, this.duration, this.imageColor);
 }
 
 // ── track tile ───────────────────────────────────────────────────────────
@@ -685,8 +668,7 @@ class _TrackTile extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         child: Row(
           children: [
             ClipRRect(
@@ -713,16 +695,13 @@ class _TrackTile extends StatelessWidget {
                           fontWeight: FontWeight.w500)),
                   const SizedBox(height: 2),
                   Text(track.artist,
-                      style:
-                          TextStyle(color: sub, fontSize: 12)),
+                      style: TextStyle(color: sub, fontSize: 12)),
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      Icon(Icons.play_arrow_rounded,
-                          size: 13, color: sub),
+                      Icon(Icons.play_arrow_rounded, size: 13, color: sub),
                       Text('  ${track.duration}',
-                          style:
-                              TextStyle(color: sub, fontSize: 11)),
+                          style: TextStyle(color: sub, fontSize: 11)),
                       if (showHeart) ...[
                         const SizedBox(width: 6),
                         const Icon(Icons.favorite,
@@ -735,8 +714,7 @@ class _TrackTile extends StatelessWidget {
             ),
             GestureDetector(
               onTap: onMore,
-              child: Icon(Icons.more_vert_rounded,
-                  color: sub, size: 20),
+              child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ),
           ],
         ),
