@@ -163,10 +163,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ),
       );
       context.pop();
-    } on DioException catch (e) {
-      print('Save error: $e');
-      print('Status: ${e.response?.statusCode}');
-      print('Body: ${e.response?.data}');
+    } on DioException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
