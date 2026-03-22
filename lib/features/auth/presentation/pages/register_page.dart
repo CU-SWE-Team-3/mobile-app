@@ -95,15 +95,12 @@ class _RegisterPageState extends State<RegisterPage> {
 
     // Show reCAPTCHA sheet and wait for token
     final token = await showRecaptchaBottomSheet(context);
-    print('Captcha token: $token');
     if (token == null || !mounted) return;
 
     setState(() => _isLoading = true);
 
     try {
       final age = DateTime.now().year - int.parse(_selectedYear!);
-      print(
-          'Register request: email=${widget.email}, displayName=${_displayNameController.text.trim()}, age=$age, gender=$_selectedGender');
       await _dio.post('/auth/register', data: {
         'email': widget.email,
         'password': _passwordController.text.trim(),
@@ -115,8 +112,6 @@ class _RegisterPageState extends State<RegisterPage> {
 
       if (mounted) context.go('/email-verification', extra: widget.email);
     } on DioException catch (e) {
-      print('Error status: ${e.response?.statusCode}');
-      print('Error body: ${e.response?.data}');
       final status = e.response?.statusCode;
       final errorMessage = e.response?.data['error'] ?? '';
 

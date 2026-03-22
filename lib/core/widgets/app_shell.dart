@@ -11,7 +11,7 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: Colors.black,
       body: Column(
         children: [
           Expanded(child: navigationShell),
@@ -39,7 +39,7 @@ class _BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BottomNavigationBar(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: const Color(0xFF1A1A1A),
       selectedItemColor: AppTheme.primary,
       unselectedItemColor: Colors.white.withAlpha(153),
       currentIndex: currentIndex,

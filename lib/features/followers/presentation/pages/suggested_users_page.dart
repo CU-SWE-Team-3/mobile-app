@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 
 class SuggestedUsersPage extends StatefulWidget {
@@ -29,11 +30,14 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
       _hasError = false;
     });
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final myId = prefs.getString('userId') ?? '';
       final response = await dioClient.dio
-          .get('/network/suggested', queryParameters: {'page': 1, 'limit': 10});
-      final data = response.data['data'] as List;
+          .get('/network/suggested', queryParameters: {'page': 1, 'limit': 20});
+      final raw = response.data['data'];
+      final all = (raw is List) ? raw.cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
       setState(() {
-        _users = data.cast<Map<String, dynamic>>();
+        _users = all.where((u) => u['_id'] != myId).toList();
         _isLoading = false;
       });
     } on DioException {
@@ -122,8 +126,10 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
                         final displayName =
                             user['displayName'] as String? ?? '';
                         final avatarUrl = user['avatarUrl'] as String?;
-                        final followerCount =
-                            user['followerCount'] as int? ?? 0;
+                        final followerCountRaw = user['followerCount'];
+                        final followerCount = followerCountRaw is int
+                            ? followerCountRaw
+                            : int.tryParse(followerCountRaw?.toString() ?? '') ?? 0;
                         final initial = displayName.isNotEmpty
                             ? displayName[0].toUpperCase()
                             : '?';

@@ -7,9 +7,9 @@ class PremiumPaywallPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF111111),
+        backgroundColor: Colors.black,
         elevation: 0,
         title: const Text(
           'Go Premium',
