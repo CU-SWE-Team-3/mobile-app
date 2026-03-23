@@ -1,26 +1,21 @@
 import 'dart:convert';
 import 'dart:typed_data';
- 
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/main.dart' as app;
 import 'package:soundcloud_clone/core/network/dio_client.dart';
-// ignore: library_prefixes
-import 'package:soundcloud_clone/core/router/app_router.dart' as from_app_router;
- 
+import 'package:soundcloud_clone/core/router/app_router.dart';
+
 import 'helpers/auth_helpers.dart';
 import 'helpers/test_data.dart';
- 
+
 // ─────────────────────────────────────────────────────────────────
 // MockHttpClientAdapter for Module 4
-//
-// Covers:
-//   POST /auth/login     → success (200)
-//   POST /tracks         → upload success (201)
-//   Safe fallback        → 200 empty JSON
 // ─────────────────────────────────────────────────────────────────
 class MockHttpClientAdapter implements HttpClientAdapter {
   @override
@@ -31,18 +26,16 @@ class MockHttpClientAdapter implements HttpClientAdapter {
   ) async {
     final path   = options.path;
     final method = options.method.toUpperCase();
- 
-    _respond(Object body, [int status = 200]) => ResponseBody.fromString(
+
+    ResponseBody respond(Object body, [int status = 200]) =>
+        ResponseBody.fromString(
           jsonEncode(body),
           status,
-          headers: {
-            Headers.contentTypeHeader: [Headers.jsonContentType],
-          },
+          headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
         );
- 
-    // ── Auth login ────────────────────────────────────────────────
+
     if (path.endsWith('/auth/login') && method == 'POST') {
-      return _respond({
+      return respond({
         'user': {
           '_id': 'test_user_id',
           'displayName': validName,
@@ -51,243 +44,230 @@ class MockHttpClientAdapter implements HttpClientAdapter {
         },
       });
     }
- 
-    // ── Track upload ──────────────────────────────────────────────
+
     if (path.endsWith('/tracks') && method == 'POST') {
-      return _respond({
-        'data': {
-          '_id': 'track_001',
-          'title': 'Test Track',
-          'status': 'processing',
-        },
+      return respond({
+        'data': {'_id': 'track_001', 'title': 'Test Track', 'status': 'processing'},
       }, 201);
     }
- 
-    // ── Safe fallback ─────────────────────────────────────────────
-    return _respond({});
+
+    return respond({});
   }
- 
+
   @override
   void close({bool force = false}) {}
 }
- 
+
 // ─────────────────────────────────────────────────────────────────
 // Module 4: Audio Upload & Track Management
 // Owner: Abdelrahman Osama
 //
-// NOTE on FilePicker:
-//   FilePicker opens a native Android dialog that cannot be
-//   driven by the Flutter test framework. Any test that requires
-//   a file to be selected is marked skip: true for Phase 2.
-//   They will be re-enabled in Phase 3 once a FilePicker mock
-//   is wired into the DI container.
+// IMPORTANT — Route clarification (from reading app_router.dart):
+//   /upload          → UploadEditPage  (metadata form, reached AFTER
+//                       FilePicker selects a file)
+//   /library/uploads → LibraryUploadsPage  (the uploads list screen
+//                       with the FAB that triggers FilePicker)
+//
+//   The standalone UploadPage widget in upload_page.dart has NO route
+//   assigned — it is unreachable. All upload UI tests target
+//   LibraryUploadsPage at /library/uploads.
+//
+// NOTE — FilePicker:
+//   FilePicker opens a native Android dialog the test framework cannot
+//   drive. Tests requiring file selection are skip: true for Phase 2
+//   and will be re-enabled in Phase 3 once a mock is injected.
 // ─────────────────────────────────────────────────────────────────
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
- 
   GetIt.instance.allowReassignment = true;
- 
+
   setUp(() async {
     await GetIt.instance.reset();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
   });
- 
-  // ── Boot, inject mock, and login ──────────────────────────────
+
+  tearDown(() async {
+    try {
+      appRouter.go('/start');
+    } catch (_) {}
+  });
+
+  // ── Boot app, inject mock, login ─────────────────────────────
   Future<void> bootAndLogin(WidgetTester tester) async {
     app.main();
-    // FIX: Inject mock adapter right after app.main() so dioClient
-    //      is already initialised and we don't lose the override.
     dioClient.dio.httpClientAdapter = MockHttpClientAdapter();
     await Future.delayed(const Duration(seconds: 2));
- 
+
     const maxAttempts = 40;
     for (var i = 0; i < maxAttempts; i++) {
       await tester.pumpAndSettle(const Duration(milliseconds: 500));
-      final onStart =
-          find.text('Log in').evaluate().isNotEmpty &&
+
+      final onStart = find.text('Log in').evaluate().isNotEmpty &&
           find.text('Create an account').evaluate().isNotEmpty;
       if (onStart) break;
-      await Future.delayed(const Duration(milliseconds: 250));
+
+      // Force /start for any unknown screen
+      appRouter.go('/start');
+      await tester.pumpAndSettle();
     }
- 
+
     await loginAs(tester, validEmail, validPassword);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userId', 'test_user_id');
+    await prefs.setString('displayName', validName);
   }
- 
-  // ── Navigate to Upload page ───────────────────────────────────
-  Future<void> navigateToUploadPage(WidgetTester tester) async {
-    from_app_router.appRouter.push('/upload');
+
+  // ── Navigate to the uploads list page ────────────────────────
+  Future<void> goToUploadsPage(WidgetTester tester) async {
+    appRouter.push('/library/uploads');
     await tester.pumpAndSettle(const Duration(seconds: 3));
   }
- 
+
   // ═══════════════════════════════════════════════════════════════
-  // GROUP: Upload page — static UI (no FilePicker interaction)
+  // GROUP: Library uploads page  (/library/uploads)
+  // Static UI tests — no FilePicker interaction
   // ═══════════════════════════════════════════════════════════════
-  group('Upload page — static UI', () {
- 
-    testWidgets('should show Upload Your Track title', (tester) async {
+  group('Library uploads page — static UI', () {
+
+    testWidgets('should show Your Uploads title in app bar', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await navigateToUploadPage(tester);
- 
+      await goToUploadsPage(tester);
+
       // Act – no action needed
- 
+
       // Assert
-      expect(find.text('Upload Your Track'), findsOneWidget);
+      expect(find.text('Your Uploads'), findsOneWidget);
     });
- 
-    testWidgets('should show Choose Audio File button', (tester) async {
+
+    testWidgets('should show Search in your uploads hint', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await navigateToUploadPage(tester);
- 
+      await goToUploadsPage(tester);
+
       // Act – no action needed
- 
+
       // Assert
-      expect(find.text('Choose Audio File'), findsOneWidget);
+      expect(find.text('Search in your uploads'), findsOneWidget);
     });
- 
-    testWidgets('should show description text', (tester) async {
+
+    testWidgets('should show No Amplify credits pill', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await navigateToUploadPage(tester);
- 
+      await goToUploadsPage(tester);
+
       // Act – no action needed
- 
+
       // Assert
-      expect(
-        find.text(
-            'Select an audio file from your device to get started.'),
-        findsOneWidget,
-      );
+      expect(find.text('No Amplify credits'), findsOneWidget);
     });
- 
-    testWidgets('should show Cancel button', (tester) async {
+
+    testWidgets('should show storage usage pill', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await navigateToUploadPage(tester);
- 
+      await goToUploadsPage(tester);
+
       // Act – no action needed
- 
+
       // Assert
-      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('24/120 mins used'), findsOneWidget);
     });
- 
-    testWidgets('should show upload icon', (tester) async {
+
+    testWidgets('should show upload FAB with add icon', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await navigateToUploadPage(tester);
- 
+      await goToUploadsPage(tester);
+
       // Act – no action needed
- 
-      // Assert
-      expect(find.byIcon(Icons.upload_file), findsOneWidget);
+
+      // Assert — FloatingActionButton with Icons.add
+      expect(find.byIcon(Icons.add), findsOneWidget);
     });
- 
-    testWidgets('should navigate back when Cancel tapped', (tester) async {
+
+    testWidgets('should show search TextField', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await navigateToUploadPage(tester);
- 
+      await goToUploadsPage(tester);
+
+      // Act – no action needed
+
+      // Assert
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('should navigate back when back button tapped', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goToUploadsPage(tester);
+
       // Act
-      await tester.tap(find.text('Cancel'));
+      await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
- 
-      // Assert – upload page is gone
-      expect(find.text('Upload Your Track'), findsNothing);
+
+      // Assert — uploads page title is gone
+      expect(find.text('Your Uploads'), findsNothing);
     });
- 
-    testWidgets('should navigate back when back arrow tapped', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await navigateToUploadPage(tester);
- 
-      // Act
-      await tester.tap(find.byIcon(Icons.arrow_back_ios_new));
-      await tester.pumpAndSettle();
- 
-      // Assert
-      expect(find.text('Upload Your Track'), findsNothing);
-    });
- 
+
   });
- 
+
   // ═══════════════════════════════════════════════════════════════
-  // GROUP: Upload page — FilePicker interaction
-  // All tests in this group are skipped for Phase 2 because
-  // FilePicker launches a native Android dialog that cannot be
-  // driven by the integration test framework.
-  // They will be un-skipped in Phase 3 once a mock is injected.
+  // GROUP: Upload metadata page  (/upload = UploadEditPage)
+  // Reached after FilePicker selects a file — all skipped Phase 2
   // ═══════════════════════════════════════════════════════════════
-  group('Upload page — FilePicker interaction (Phase 3)', () {
- 
+  group('Upload metadata page (Phase 3)', () {
+
     testWidgets(
-      'should navigate to upload edit page after selecting a file',
+      'should show title field after file selected',
       (tester) async {
         // Arrange
         await bootAndLogin(tester);
-        await navigateToUploadPage(tester);
- 
-        // Act – tap Choose Audio File (opens native FilePicker dialog)
-        await tester.tap(find.text('Choose Audio File'));
+        await goToUploadsPage(tester);
+
+        // Act — tap FAB to trigger FilePicker (native dialog, not driveable)
+        await tester.tap(find.byIcon(Icons.add));
         await tester.pumpAndSettle();
- 
-        // Assert – navigated to edit metadata page
-        // (requires mock FilePicker — will be implemented in Phase 3)
-        expect(find.text('Upload Your Track'), findsNothing);
-      },
-      skip: true, // Phase 3: wire mock FilePicker into DI container
-    );
- 
-    testWidgets(
-      'should show track title field on edit page after file is selected',
-      (tester) async {
-        // Arrange
-        await bootAndLogin(tester);
-        await navigateToUploadPage(tester);
- 
-        // Act
-        await tester.tap(find.text('Choose Audio File'));
-        await tester.pumpAndSettle();
- 
+
         // Assert
         expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
       },
-      skip: true, // Phase 3
+      skip: true, // Phase 3: inject mock FilePicker
     );
- 
+
     testWidgets(
-      'should show genre field on edit page after file is selected',
+      'should show genre dropdown after file selected',
       (tester) async {
         // Arrange
         await bootAndLogin(tester);
-        await navigateToUploadPage(tester);
- 
+        await goToUploadsPage(tester);
+
         // Act
-        await tester.tap(find.text('Choose Audio File'));
+        await tester.tap(find.byIcon(Icons.add));
         await tester.pumpAndSettle();
- 
+
         // Assert
-        expect(find.widgetWithText(TextField, 'Genre'), findsOneWidget);
+        expect(find.text('All Music Genres'), findsOneWidget);
       },
       skip: true, // Phase 3
     );
- 
+
     testWidgets(
-      'should show Public / Private toggle on edit page',
+      'should show Public toggle after file selected',
       (tester) async {
         // Arrange
         await bootAndLogin(tester);
-        await navigateToUploadPage(tester);
- 
+        await goToUploadsPage(tester);
+
         // Act
-        await tester.tap(find.text('Choose Audio File'));
+        await tester.tap(find.byIcon(Icons.add));
         await tester.pumpAndSettle();
- 
+
         // Assert
         expect(find.text('Public'), findsOneWidget);
       },
       skip: true, // Phase 3
     );
- 
+
   });
 }
- 

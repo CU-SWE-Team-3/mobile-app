@@ -6,8 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/main.dart' as app;
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/router/app_router.dart';
 
 import 'helpers/auth_helpers.dart';
 import 'helpers/test_data.dart';
@@ -104,13 +106,20 @@ void main() {
   // Allow GetIt to overwrite dependencies between tests.
   GetIt.instance.allowReassignment = true;
 
-  // ── setUp: reset GetIt before each test ──────────────────────────
+  // ── setUp: reset state before each test ──────────────────────────
   // FIX 3: The mock adapter is set AFTER app.main() inside
   //         waitForStartScreen(), NOT here in setUp.
-  //         Previously the adapter was set before app.main() ran,
-  //         so dioClient.init() could overwrite it with the real adapter.
+  //
+  // FIX 8: Clear SharedPreferences before every test.
+  //         Without this, a successful login in test N writes
+  //         accessToken + userId to SharedPreferences. When test N+1
+  //         calls app.main() → dioClient.init(), it reads the saved
+  //         token and the app skips straight to /home — so
+  //         waitForStartScreen never finds the start page and times out.
   setUp(() async {
     await GetIt.instance.reset();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
   });
 
   // ─────────────────────────────────────────────────────────────────
@@ -135,19 +144,39 @@ void main() {
     for (var i = 0; i < maxAttempts; i++) {
       await tester.pumpAndSettle(const Duration(milliseconds: 500));
 
-      final hasLogIn    = find.text('Log in').evaluate().isNotEmpty;
-      final hasCreate   = find.text('Create an account').evaluate().isNotEmpty;
-      final hasTagline  = find.text('Where artists & fans connect.').evaluate().isNotEmpty;
+      final hasLogIn   = find.text('Log in').evaluate().isNotEmpty;
+      final hasCreate  = find.text('Create an account').evaluate().isNotEmpty;
+      final hasTagline = find.text('Where artists & fans connect.').evaluate().isNotEmpty;
 
       if (hasLogIn && hasCreate && hasTagline) return; // ✅ on start page
 
-      // If the app landed on a deeper screen, try to navigate back.
+      // FIX 8: If a previous test left the app on /home (or any other
+      //        post-auth screen), app.main() does NOT restart the widget
+      //        tree — the same instance keeps running. Detect the home
+      //        screen by its BottomNavigationBar and jump directly to
+      //        /start via the router, which is the cleanest way to
+      //        "log out" without needing a logout button in tests.
+      final onHomePage = find.byType(BottomNavigationBar).evaluate().isNotEmpty;
+      if (onHomePage) {
+        appRouter.go('/start');
+        await tester.pumpAndSettle();
+        continue;
+      }
+
+      // If on login or forgot-password screen, tap back to reach start.
+      // FIX 9: ForgotPasswordPage uses Icons.arrow_back_ios_sharp specifically.
+      //        The previous code only checked arrow_back and arrow_back_ios,
+      //        so the forgot-password page was never escaped and all subsequent
+      //        tests stalled waiting for the start screen.
       final onLoginScreen = find.text('Welcome back!').evaluate().isNotEmpty ||
           find.widgetWithText(TextField, 'Email address').evaluate().isNotEmpty;
       final onForgotScreen = find.text('Reset password').evaluate().isNotEmpty;
 
       if (onLoginScreen || onForgotScreen) {
-        if (find.byIcon(Icons.arrow_back).evaluate().isNotEmpty) {
+        if (find.byIcon(Icons.arrow_back_ios_sharp).evaluate().isNotEmpty) {
+          await tester.tap(find.byIcon(Icons.arrow_back_ios_sharp));
+          await tester.pumpAndSettle();
+        } else if (find.byIcon(Icons.arrow_back).evaluate().isNotEmpty) {
           await tester.tap(find.byIcon(Icons.arrow_back));
           await tester.pumpAndSettle();
         } else if (find.byIcon(Icons.arrow_back_ios).evaluate().isNotEmpty) {
