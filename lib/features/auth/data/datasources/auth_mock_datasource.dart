@@ -34,7 +34,7 @@ class AuthMockDatasource {
     required String password,
   }) async {
     await Future.delayed(const Duration(seconds: 1));
-    return User(
+    return const User(
       id: 'mock_001',
       permalink: 'mock-user',
       displayName: 'Mock User',

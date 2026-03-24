@@ -27,13 +27,13 @@ import '../../features/feed/presentation/pages/pop_genre_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
 
-import '../../features/upload/presentation/pages/upload_page.dart';
-import '../../features/upload/presentation/pages/upload_progress_page.dart';
+import '../../features/library/presentation/pages/upload_edit_page.dart';
+import '../../features/library/presentation/pages/upload_progress_page.dart';
+import '../../features/library/presentation/pages/library_uploads_page.dart';
 
 import '../../features/library/presentation/pages/library_page.dart';
 import '../../features/library/presentation/pages/library_albums_page.dart';
 import '../../features/library/presentation/pages/library_stations_page.dart';
-import '../../features/library/presentation/pages/library_uploads_page.dart';
 import '../../features/library/presentation/pages/library_playlists_page.dart';
 import '../../features/library/presentation/pages/library_likes_page.dart';
 import '../../features/library/presentation/pages/your_insights_page.dart';
@@ -218,7 +218,15 @@ final appRouter = GoRouter(
                     builder: (_, __) => const LibraryStationsPage()),
                 GoRoute(
                     path: 'uploads',
-                    builder: (_, __) => const LibraryUploadsPage()),
+                    builder: (_, __) => const LibraryUploadsPage(),
+                    routes: [
+                      GoRoute(
+                          path: 'edit',
+                          builder: (_, __) => const UploadEditPage()),
+                      GoRoute(
+                          path: 'progress',
+                          builder: (_, __) => const UploadProgressPage()),
+                    ]),
                 GoRoute(
                     path: 'playlists',
                     builder: (_, __) => const LibraryPlaylistsPage()),
@@ -262,7 +270,7 @@ final appRouter = GoRouter(
     // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─
     GoRoute(
       path: '/upload',
-      builder: (_, __) => const UploadPage(),
+      builder: (_, __) => const UploadEditPage(),
       routes: [
         GoRoute(
             path: 'progress', builder: (_, __) => const UploadProgressPage()),
@@ -274,7 +282,10 @@ final appRouter = GoRouter(
       path: '/profile',
       builder: (_, __) => const ProfilePage(),
       routes: [
-        GoRoute(path: 'edit', builder: (_, state) => EditProfilePage(initialData: (state.extra as Map?)?.cast<String, String>())),
+        GoRoute(
+            path: 'edit',
+            builder: (_, state) => EditProfilePage(
+                initialData: (state.extra as Map?)?.cast<String, String>())),
         GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
         GoRoute(
             path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
@@ -365,7 +376,16 @@ final appRouter = GoRouter(
             path: 'advertising',
             builder: (_, __) => const AdvertisingSettingsPage()),
         GoRoute(
-            path: 'import-music', builder: (_, __) => const ImportMusicPage()),
+            path: 'import-music',
+            builder: (_, __) => const ImportMusicPage(),
+            routes: [
+              GoRoute(
+                  path: 'import',
+                  builder: (_, __) => const ImportFromAppPage()),
+              GoRoute(
+                  path: 'manage',
+                  builder: (_, __) => const ManageImportedLikesPage()),
+            ]),
         GoRoute(path: 'inbox', builder: (_, __) => const InboxSettingsPage()),
         GoRoute(path: 'legal', builder: (_, __) => const LegalPage()),
         GoRoute(path: 'add-widget', builder: (_, __) => const AddWidgetPage()),
