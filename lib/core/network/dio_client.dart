@@ -12,8 +12,7 @@ class DioClient {
 
   DioClient._internal() {
     dio = Dio(BaseOptions(
-      baseUrl:
-          'https://biobeats-api-dwe8abgwg3e9agcu.francecentral-01.azurewebsites.net/api',
+      baseUrl: 'https://biobeats.duckdns.org/api',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
     ));
@@ -47,7 +46,7 @@ class DioClient {
               if (refreshToken == null) return handler.next(error);
 
               final refreshResponse = await Dio().post(
-                'https://biobeats-api-dwe8abgwg3e9agcu.francecentral-01.azurewebsites.net/api/auth/refresh',
+                'https://biobeats.duckdns.org/api/auth/refresh',
                 data: {'refreshToken': refreshToken},
               );
 
@@ -65,7 +64,8 @@ class DioClient {
 
               // Retry original request with updated token
               final opts = error.requestOptions;
-              opts.headers['Authorization'] = dio.options.headers['Authorization'];
+              opts.headers['Authorization'] =
+                  dio.options.headers['Authorization'];
               final response = await dio.fetch(opts);
               return handler.resolve(response);
             } catch (_) {

@@ -39,12 +39,12 @@ class _FollowersListPageState extends State<FollowersListPage> {
           await dioClient.dio.get('/network/$userId/followers?page=1&limit=20');
       final followersData = followersResponse.data['data'] as List;
 
-      // Fetch current user's following list to cross-reference
+      // Fetch current user's following list to determine which followers are already followed back
       final followingResponse = await dioClient.dio
           .get('/network/$userId/following?page=1&limit=999');
       final followingData = followingResponse.data['data'] as List;
 
-      // Build a set of user IDs that the current user is following
+      // make a set of following user IDs to easily check if a follower is already followed back
       final followingIds = followingData
           .map((user) => user['_id'] as String?)
           .whereType<String>()

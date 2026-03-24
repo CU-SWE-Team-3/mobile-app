@@ -76,6 +76,11 @@ class _RecaptchaSheetState extends State<_RecaptchaSheet> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setUserAgent(
+        'Mozilla/5.0 (Linux; Android 10; Mobile) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/120.0.0.0 Mobile Safari/537.36',
+      )
       ..addJavaScriptChannel(
         'CaptchaChannel',
         onMessageReceived: (msg) {
@@ -90,7 +95,7 @@ class _RecaptchaSheetState extends State<_RecaptchaSheet> {
           if (mounted) setState(() => _loading = false);
         },
       ))
-      ..loadHtmlString(_recaptchaHtml, baseUrl: 'http://localhost');
+      ..loadHtmlString(_recaptchaHtml, baseUrl: 'https://biobeats.duckdns.org');
   }
 
   @override
