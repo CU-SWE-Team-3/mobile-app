@@ -7,6 +7,9 @@ import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/onboarding_page.dart';
 import '../../features/auth/presentation/pages/email_verification_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
+import '../../features/auth/presentation/pages/reset_password_page.dart';
+import '../../features/auth/presentation/pages/verify_email_deep_link_page.dart';
+import '../../features/auth/presentation/pages/confirm_email_update_page.dart';
 import '../../features/auth/presentation/pages/oauth_login_page.dart';
 import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/register_screen.dart';
@@ -109,7 +112,19 @@ final appRouter = GoRouter(
     GoRoute(
         path: '/forgot-password',
         builder: (_, __) => const ForgotPasswordPage()),
+    GoRoute(
+        path: '/reset-password',
+        builder: (_, state) =>
+            ResetPasswordPage(token: state.extra as String? ?? '')),
     GoRoute(path: '/oauth-login', builder: (_, __) => const OAuthLoginPage()),
+    GoRoute(
+        path: '/verify-email-deep-link',
+        builder: (_, state) =>
+            VerifyEmailDeepLinkPage(token: state.extra as String? ?? '')),
+    GoRoute(
+        path: '/confirm-email-update',
+        builder: (_, state) =>
+            ConfirmEmailUpdatePage(token: state.extra as String? ?? '')),
     GoRoute(
         path: '/email-verification',
         builder: (_, state) =>

@@ -33,11 +33,27 @@ class _FollowersListPageState extends State<FollowersListPage> {
     try {
       final userId = await UserSession.getUserId();
       if (userId == null) throw Exception('Not logged in');
-      final response = await dioClient.dio
-          .get('/network/$userId/followers?page=1&limit=20');
-      final data = response.data['data'] as List;
+
+      // Fetch followers list
+      final followersResponse =
+          await dioClient.dio.get('/network/$userId/followers?page=1&limit=20');
+      final followersData = followersResponse.data['data'] as List;
+
+      // Fetch current user's following list to determine which followers are already followed back
+      final followingResponse = await dioClient.dio
+          .get('/network/$userId/following?page=1&limit=999');
+      final followingData = followingResponse.data['data'] as List;
+
+      // make a set of following user IDs to easily check if a follower is already followed back
+      final followingIds = followingData
+          .map((user) => user['_id'] as String?)
+          .whereType<String>()
+          .toSet();
+
       setState(() {
-        _users = data.cast<Map<String, dynamic>>();
+        _users = followersData.cast<Map<String, dynamic>>();
+        _followingIds.clear();
+        _followingIds.addAll(followingIds);
         _isLoading = false;
       });
     } on DioException {
@@ -134,8 +150,7 @@ class _FollowersListPageState extends State<FollowersListPage> {
                   ? Center(
                       child: Text(
                         'No followers yet',
-                        style:
-                            TextStyle(color: Colors.grey[600], fontSize: 15),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 15),
                       ),
                     )
                   : ListView.builder(
@@ -173,8 +188,7 @@ class _FollowerTile extends StatelessWidget {
     final displayName = user['displayName'] as String? ?? '';
     final avatarUrl = user['avatarUrl'] as String?;
     final followerCount = user['followerCount'] as int? ?? 0;
-    final initial =
-        displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     final isDefaultAvatar = avatarUrl == null ||
         avatarUrl.isEmpty ||
         avatarUrl.contains('default-avatar');
@@ -227,8 +241,8 @@ class _FollowerTile extends StatelessWidget {
                       const SizedBox(width: 5),
                       Text(
                         '$followerCount Followers',
-                        style: const TextStyle(
-                            color: Colors.grey, fontSize: 13),
+                        style:
+                            const TextStyle(color: Colors.grey, fontSize: 13),
                       ),
                     ],
                   ),
