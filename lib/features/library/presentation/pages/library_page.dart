@@ -79,11 +79,7 @@ class LibraryPage extends ConsumerWidget {
 
             // ── Menu list ─────────────────────
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: () async {},
-                color: const Color(0xFFFF5500),
-                backgroundColor: const Color(0xFF1A1A1A),
-                child: ListView(
+              child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
                   _LibraryMenuItem(title: 'Your likes', onTap: () {}),
@@ -162,7 +158,6 @@ class LibraryPage extends ConsumerWidget {
 
                   const SizedBox(height: 120),
                 ],
-                ),
               ),
             ),
           ],
