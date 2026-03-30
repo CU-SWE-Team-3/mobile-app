@@ -19,7 +19,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String _city = '';
   String _country = '';
   String _avatarUrl = '';
-  int _followerCount = 0;
+  int _followerCount = 5;
   int _followingCount = 0;
   bool _bioExpanded = false;
   bool _isLoading = true;
@@ -70,54 +70,51 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() { _isLoading = true; _hasError = false; });
     try {
       final prefs = await SharedPreferences.getInstance();
+      final String userId = prefs.getString('userId') ?? '';
       final String permalink = prefs.getString('permalink') ?? '';
 
+      if (userId.isEmpty) {
+        if (mounted) setState(() { _username = prefs.getString('displayName') ?? ''; _isLoading = false; });
+        return;
+      }
+
+      // If we have a permalink, fetch full profile (includes followerCount + followingCount)
       if (permalink.isNotEmpty) {
-        // Happy path: permalink cached — use proper GET endpoint
         try {
-          final response = await dioClient.dio.get('/profile/$permalink');
-          final responseData = response.data['data'] as Map<String, dynamic>;
-          final data = (responseData['user'] as Map<String, dynamic>?) ?? responseData;
+          final profileResponse = await dioClient.dio.get('/profile/$permalink');
+          final data = profileResponse.data['data']['user'] as Map<String, dynamic>;
           if (mounted) {
             setState(() {
-              _username       = data['displayName'] as String? ?? '';
-              _bio            = data['bio']         as String? ?? '';
-              _city           = data['city']        as String? ?? '';
-              _country        = data['country']     as String? ?? '';
-              _avatarUrl      = data['avatarUrl']   as String? ?? '';
+              _username       = data['displayName']   as String? ?? prefs.getString('displayName') ?? '';
+              _bio            = data['bio']           as String? ?? '';
+              _city           = data['city']          as String? ?? '';
+              _country        = data['country']       as String? ?? '';
+              _avatarUrl      = data['avatarUrl']     as String? ?? '';
               _followerCount  = _parseInt(data['followerCount']);
               _followingCount = _parseInt(data['followingCount']);
               _isLoading = false;
             });
           }
           return;
-        } catch (_) {
-          // Permalink may have changed after an edit — clear it and re-fetch via PATCH
-          await prefs.remove('permalink');
-        }
+        } catch (_) {}
       }
 
-      // No permalink yet — use PATCH /profile/update {} to bootstrap all profile data
-      // (PATCH with empty body is a no-op that returns the full user object including permalink)
-      final patchResponse = await dioClient.dio.patch('/profile/update', data: {});
-      final data = patchResponse.data['data'] as Map<String, dynamic>;
-      final fetchedPermalink = data['permalink'] as String? ?? '';
-      if (fetchedPermalink.isNotEmpty) {
-        await prefs.setString('permalink', fetchedPermalink);
-      }
+      // No permalink yet — fetch counts separately
+      final results = await Future.wait([
+        dioClient.dio.get('/network/$userId/followers'),
+        dioClient.dio.get('/network/$userId/following'),
+      ]);
       if (mounted) {
         setState(() {
-          _username       = data['displayName'] as String? ?? '';
-          _bio            = data['bio']         as String? ?? '';
-          _city           = data['city']        as String? ?? '';
-          _country        = data['country']     as String? ?? '';
-          _avatarUrl      = data['avatarUrl']   as String? ?? '';
-          _followerCount  = _parseInt(data['followerCount']);
-          _followingCount = _parseInt(data['followingCount']);
+          _username       = prefs.getString('displayName') ?? '';
+          _followerCount  = _parseInt(results[0].data['count']);
+          _followingCount = _parseInt(results[1].data['count']);
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('=== PROFILE FETCH ERROR: $e\n$st');
       if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
   }

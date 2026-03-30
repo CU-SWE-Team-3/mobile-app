@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/deep_link_state.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -17,7 +18,7 @@ class _SplashPageState extends State<SplashPage> {
 
   Future<void> _navigate() async {
     await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
+    if (mounted && !deepLinkHandled) {
       context.go('/start');
     }
   }

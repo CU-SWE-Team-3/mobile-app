@@ -33,7 +33,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   ];
   final List<String> _days = List.generate(31, (i) => '${i + 1}');
   final List<String> _years = List.generate(100, (i) => '${2010 - i}');
-  final List<String> _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
+  final List<String> _genders = ['Male', 'Female', 'Custom', 'Prefer not to say'];
 
   @override
   void initState() {
@@ -101,7 +101,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (mounted) context.go('/email-verification', extra: _emailController.text.trim());
     } on DioException catch (e) {
       final status = e.response?.statusCode;
-      final errorMessage = e.response?.data['error'] ?? '';
+      final errorMessage = e.response?.data['message'] ?? e.response?.data['error'] ?? '';
 
       if (status == 400 &&
           errorMessage.toString().contains('already registered')) {
