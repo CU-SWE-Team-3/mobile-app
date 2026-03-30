@@ -121,7 +121,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   // ── navigate to edit, then re-fetch to show latest data ─────────────
   Future<void> _openEdit() async {
-    await context.push('/profile/edit', extra: {
+    final result = await context.push<Map<String, String>>('/profile/edit', extra: {
       'displayName': _username,
       'bio': _bio,
       'country': _country,
@@ -129,6 +129,19 @@ class _ProfilePageState extends State<ProfilePage> {
       'avatarUrl': _avatarUrl,
       'coverUrl': '',
     });
+    if (!mounted) return;
+    // Optimistically update UI with saved values before the re-fetch completes
+    if (result != null) {
+      setState(() {
+        _username = result['displayName'] ?? _username;
+        _bio      = result['bio']         ?? _bio;
+        _city     = result['city']        ?? _city;
+        _country  = result['country']     ?? _country;
+      });
+    }
+    // Clear cached permalink so _fetchProfile re-bootstraps fresh data from server
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('permalink');
     if (mounted) _fetchProfile();
   }
 
@@ -496,7 +509,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           children: [
                             Icon(Icons.play_arrow_rounded,
                                 size: 13, color: sub),
-                            Text('  \${r.plays} · \${r.duration}',
+                            Text('  ${r.plays} · ${r.duration}',
                                 style: TextStyle(color: sub, fontSize: 11)),
                           ],
                         ),
