@@ -6,7 +6,9 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 
 class FollowersListPage extends StatefulWidget {
-  const FollowersListPage({super.key});
+  final String? targetUserId;
+
+  const FollowersListPage({super.key, this.targetUserId});
 
   @override
   State<FollowersListPage> createState() => _FollowersListPageState();
@@ -31,22 +33,23 @@ class _FollowersListPageState extends State<FollowersListPage> {
       _hasError = false;
     });
     try {
-      final userId = await UserSession.getUserId();
-      if (userId == null) throw Exception('Not logged in');
+      final myId = await UserSession.getUserId();
+      if (myId == null) throw Exception('Not logged in');
 
-      // Fetch followers list
-      final followersResponse =
-          await dioClient.dio.get('/network/$userId/followers?page=1&limit=20');
-      final followersData = followersResponse.data['data'] as List;
+      // When targetUserId is provided, show that user's followers.
+      // Always use myId for the "am I following them?" check.
+      final targetId = widget.targetUserId ?? myId;
 
-      // Fetch current user's following list to determine which followers are already followed back
-      final followingResponse = await dioClient.dio
-          .get('/network/$userId/following?page=1&limit=999');
-      final followingData = followingResponse.data['data'] as List;
+      final results = await Future.wait([
+        dioClient.dio.get('/network/$targetId/followers?page=1&limit=20'),
+        dioClient.dio.get('/network/$myId/following?page=1&limit=999'),
+      ]);
 
-      // make a set of following user IDs to easily check if a follower is already followed back
+      final followersData = results[0].data['data'] as List;
+      final followingData = results[1].data['data'] as List;
+
       final followingIds = followingData
-          .map((user) => user['_id'] as String?)
+          .map((u) => u['_id'] as String?)
           .whereType<String>()
           .toSet();
 
@@ -187,14 +190,22 @@ class _FollowerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final displayName = user['displayName'] as String? ?? '';
     final avatarUrl = user['avatarUrl'] as String?;
-    final followerCount = user['followerCount'] as int? ?? 0;
+    final followerCount = _safeInt(user['followerCount']);
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     final isDefaultAvatar = avatarUrl == null ||
         avatarUrl.isEmpty ||
         avatarUrl.contains('default-avatar');
 
     return InkWell(
-      onTap: () {},
+      onTap: () {
+        final permalink = user['permalink'] as String? ?? '';
+        final userId = user['_id'] as String? ?? '';
+        final displayName = user['displayName'] as String? ?? '';
+        if (permalink.isNotEmpty) {
+          context.push('/user/$permalink',
+              extra: {'userId': userId, 'displayName': displayName});
+        }
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         child: Row(
@@ -285,4 +296,11 @@ class _FollowerTile extends StatelessWidget {
       ),
     );
   }
+}
+
+int _safeInt(dynamic val) {
+  if (val == null) return 0;
+  if (val is int) return val;
+  if (val is double) return val.toInt();
+  return int.tryParse(val.toString()) ?? 0;
 }
