@@ -142,19 +142,26 @@ class _EditProfilePageState extends State<EditProfilePage> {
         ),
       );
 
-  // ── save: PATCH /profile/me ───────────────────────────────────────────
+  // ── save: PATCH /profile/update ──────────────────────────────────────
   Future<void> _save() async {
     if (_isLoading) return;
     setState(() => _isLoading = true);
     try {
-      await dioClient.dio.patch('/profile/update', data: {
+      final body = {
         'displayName': _nameCtrl.text.trim().isEmpty
             ? _initUsername
             : _nameCtrl.text.trim(),
         'bio': _bio,
         'country': _country,
         'city': _cityCtrl.text.trim(),
-      });
+      };
+      // ignore: avoid_print
+      print('[EditProfile] Sending: $body');
+      final response = await dioClient.dio.patch('/profile/update', data: body);
+      // ignore: avoid_print
+      print('[EditProfile] Response status: ${response.statusCode}');
+      // ignore: avoid_print
+      print('[EditProfile] Response data: ${response.data}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -162,8 +169,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
           backgroundColor: Colors.green,
         ),
       );
-      context.pop();
-    } on DioException {
+      context.pop(<String, String>{
+        'displayName': body['displayName'] as String,
+        'bio': body['bio'] as String,
+        'city': body['city'] as String,
+        'country': body['country'] as String,
+      });
+    } on DioException catch (e) {
+      // ignore: avoid_print
+      print('[EditProfile] Error status: ${e.response?.statusCode}');
+      // ignore: avoid_print
+      print('[EditProfile] Error data: ${e.response?.data}');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
