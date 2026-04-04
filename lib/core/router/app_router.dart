@@ -47,6 +47,8 @@ import '../../features/profile/presentation/pages/profile_insights_page.dart';
 import '../../features/profile/presentation/pages/avatar_upload_page.dart';
 import '../../features/profile/presentation/pages/cover_photo_upload_page.dart';
 import '../../features/profile/presentation/pages/avatar_viewer_page.dart';
+import '../../features/profile/presentation/pages/public_profile_page.dart';
+import '../../features/profile/presentation/pages/other_user_profile_page.dart';
 
 import '../../features/followers/presentation/pages/followers_list_page.dart';
 import '../../features/followers/presentation/pages/following_list_page.dart';
@@ -297,12 +299,43 @@ final appRouter = GoRouter(
         GoRoute(
             path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
         GoRoute(
-            path: 'followers', builder: (_, __) => const FollowersListPage()),
+          path: 'followers',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            return FollowersListPage(
+                targetUserId: extra?['targetUserId'] as String?);
+          },
+        ),
         GoRoute(
-            path: 'following', builder: (_, __) => const FollowingListPage()),
+          path: 'following',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            return FollowingListPage(
+                targetUserId: extra?['targetUserId'] as String?);
+          },
+        ),
         GoRoute(
             path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),
+        GoRoute(
+          path: 'user/:permalink',
+          builder: (_, state) => PublicProfilePage(
+            permalink: state.pathParameters['permalink']!,
+          ),
+        ),
       ],
+    ),
+
+    // ── OTHER USER PROFILE (global, short URL) ────────────────────────
+    GoRoute(
+      path: '/user/:permalink',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return OtherUserProfilePage(
+          permalink: state.pathParameters['permalink']!,
+          initialDisplayName: extra['displayName'] as String? ?? '',
+          initialUserId: extra['userId'] as String? ?? '',
+        );
+      },
     ),
 
     // ── PLAYER (global, accessible from anywhere) ─────────────────────

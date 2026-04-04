@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 
@@ -25,26 +26,35 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
   }
 
   Future<void> _fetchSuggested() async {
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
+    setState(() { _isLoading = true; _hasError = false; });
     try {
       final prefs = await SharedPreferences.getInstance();
       final myId = prefs.getString('userId') ?? '';
-      final response = await dioClient.dio
-          .get('/network/suggested', queryParameters: {'page': 1, 'limit': 20});
-      final raw = response.data['data'];
-      final all = (raw is List) ? raw.cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
+
+      final results = await Future.wait([
+        dioClient.dio.get('/network/suggested',
+            queryParameters: {'page': 1, 'limit': 20}),
+        dioClient.dio.get('/network/blocked-users'),
+      ]);
+
+      final raw = results[0].data['data'];
+      final all = (raw is List)
+          ? raw.cast<Map<String, dynamic>>()
+          : <Map<String, dynamic>>[];
+
+      final blockedRaw = results[1].data['data'];
+      final blockedIds = (blockedRaw is List)
+          ? blockedRaw.map((u) => u['_id'] as String).toSet()
+          : <String>{};
+
       setState(() {
-        _users = all.where((u) => u['_id'] != myId).toList();
+        _users = all
+            .where((u) => u['_id'] != myId && !blockedIds.contains(u['_id']))
+            .toList();
         _isLoading = false;
       });
     } on DioException {
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-      });
+      setState(() { _isLoading = false; _hasError = true; });
     }
   }
 
@@ -123,6 +133,7 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
                       itemBuilder: (context, i) {
                         final user = _users[i];
                         final id = user['_id'] as String;
+                        final permalink = user['permalink'] as String? ?? '';
                         final displayName =
                             user['displayName'] as String? ?? '';
                         final avatarUrl = user['avatarUrl'] as String?;
@@ -139,7 +150,14 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
                         final isFollowing = _followingIds.contains(id);
                         final isButtonLoading = _loadingIds.contains(id);
 
-                        return Padding(
+                        return InkWell(
+                          onTap: () {
+                            if (permalink.isNotEmpty) {
+                              context.push('/user/$permalink',
+                                  extra: {'userId': id, 'displayName': displayName});
+                            }
+                          },
+                          child: Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 10),
                           child: Row(
@@ -243,6 +261,7 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
                               ),
                             ],
                           ),
+                        ),
                         );
                       },
                     ),

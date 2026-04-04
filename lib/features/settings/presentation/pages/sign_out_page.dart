@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 
@@ -61,6 +62,8 @@ class _SignOutPageState extends ConsumerState<SignOutPage> {
                 await dioClient.dio.post('/auth/logout');
               } catch (_) {}
               await UserSession.clear();
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('blockedUserIds');
               dioClient.dio.options.headers.remove('Authorization');
               if (context.mounted) context.go('/start');
             },
