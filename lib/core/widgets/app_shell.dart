@@ -1,8 +1,10 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/player/presentation/providers/player_provider.dart';
 import '../themes/app_theme.dart';
 
 class AppShell extends StatelessWidget {
@@ -94,18 +96,23 @@ class _MiniPlayerSlot extends StatelessWidget {
   }
 }
 
-class _MiniPlayerBar extends StatefulWidget {
+class _MiniPlayerBar extends ConsumerStatefulWidget {
   const _MiniPlayerBar();
 
   @override
-  State<_MiniPlayerBar> createState() => _MiniPlayerBarState();
+  ConsumerState<_MiniPlayerBar> createState() => _MiniPlayerBarState();
 }
 
-class _MiniPlayerBarState extends State<_MiniPlayerBar> {
+class _MiniPlayerBarState extends ConsumerState<_MiniPlayerBar> {
   bool _isLiked = false;
 
   @override
   Widget build(BuildContext context) {
+    final playerState = ref.watch(playerProvider);
+    final title = playerState.currentTrackTitle ?? 'No track playing';
+    final artist = playerState.currentTrackArtist ?? '';
+    final isPlaying = playerState.isPlaying;
+
     return GestureDetector(
       onTap: () => context.push('/player'),
       child: ClipRRect(
@@ -129,17 +136,21 @@ class _MiniPlayerBarState extends State<_MiniPlayerBar> {
                     color: Colors.white,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.play_arrow, color: Colors.black, size: 22),
+                  child: Icon(
+                    isPlaying ? Icons.pause : Icons.play_arrow,
+                    color: Colors.black,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "♫  i'm not okay [peril]",
-                        style: TextStyle(
+                        '♫  $title',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -147,8 +158,8 @@ class _MiniPlayerBarState extends State<_MiniPlayerBar> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        'Dugis',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                        artist,
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                     ],
                   ),

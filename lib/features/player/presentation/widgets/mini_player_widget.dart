@@ -4,11 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../providers/player_provider.dart';
+
 class MiniPlayerWidget extends ConsumerWidget {
   const MiniPlayerWidget({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final playerState = ref.watch(playerProvider);
+    final title = playerState.currentTrackTitle ?? 'No track playing';
+    final artist = playerState.currentTrackArtist ?? '';
+    final isPlaying = playerState.isPlaying;
+
     return GestureDetector(
       onTap: () => context.push('/player'),
       child: ClipRRect(
@@ -32,17 +39,21 @@ class MiniPlayerWidget extends ConsumerWidget {
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.play_arrow, color: Colors.black, size: 22),
+              child: Icon(
+                isPlaying ? Icons.pause : Icons.play_arrow,
+                color: Colors.black,
+                size: 22,
+              ),
             ),
             const SizedBox(width: 12),
-            const Expanded(
+            Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "♫  Track Title",
-                    style: TextStyle(
+                    '♫  $title',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
@@ -50,8 +61,8 @@ class MiniPlayerWidget extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'Artist',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                    artist,
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                 ],
               ),
