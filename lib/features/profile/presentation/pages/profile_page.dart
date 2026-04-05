@@ -96,7 +96,10 @@ class _ProfilePageState extends State<ProfilePage> {
             });
           }
           return;
-        } catch (_) {}
+        } catch (e) {
+          // ignore: avoid_print
+          print('=== PROFILE PERMALINK FETCH ERROR: $e');
+        }
       }
 
       // No permalink yet — fetch counts separately
@@ -107,6 +110,9 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) {
         setState(() {
           _username       = prefs.getString('displayName') ?? '';
+          _bio            = prefs.getString('bio') ?? '';
+          _country        = prefs.getString('country') ?? '';
+          _city           = prefs.getString('city') ?? '';
           _followerCount  = _parseInt(results[0].data['count']);
           _followingCount = _parseInt(results[1].data['count']);
           _isLoading = false;
@@ -139,9 +145,6 @@ class _ProfilePageState extends State<ProfilePage> {
         _country  = result['country']     ?? _country;
       });
     }
-    // Clear cached permalink so _fetchProfile re-bootstraps fresh data from server
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('permalink');
     if (mounted) _fetchProfile();
   }
 

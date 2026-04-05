@@ -1,100 +1,292 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart' as ja;
+
+import '../../../player/domain/entities/player_track.dart';
+
+export '../../../player/domain/entities/player_track.dart';
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
 
 class PlayerState {
-  final String? currentTrackPath;
+  final PlayerTrack? currentTrack;
   final bool isPlaying;
-  final String? currentTrackTitle;
-  final String? currentTrackArtist;
+  final Duration position;
+  final Duration duration;
+  final List<PlayerTrack> queue;
+  final int currentQueueIndex;
+  final List<PlayerTrack> history;
+  final bool isLoading;
+  final String? error;
+  final double volume;
 
   const PlayerState({
-    this.currentTrackPath,
+    this.currentTrack,
     this.isPlaying = false,
-    this.currentTrackTitle,
-    this.currentTrackArtist,
+    this.position = Duration.zero,
+    this.duration = Duration.zero,
+    this.queue = const [],
+    this.currentQueueIndex = 0,
+    this.history = const [],
+    this.isLoading = false,
+    this.error,
+    this.volume = 0.7,
   });
 
+  // Backward-compat getters used by existing UI
+  String? get currentTrackPath => currentTrack?.audioUrl;
+  String? get currentTrackTitle => currentTrack?.title;
+  String? get currentTrackArtist => currentTrack?.artist;
+  String? get currentTrackArtworkUrl => currentTrack?.coverUrl;
+
   PlayerState copyWith({
-    String? currentTrackPath,
+    PlayerTrack? currentTrack,
+    bool clearCurrentTrack = false,
     bool? isPlaying,
-    String? currentTrackTitle,
-    String? currentTrackArtist,
+    Duration? position,
+    Duration? duration,
+    List<PlayerTrack>? queue,
+    int? currentQueueIndex,
+    List<PlayerTrack>? history,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+    double? volume,
   }) {
     return PlayerState(
-      currentTrackPath: currentTrackPath ?? this.currentTrackPath,
+      currentTrack:
+          clearCurrentTrack ? null : (currentTrack ?? this.currentTrack),
       isPlaying: isPlaying ?? this.isPlaying,
-      currentTrackTitle: currentTrackTitle ?? this.currentTrackTitle,
-      currentTrackArtist: currentTrackArtist ?? this.currentTrackArtist,
+      position: position ?? this.position,
+      duration: duration ?? this.duration,
+      queue: queue ?? this.queue,
+      currentQueueIndex: currentQueueIndex ?? this.currentQueueIndex,
+      history: history ?? this.history,
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : (error ?? this.error),
+      volume: volume ?? this.volume,
     );
   }
 }
 
-class PlayerNotifier extends StateNotifier<PlayerState> {
-  PlayerNotifier() : super(const PlayerState());
+// ---------------------------------------------------------------------------
+// Notifier
+// ---------------------------------------------------------------------------
 
-  /// Play a track from a local file path
+class PlayerNotifier extends StateNotifier<PlayerState> {
+  final ja.AudioPlayer _audioPlayer = ja.AudioPlayer();
+
+  late final StreamSubscription<Duration> _positionSub;
+  late final StreamSubscription<Duration?> _durationSub;
+  late final StreamSubscription<ja.PlayerState> _playerStateSub;
+
+  PlayerNotifier() : super(const PlayerState()) {
+    _positionSub = _audioPlayer.positionStream.listen((pos) {
+      state = state.copyWith(position: pos);
+    });
+
+    _durationSub = _audioPlayer.durationStream.listen((dur) {
+      if (dur != null) {
+        state = state.copyWith(duration: dur);
+      }
+    });
+
+    _playerStateSub = _audioPlayer.playerStateStream.listen((ps) {
+      final loading = ps.processingState == ja.ProcessingState.loading ||
+          ps.processingState == ja.ProcessingState.buffering;
+
+      state = state.copyWith(
+        isPlaying: ps.playing,
+        isLoading: loading,
+      );
+
+      if (ps.processingState == ja.ProcessingState.completed) {
+        _onTrackCompleted();
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Core play method — all others delegate here
+  // -------------------------------------------------------------------------
+
+  Future<void> playTrack(PlayerTrack track) async {
+    try {
+      state = state.copyWith(isLoading: true, clearError: true);
+
+      // Push current track to history before switching
+      if (state.currentTrack != null) {
+        final updated = [state.currentTrack!, ...state.history];
+        state = state.copyWith(
+          history: updated.length > 50 ? updated.sublist(0, 50) : updated,
+        );
+      }
+
+      state = state.copyWith(currentTrack: track);
+
+      final url = track.audioUrl;
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        await _audioPlayer.setUrl(url);
+      } else {
+        await _audioPlayer.setFilePath(url);
+      }
+
+      await _audioPlayer.play();
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        isPlaying: false,
+        error: e.toString(),
+      );
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Queue operations
+  // -------------------------------------------------------------------------
+
+  Future<void> playQueue(List<PlayerTrack> tracks, {int startIndex = 0}) async {
+    if (tracks.isEmpty) return;
+    state = state.copyWith(queue: tracks, currentQueueIndex: startIndex);
+    await playTrack(tracks[startIndex]);
+  }
+
+  Future<void> skipToNext() async {
+    final queue = state.queue;
+    if (queue.isEmpty) return;
+    final nextIndex = state.currentQueueIndex + 1;
+    if (nextIndex >= queue.length) return;
+    state = state.copyWith(currentQueueIndex: nextIndex);
+    await playTrack(queue[nextIndex]);
+  }
+
+  Future<void> skipToPrevious() async {
+    // If more than 3 s in, restart instead of going back
+    if (state.position.inSeconds > 3) {
+      await seekTo(Duration.zero);
+      return;
+    }
+    final queue = state.queue;
+    if (queue.isEmpty) return;
+    final prevIndex = state.currentQueueIndex - 1;
+    if (prevIndex < 0) return;
+    state = state.copyWith(currentQueueIndex: prevIndex);
+    await playTrack(queue[prevIndex]);
+  }
+
+  Future<void> seekTo(Duration position) async {
+    await _audioPlayer.seek(position);
+  }
+
+  void addToQueue(PlayerTrack track) {
+    state = state.copyWith(queue: [...state.queue, track]);
+  }
+
+  void removeFromQueue(int index) {
+    final updated = List<PlayerTrack>.from(state.queue)..removeAt(index);
+    state = state.copyWith(queue: updated);
+  }
+
+  void clearQueue() {
+    state = state.copyWith(queue: []);
+  }
+
+  // -------------------------------------------------------------------------
+  // Backward-compatible methods (original signatures preserved)
+  // -------------------------------------------------------------------------
+
   Future<void> playTrackFromFile({
     required String filePath,
     required String title,
     required String artist,
   }) async {
-    try {
-      // In a real app, you'd use just_audio or similar package
-      // For now, we'll just update the state to show what's playing
-      state = state.copyWith(
-        currentTrackPath: filePath,
-        currentTrackTitle: title,
-        currentTrackArtist: artist,
-        isPlaying: true,
-      );
-    } catch (e) {
-      print('Error playing track: $e');
-    }
+    await playTrack(PlayerTrack(
+      id: filePath,
+      title: title,
+      artist: artist,
+      audioUrl: filePath,
+    ));
   }
 
-  /// Play a track from a URL
   Future<void> playTrackFromUrl({
     required String url,
     required String title,
     required String artist,
   }) async {
-    try {
-      state = state.copyWith(
-        currentTrackPath: url,
-        currentTrackTitle: title,
-        currentTrackArtist: artist,
-        isPlaying: true,
-      );
-    } catch (e) {
-      print('Error playing track: $e');
-    }
+    await playTrack(PlayerTrack(
+      id: url,
+      title: title,
+      artist: artist,
+      audioUrl: url,
+    ));
   }
 
-  /// Pause playback
   void pause() {
-    state = state.copyWith(isPlaying: false);
+    _audioPlayer.pause();
   }
 
-  /// Resume playback
   void resume() {
-    if (state.currentTrackPath != null) {
-      state = state.copyWith(isPlaying: true);
+    if (state.currentTrack != null) {
+      _audioPlayer.play();
     }
   }
 
-  /// Toggle play/pause
   void togglePlayPause() {
     if (state.isPlaying) {
       pause();
-    } else if (state.currentTrackPath != null) {
+    } else {
       resume();
     }
   }
 
-  /// Stop playback and clear current track
   void stop() {
+    _audioPlayer.stop();
     state = const PlayerState();
   }
+
+  Future<void> setVolume(double volume) async {
+    final clamped = volume.clamp(0.0, 1.0);
+    await _audioPlayer.setVolume(clamped);
+    state = state.copyWith(volume: clamped);
+  }
+
+  /// Aliases used by the full-screen player UI.
+  Future<void> skipNext() => skipToNext();
+  Future<void> skipPrevious() => skipToPrevious();
+
+  // -------------------------------------------------------------------------
+  // Internal
+  // -------------------------------------------------------------------------
+
+  void _onTrackCompleted() {
+    final queue = state.queue;
+    if (queue.isNotEmpty) {
+      final nextIndex = state.currentQueueIndex + 1;
+      if (nextIndex < queue.length) {
+        state = state.copyWith(currentQueueIndex: nextIndex);
+        playTrack(queue[nextIndex]);
+        return;
+      }
+    }
+    state = state.copyWith(isPlaying: false, position: Duration.zero);
+  }
+
+  @override
+  void dispose() {
+    _positionSub.cancel();
+    _durationSub.cancel();
+    _playerStateSub.cancel();
+    _audioPlayer.dispose();
+    super.dispose();
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
 
 final playerProvider =
     StateNotifierProvider<PlayerNotifier, PlayerState>((ref) {
