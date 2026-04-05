@@ -246,13 +246,13 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                           ));
                         },
                         child: SizedBox(
-                          height: 64,
+                          height: 80,
                           width: constraints.maxWidth,
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
                               Positioned.fill(
-                                top: 20,
+                                top: 40,
                                 child: CustomPaint(
                                   painter:
                                       _WaveformPainter(progress: progress),
@@ -264,6 +264,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                   totalSeconds:
                                       playerState.duration.inSeconds,
                                   width: constraints.maxWidth,
+                                  currentSec: currentSec,
                                 ),
                             ],
                           ),
@@ -489,8 +490,13 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
     required List<CommentModel> comments,
     required int totalSeconds,
     required double width,
+    required int currentSec,
   }) {
     if (totalSeconds == 0 || comments.isEmpty) return [];
+
+    // Only show a comment pin when playback is within 3 seconds of its timestamp
+    // This mimics real SoundCloud where avatars appear as the track plays
+    const visibleWindow = 1;
 
     final Map<int, CommentModel> buckets = {};
     for (final c in comments) {
@@ -498,27 +504,33 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
       buckets.putIfAbsent(bucket, () => c);
     }
 
-    return buckets.entries.map((entry) {
-      final comment = entry.value;
-      final xFraction = comment.timestamp / totalSeconds;
-      final xPos = (xFraction * width).clamp(0.0, width - 20.0);
-      return Positioned(
-        left: xPos,
-        top: 0,
-        child: _WaveformCommentPin(
-          avatarUrl: comment.user.avatarUrl,
-          displayName: comment.user.displayName,
-          content: comment.content,
-          timestamp: comment.timestamp,
-        ),
-      );
-    }).toList();
+    return buckets.entries
+        .where((entry) {
+          final diff = (currentSec - entry.value.timestamp).abs();
+          return diff <= visibleWindow;
+        })
+        .map((entry) {
+          final comment = entry.value;
+          final xFraction = comment.timestamp / totalSeconds;
+          final xPos = (xFraction * width).clamp(0.0, width - 200.0);
+          return Positioned(
+            left: xPos,
+            top: 0,
+            child: _WaveformCommentPin(
+              avatarUrl: comment.user.avatarUrl,
+              displayName: comment.user.displayName,
+              content: comment.content,
+              timestamp: comment.timestamp,
+            ),
+          );
+        })
+        .toList();
   }
 }
 
 // ── Waveform comment pin ─────────────────────────────────────────────────────
 
-class _WaveformCommentPin extends StatefulWidget {
+class _WaveformCommentPin extends StatelessWidget {
   final String? avatarUrl;
   final String displayName;
   final String content;
@@ -532,109 +544,62 @@ class _WaveformCommentPin extends StatefulWidget {
   });
 
   @override
-  State<_WaveformCommentPin> createState() => _WaveformCommentPinState();
-}
-
-class _WaveformCommentPinState extends State<_WaveformCommentPin> {
-  bool _expanded = false;
-
-  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => setState(() => _expanded = !_expanded),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_expanded)
-            Container(
-              constraints: const BoxConstraints(maxWidth: 160),
-              margin: const EdgeInsets.only(bottom: 4),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.displayName,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2A2A2A),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          _fmtSec(widget.timestamp),
-                          style: const TextStyle(
-                            color: Colors.orange,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.content,
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 11, height: 1.3),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-          Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.orange, width: 1.5),
-            ),
-            child: ClipOval(
-              child: widget.avatarUrl != null && widget.avatarUrl!.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: widget.avatarUrl!,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => _defaultAvatar(),
-                      errorWidget: (_, __, ___) => _defaultAvatar(),
-                    )
-                  : _defaultAvatar(),
-            ),
+    final isValidUrl = avatarUrl != null &&
+        avatarUrl!.isNotEmpty &&
+        avatarUrl!.startsWith('http');
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Avatar circle
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.orange, width: 2),
           ),
-        ],
-      ),
+          child: ClipOval(
+            child: isValidUrl
+                ? CachedNetworkImage(
+                    imageUrl: avatarUrl!,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => _placeholder(),
+                    errorWidget: (_, __, ___) => _placeholder(),
+                  )
+                : _placeholder(),
+          ),
+        ),
+        const SizedBox(width: 6),
+        // Comment bubble — always visible like real SoundCloud
+        Container(
+          constraints: const BoxConstraints(maxWidth: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.78),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            content,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              height: 1.3,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _defaultAvatar() => Container(
+  Widget _placeholder() => Container(
         color: const Color(0xFF3A3A3A),
         child: const Icon(Icons.person, color: Colors.white38, size: 12),
       );
-
-  String _fmtSec(int s) {
-    final m = s ~/ 60;
-    final sec = (s % 60).toString().padLeft(2, '0');
-    return '$m:$sec';
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
