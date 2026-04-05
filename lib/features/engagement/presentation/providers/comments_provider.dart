@@ -5,7 +5,7 @@ import '../../data/models/comment_model.dart';
 import '../../data/sources/engagement_remote_data_source.dart';
 import '../../../../core/network/dio_client.dart';
 
-// ── State ──────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────
 
 class CommentsState {
   final List<CommentModel> comments;
@@ -24,7 +24,7 @@ class CommentsState {
     this.totalPages = 1,
   });
 
-  bool get hasMore => currentPage < totalPages;
+  bool get hasMore => currentPage <= totalPages;
 
   CommentsState copyWith({
     List<CommentModel>? comments,
@@ -45,39 +45,44 @@ class CommentsState {
   }
 }
 
-// ── Notifier ───────────────────────────────────────────────────────────────
+// ── Notifier ──────────────────────────────────────────────────────────────
 
 class CommentsNotifier extends StateNotifier<CommentsState> {
   final EngagementRemoteDataSource _dataSource;
-  String? _trackId;
+  final String _trackId;
 
-  CommentsNotifier(this._dataSource) : super(const CommentsState());
-
-  void init(String trackId) {
-    if (_trackId == trackId) return;
-    _trackId = trackId;
+  CommentsNotifier(this._dataSource, this._trackId)
+      : super(const CommentsState()) {
     loadComments(refresh: true);
   }
 
+  void init(String trackId) {
+    // No-op — family provider inits via constructor
+  }
+
   Future<void> loadComments({bool refresh = false}) async {
-    if (_trackId == null) return;
     if (state.isLoading) return;
+    if (!refresh && !state.hasMore) return;
 
     final page = refresh ? 1 : state.currentPage;
 
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final comments = await _dataSource.getComments(_trackId!, page: page);
+      final result = await _dataSource.getComments(_trackId, page: page);
       state = state.copyWith(
-        comments: refresh ? comments : [...state.comments, ...comments],
+        comments: refresh
+            ? result.comments
+            : [...state.comments, ...result.comments],
         isLoading: false,
-        currentPage: page + 1,
+        currentPage: result.page + 1,
+        totalPages: result.totalPages,
       );
     } on DioException catch (e) {
       state = state.copyWith(
         isLoading: false,
-        error: e.response?.data['message'] as String? ?? 'Failed to load comments',
+        error: e.response?.data?['message'] as String? ??
+            'Failed to load comments',
       );
     }
   }
@@ -87,22 +92,21 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
     required int timestamp,
     String? parentCommentId,
   }) async {
-    if (_trackId == null || content.trim().isEmpty) return false;
+    if (content.trim().isEmpty) return false;
 
     state = state.copyWith(isPosting: true, error: null);
 
     try {
       final newComment = await _dataSource.postComment(
-        trackId: _trackId!,
+        trackId: _trackId,
         content: content.trim(),
         timestamp: timestamp,
         parentCommentId: parentCommentId,
       );
 
-      // Insert the new comment at its correct timestamp position
       final updated = [...state.comments];
+
       if (parentCommentId != null) {
-        // It's a reply — append to the parent's replies list
         final idx = updated.indexWhere((c) => c.id == parentCommentId);
         if (idx != -1) {
           final parent = updated[idx];
@@ -132,8 +136,8 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
           );
         }
       } else {
-        // Top-level: insert sorted by timestamp
-        int insertIdx = updated.indexWhere((c) => c.timestamp > newComment.timestamp);
+        int insertIdx = updated
+            .indexWhere((c) => c.timestamp > newComment.timestamp);
         if (insertIdx == -1) {
           updated.add(newComment);
         } else {
@@ -146,7 +150,8 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
     } on DioException catch (e) {
       state = state.copyWith(
         isPosting: false,
-        error: e.response?.data['message'] as String? ?? 'Failed to post comment',
+        error: e.response?.data?['message'] as String? ??
+            'Failed to post comment',
       );
       return false;
     }
@@ -158,7 +163,6 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
 
       final updated = [...state.comments];
       if (parentId != null) {
-        // It's a reply
         final idx = updated.indexWhere((c) => c.id == parentId);
         if (idx != -1) {
           final parent = updated[idx];
@@ -168,7 +172,9 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
             timestamp: parent.timestamp,
             user: parent.user,
             parentCommentId: parent.parentCommentId,
-            replies: parent.replies.where((r) => r.id != commentId).toList(),
+            replies: parent.replies
+                .where((r) => r.id != commentId)
+                .toList(),
             createdAt: parent.createdAt,
           );
         }
@@ -178,23 +184,23 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
 
       state = state.copyWith(comments: updated);
     } on DioException {
-      // Silently fail — don't disrupt UX for delete errors
+      // Silently fail
     }
   }
 }
 
-// ── Providers ──────────────────────────────────────────────────────────────
+// ── Providers ─────────────────────────────────────────────────────────────
 
-final _engagementDataSourceProvider = Provider<EngagementRemoteDataSource>((ref) {
+final _engagementDataSourceProvider =
+    Provider<EngagementRemoteDataSource>((ref) {
   return EngagementRemoteDataSource(dioClient.dio);
 });
 
-// Family keyed by trackId — player and comments sheet share the same instance
+// Family keyed by trackId — player and comments sheet share same instance
 final commentsProvider = StateNotifierProvider.autoDispose
     .family<CommentsNotifier, CommentsState, String>(
-  (ref, trackId) {
-    final notifier = CommentsNotifier(ref.read(_engagementDataSourceProvider));
-    notifier.init(trackId);
-    return notifier;
-  },
+  (ref, trackId) => CommentsNotifier(
+    ref.read(_engagementDataSourceProvider),
+    trackId,
+  ),
 );
