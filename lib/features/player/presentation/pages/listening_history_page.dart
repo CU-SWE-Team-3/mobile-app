@@ -10,9 +10,9 @@ class ListeningHistoryPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final historyState = ref.watch(historyProvider);
+    final historyState = ref.watch(serverHistoryProvider);
     final notifier = ref.read(playerProvider.notifier);
-    final historyNotifier = ref.read(historyProvider.notifier);
+    final historyNotifier = ref.read(serverHistoryProvider.notifier);
 
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
@@ -74,7 +74,7 @@ class ListeningHistoryPage extends ConsumerWidget {
   }
 
   void _confirmClear(
-      BuildContext context, HistoryNotifier historyNotifier) {
+      BuildContext context, ServerHistoryNotifier historyNotifier) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -261,8 +261,9 @@ class _HistoryTile extends StatelessWidget {
   }
 
   static String _formatTime(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
+    final local = dt.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
 

@@ -1,18 +1,81 @@
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
+import 'package:soundcloud_clone/features/player/domain/entities/player_track.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
-class ProfilePage extends StatefulWidget {
+// ── API track model ───────────────────────────────────────────────────────────
+
+class _ApiTrack {
+  final String id;
+  final String title;
+  final String artistName;
+  final String? artworkUrl;
+  final String hlsUrl;
+  final List<int>? waveform;
+  final int? durationSeconds;
+
+  const _ApiTrack({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    required this.artworkUrl,
+    required this.hlsUrl,
+    this.waveform,
+    this.durationSeconds,
+  });
+
+  factory _ApiTrack.fromJson(Map<String, dynamic> json) {
+    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final dur = json['duration'];
+    return _ApiTrack(
+      id: json['_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      artistName: artist['displayName'] as String? ?? '',
+      artworkUrl: json['artworkUrl'] as String?,
+      hlsUrl: json['hlsUrl'] as String? ?? '',
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      durationSeconds: dur != null ? (dur as num).toInt() : null,
+    );
+  }
+
+  String get durationLabel {
+    if (durationSeconds == null) return '';
+    final m = durationSeconds! ~/ 60;
+    final s = (durationSeconds! % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  PlayerTrack toPlayerTrack() => PlayerTrack(
+        id: id,
+        title: title,
+        artist: artistName,
+        audioUrl: hlsUrl,
+        coverUrl: artworkUrl,
+        waveform: waveform,
+        duration:
+            durationSeconds != null ? Duration(seconds: durationSeconds!) : null,
+      );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  ConsumerState<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends ConsumerState<ProfilePage> {
   // ── profile data ─────────────────────────────────────────────────────
   String _username = '';
   String _bio = '';
@@ -25,10 +88,8 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isLoading = true;
   bool _hasError = false;
 
-  final _tracks = const [
-    _Track('It_is_realme.mp3', 'SUNDER', '1:20'),
-    _Track('I am in tiny room', 'SUNDER', '2:44'),
-  ];
+  List<_ApiTrack> _apiTracks = [];
+  bool _tracksLoading = false;
 
   final _likes = const [
     _Track('🕊♡without a trace @@2rel', 'Alis', '2:12',
@@ -64,6 +125,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     _fetchProfile();
+    _fetchTracks();
   }
 
   Future<void> _fetchProfile() async {
@@ -123,6 +185,28 @@ class _ProfilePageState extends State<ProfilePage> {
       print('=== PROFILE FETCH ERROR: $e\n$st');
       if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
+  }
+
+  Future<void> _fetchTracks() async {
+    setState(() => _tracksLoading = true);
+    try {
+      final response = await dioClient.dio.get('/tracks/my-tracks');
+      final data = response.data['data'] as List<dynamic>;
+      final tracks = data
+          .cast<Map<String, dynamic>>()
+          .map(_ApiTrack.fromJson)
+          .where((t) => t.hlsUrl.isNotEmpty)
+          .toList();
+      if (mounted) setState(() { _apiTracks = tracks; _tracksLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _tracksLoading = false);
+    }
+  }
+
+  void _playFrom(int index) {
+    if (_apiTracks.isEmpty) return;
+    final queue = _apiTracks.map((t) => t.toPlayerTrack()).toList();
+    ref.read(playerProvider.notifier).playQueue(queue, startIndex: index);
   }
 
   // ── navigate to edit, then re-fetch to show latest data ─────────────
@@ -197,11 +281,23 @@ class _ProfilePageState extends State<ProfilePage> {
                         _spotlight(),
                         _sectionHeader('Tracks',
                             onSeeAll: () => context.push('/profile/tracks')),
-                        ..._tracks.map((t) => _TrackTile(
-                              track: t,
-                              onTap: () {},
-                              onMore: () {},
-                            )),
+                        if (_tracksLoading)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            child: Center(
+                                child: CircularProgressIndicator(
+                                    color: Color(0xFFFF5500))),
+                          )
+                        else
+                          ..._apiTracks.take(2).toList().asMap().entries.map(
+                                (e) => _TrackTile(
+                                  track: _Track(e.value.title,
+                                      e.value.artistName, e.value.durationLabel),
+                                  artworkUrl: e.value.artworkUrl,
+                                  onTap: () => _playFrom(e.key),
+                                  onMore: () {},
+                                ),
+                              ),
                         _sectionHeader('Reposts',
                             onSeeAll: () => context.push('/profile/reposts')),
                         _repostsList(),
@@ -337,7 +433,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const Spacer(),
-                _iconCircle(Icons.shuffle_rounded, () {}),
+                _iconCircle(Icons.shuffle_rounded, () {
+                  if (_apiTracks.isEmpty) return;
+                  _playFrom(Random().nextInt(_apiTracks.length));
+                }),
                 const SizedBox(width: 12),
                 _playCircle(context),
               ],
@@ -609,7 +708,7 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
   Widget _playCircle(BuildContext context) => GestureDetector(
-        onTap: () {},
+        onTap: () => _playFrom(0),
         child: Container(
           width: 52,
           height: 52,
@@ -667,12 +766,14 @@ class _TrackTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onMore;
   final bool showHeart;
+  final String? artworkUrl;
 
   const _TrackTile({
     required this.track,
     required this.onTap,
     required this.onMore,
     this.showHeart = false,
+    this.artworkUrl,
   });
 
   @override
@@ -686,13 +787,27 @@ class _TrackTile extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Container(
-                width: 56,
-                height: 56,
-                color: track.likeColor ?? const Color(0xFF2A2A2A),
-                child: const Icon(Icons.music_note,
-                    color: Colors.white38, size: 24),
-              ),
+              child: (artworkUrl != null && artworkUrl!.isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: artworkUrl!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        width: 56,
+                        height: 56,
+                        color: track.likeColor ?? const Color(0xFF2A2A2A),
+                        child: const Icon(Icons.music_note,
+                            color: Colors.white38, size: 24),
+                      ),
+                    )
+                  : Container(
+                      width: 56,
+                      height: 56,
+                      color: track.likeColor ?? const Color(0xFF2A2A2A),
+                      child: const Icon(Icons.music_note,
+                          color: Colors.white38, size: 24),
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(

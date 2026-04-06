@@ -7,6 +7,7 @@ class PlayerTrack {
   final String? coverUrl;
   final Duration? duration;
   final List<int>? waveform;
+  final String? artistId;
 
   const PlayerTrack({
     required this.id,
@@ -16,6 +17,7 @@ class PlayerTrack {
     this.coverUrl,
     this.duration,
     this.waveform,
+    this.artistId,
   });
 
   @override
