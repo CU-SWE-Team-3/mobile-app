@@ -436,6 +436,8 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
                                       }
                                         : null,
                   child: Text(
+
+                    
                     '${_formatCount(_followingCount)} Following',
                     style:
                         const TextStyle(color: Colors.grey, fontSize: 14),

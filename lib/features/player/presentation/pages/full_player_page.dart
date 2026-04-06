@@ -164,7 +164,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     children: [
                       _CircleButton(
                         icon: Icons.keyboard_arrow_down,
-                        onTap: () => context.pop(),
+                        onTap: () => context.go('/home'),
                       ),
                       _CircleButton(
                         icon: Icons.person_add_outlined,
@@ -302,7 +302,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     IconButton(
                       icon: const Icon(Icons.skip_previous_rounded,
                           color: Colors.white, size: 40),
-                      onPressed: notifier.skipPrevious,
+                      onPressed: () => ref.read(playerProvider.notifier).skipPrevious(),
                     ),
                     const SizedBox(width: 24),
                     GestureDetector(
@@ -327,7 +327,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     IconButton(
                       icon: const Icon(Icons.skip_next_rounded,
                           color: Colors.white, size: 40),
-                      onPressed: notifier.skipNext,
+                      onPressed: () => ref.read(playerProvider.notifier).skipNext(),
                     ),
                   ],
                 ),
@@ -698,8 +698,9 @@ class _EmojiButton extends StatelessWidget {
 
 class _WaveformPainter extends CustomPainter {
   final double progress;
+  final List<int>? waveform;
 
-  static const _heights = [
+  static const _fallbackHeights = [
     0.30, 0.50, 0.70, 0.40, 0.90, 0.60, 0.80, 0.50, 0.30, 0.70,
     0.40, 0.60, 0.80, 0.50, 0.30, 0.90, 0.70, 0.40, 0.60, 0.50,
     0.80, 0.30, 0.70, 0.50, 0.40, 0.90, 0.60, 0.30, 0.80, 0.50,
@@ -709,11 +710,18 @@ class _WaveformPainter extends CustomPainter {
     0.40, 0.80, 0.60, 0.30, 0.90, 0.50, 0.70, 0.40, 0.60, 0.30,
   ];
 
-  const _WaveformPainter({required this.progress});
+  const _WaveformPainter({required this.progress, this.waveform});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final barCount = _heights.length;
+    final List<double> heights;
+    if (waveform != null && waveform!.isNotEmpty) {
+      heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
+    } else {
+      heights = _fallbackHeights;
+    }
+
+    final barCount = heights.length;
     const spacing = 2.0;
     final barWidth = (size.width - (barCount - 1) * spacing) / barCount;
 
@@ -725,7 +733,7 @@ class _WaveformPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     for (int i = 0; i < barCount; i++) {
-      final barHeight = _heights[i] * size.height;
+      final barHeight = heights[i] * size.height;
       final x = i * (barWidth + spacing);
       final y = (size.height - barHeight) / 2;
       final rect = RRect.fromRectAndRadius(

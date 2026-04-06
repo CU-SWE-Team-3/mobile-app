@@ -1,11 +1,10 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/player/presentation/providers/player_provider.dart';
 import '../themes/app_theme.dart';
+import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 
 class AppShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
@@ -92,96 +91,6 @@ class _MiniPlayerSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     // Feed tab (index 1) manages its own mini player — hide here
     if (currentIndex == 1) return const SizedBox.shrink();
-    return const _MiniPlayerBar();
-  }
-}
-
-class _MiniPlayerBar extends ConsumerStatefulWidget {
-  const _MiniPlayerBar();
-
-  @override
-  ConsumerState<_MiniPlayerBar> createState() => _MiniPlayerBarState();
-}
-
-class _MiniPlayerBarState extends ConsumerState<_MiniPlayerBar> {
-  bool _isLiked = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final playerState = ref.watch(playerProvider);
-    final title = playerState.currentTrackTitle ?? 'No track playing';
-    final artist = playerState.currentTrackArtist ?? '';
-    final isPlaying = playerState.isPlaying;
-
-    return GestureDetector(
-      onTap: () => context.push('/player'),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: 64,
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(32),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isPlaying ? Icons.pause : Icons.play_arrow,
-                    color: Colors.black,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '♫  $title',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        artist,
-                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.person_add_outlined,
-                      color: Colors.white, size: 22),
-                  onPressed: () {},
-                ),
-                IconButton(
-                  icon: Icon(
-                    _isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: _isLiked ? const Color(0xFFFF5500) : Colors.white,
-                    size: 22,
-                  ),
-                  onPressed: () => setState(() => _isLiked = !_isLiked),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    return const MiniPlayerWidget();
   }
 }

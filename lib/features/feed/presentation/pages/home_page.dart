@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -12,6 +14,8 @@ class _FeedTrack {
   final String artistName;
   final String? artworkUrl;
   final int playCount;
+  final String? hlsUrl;
+  final List<int>? waveform;
 
   _FeedTrack({
     required this.id,
@@ -19,6 +23,8 @@ class _FeedTrack {
     required this.artistName,
     required this.artworkUrl,
     required this.playCount,
+    this.hlsUrl,
+    this.waveform,
   });
 
   factory _FeedTrack.fromJson(Map<String, dynamic> json) {
@@ -29,6 +35,10 @@ class _FeedTrack {
       artistName: artist['displayName'] as String? ?? '',
       artworkUrl: json['artworkUrl'] as String?,
       playCount: json['playCount'] as int? ?? 0,
+      hlsUrl: json['hlsUrl'] as String?,
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
     );
   }
 }
@@ -65,8 +75,16 @@ class _HomePageState extends ConsumerState<HomePage> {
     super.initState();
     _fetchFeed();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showSuggestedDialog(context);
+      _maybeShowSuggestedDialog();
     });
+  }
+
+  Future<void> _maybeShowSuggestedDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyShown = prefs.getBool('suggested_dialog_shown') ?? false;
+    if (alreadyShown || !mounted) return;
+    await prefs.setBool('suggested_dialog_shown', true);
+    if (mounted) _showSuggestedDialog(context);
   }
 
   Future<void> _fetchFeed() async {
@@ -177,7 +195,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
 
     return Column(
-      children: _tracks.map((track) => _TrackRow(track: track)).toList(),
+      children: _tracks.asMap().entries.map((entry) => _TrackRow(
+        track: entry.value,
+        allTracks: _tracks,
+        index: entry.key,
+      )).toList(),
     );
   }
 
@@ -303,16 +325,46 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 // ── Track row ─────────────────────────────────────────────────────────────────
 
-class _TrackRow extends StatelessWidget {
+class _TrackRow extends ConsumerWidget {
   final _FeedTrack track;
+  final List<_FeedTrack> allTracks;
+  final int index;
 
-  const _TrackRow({required this.track});
+  const _TrackRow({
+    required this.track,
+    required this.allTracks,
+    required this.index,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
+      child: GestureDetector(
+        onTap: () {
+          final url = track.hlsUrl;
+          if (url == null || url.isEmpty) return;
+          final queue = allTracks
+              .where((t) => t.hlsUrl != null && t.hlsUrl!.isNotEmpty)
+              .map((t) => PlayerTrack(
+                    id: t.id,
+                    title: t.title,
+                    artist: t.artistName,
+                    audioUrl: t.hlsUrl!,
+                    coverUrl: t.artworkUrl,
+                    waveform: t.waveform,
+                  ))
+              .toList();
+          final startIndex = allTracks
+              .where((t) => t.hlsUrl != null && t.hlsUrl!.isNotEmpty)
+              .toList()
+              .indexWhere((t) => t.id == track.id);
+          ref.read(playerProvider.notifier).playQueue(
+                queue,
+                startIndex: startIndex < 0 ? 0 : startIndex,
+              );
+        },
+        child: Row(
         children: [
           // Artwork
           Container(
@@ -382,6 +434,7 @@ class _TrackRow extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }

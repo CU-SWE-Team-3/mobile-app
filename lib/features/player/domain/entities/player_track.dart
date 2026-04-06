@@ -6,6 +6,7 @@ class PlayerTrack {
   final String audioUrl; // supports both file path and HTTP URL
   final String? coverUrl;
   final Duration? duration;
+  final List<int>? waveform;
 
   const PlayerTrack({
     required this.id,
@@ -14,6 +15,7 @@ class PlayerTrack {
     required this.audioUrl,
     this.coverUrl,
     this.duration,
+    this.waveform,
   });
 
   @override
