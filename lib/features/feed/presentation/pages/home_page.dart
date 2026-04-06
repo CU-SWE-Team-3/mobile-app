@@ -12,6 +12,7 @@ class _FeedTrack {
   final String id;
   final String title;
   final String artistName;
+  final String? artistId;
   final String? artworkUrl;
   final int playCount;
   final String? hlsUrl;
@@ -23,6 +24,7 @@ class _FeedTrack {
     required this.artistName,
     required this.artworkUrl,
     required this.playCount,
+    this.artistId,
     this.hlsUrl,
     this.waveform,
   });
@@ -33,6 +35,7 @@ class _FeedTrack {
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       playCount: json['playCount'] as int? ?? 0,
       hlsUrl: json['hlsUrl'] as String?,
@@ -350,6 +353,7 @@ class _TrackRow extends ConsumerWidget {
                     id: t.id,
                     title: t.title,
                     artist: t.artistName,
+                    artistId: t.artistId,
                     audioUrl: t.hlsUrl!,
                     coverUrl: t.artworkUrl,
                     waveform: t.waveform,

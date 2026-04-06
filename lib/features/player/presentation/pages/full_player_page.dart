@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../providers/follow_provider.dart';
 import '../providers/player_provider.dart';
 import '../providers/track_like_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
@@ -18,6 +19,7 @@ class FullPlayerPage extends ConsumerStatefulWidget {
 class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
   late final TextEditingController _commentController;
   late final FocusNode _commentFocus;
+
   @override
   void initState() {
     super.initState();
@@ -81,6 +83,11 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
     final notifier = ref.read(playerProvider.notifier);
     final artworkUrl = playerState.currentTrackArtworkUrl;
     final trackId = playerState.currentTrack?.id;
+    final artistId = playerState.currentTrack?.artistId;
+
+    final followState = artistId != null
+        ? ref.watch(followProvider(artistId))
+        : const FollowState();
 
     // Like state — keyed by trackId, auto-disposed on track change
     final likeState = trackId != null
@@ -164,11 +171,18 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     children: [
                       _CircleButton(
                         icon: Icons.keyboard_arrow_down,
-                        onTap: () => context.go('/home'),
+                        onTap: () => context.pop(),
                       ),
                       _CircleButton(
-                        icon: Icons.person_add_outlined,
-                        onTap: () {},
+                        icon: followState.isFollowing
+                            ? Icons.person
+                            : Icons.person_add_outlined,
+                        onTap: artistId != null
+                            ? () => ref
+                                .read(followProvider(artistId).notifier)
+                                .toggle(artistId)
+                            : () {},
+                        loading: followState.isLoading,
                       ),
                     ],
                   ),
@@ -255,7 +269,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 top: 40,
                                 child: CustomPaint(
                                   painter:
-                                      _WaveformPainter(progress: progress),
+                                      _WaveformPainter(progress: progress, waveform: playerState.currentTrack?.waveform),
                                 ),
                               ),
                               if (playerState.duration.inSeconds > 0)
@@ -290,6 +304,40 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       style: const TextStyle(
                           color: Colors.white, fontSize: 12),
                     ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // ── Volume slider ─────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.volume_down, color: Colors.white),
+                      Expanded(
+                        child: SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: Colors.white,
+                            inactiveTrackColor: Colors.white24,
+                            thumbColor: Colors.white,
+                            overlayColor: Colors.white24,
+                            trackHeight: 3,
+                            thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6),
+                          ),
+                          child: Slider(
+                            value: playerState.volume,
+                            min: 0.0,
+                            max: 1.0,
+                            onChanged: (value) => ref
+                                .read(playerProvider.notifier)
+                                .setVolume(value),
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.volume_up, color: Colors.white),
+                    ],
                   ),
                 ),
 
@@ -619,7 +667,9 @@ String _formatSec(int seconds) {
 class _CircleButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-  const _CircleButton({required this.icon, required this.onTap});
+  final bool loading;
+  const _CircleButton(
+      {required this.icon, required this.onTap, this.loading = false});
 
   @override
   Widget build(BuildContext context) {
@@ -630,7 +680,16 @@ class _CircleButton extends StatelessWidget {
         height: 40,
         decoration: const BoxDecoration(
             color: Colors.black38, shape: BoxShape.circle),
-        child: Icon(icon, color: Colors.white, size: 22),
+        child: loading
+            ? const Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
+                ),
+              )
+            : Icon(icon, color: Colors.white, size: 22),
       ),
     );
   }
@@ -710,7 +769,7 @@ class _WaveformPainter extends CustomPainter {
     0.40, 0.80, 0.60, 0.30, 0.90, 0.50, 0.70, 0.40, 0.60, 0.30,
   ];
 
-  const _WaveformPainter({required this.progress, this.waveform});
+  _WaveformPainter({required this.progress, this.waveform});
 
   @override
   void paint(Canvas canvas, Size size) {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 
 import '../../../player/domain/entities/player_track.dart';
+import '../../data/services/player_api_service.dart';
 
 export '../../../player/domain/entities/player_track.dart';
 
@@ -78,12 +79,16 @@ class PlayerState {
 
 class PlayerNotifier extends StateNotifier<PlayerState> {
   final ja.AudioPlayer _audioPlayer = ja.AudioPlayer();
+  final PlayerApiService _api;
 
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration?> _durationSub;
   late final StreamSubscription<ja.PlayerState> _playerStateSub;
 
-  PlayerNotifier() : super(const PlayerState()) {
+  /// Fires PUT /player/state every 5 seconds while a track is playing.
+  Timer? _heartbeatTimer;
+
+  PlayerNotifier(this._api) : super(const PlayerState()) {
     // Sync the hardware volume to the state default so the UI and player agree
     // before the first explicit setVolume() call.
     _audioPlayer.setVolume(const PlayerState().volume);
@@ -111,6 +116,27 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         _onTrackCompleted();
       }
     });
+
+    _startHeartbeat();
+  }
+
+  // -------------------------------------------------------------------------
+  // Heartbeat
+  // -------------------------------------------------------------------------
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      final track = state.currentTrack;
+      if (track != null && state.isPlaying) {
+        _api.syncPlayerState(
+          trackId: track.id,
+          position: state.position.inSeconds.toDouble(),
+          isPlaying: state.isPlaying,
+          volume: state.volume,
+        );
+      }
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -121,9 +147,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     try {
       state = state.copyWith(isLoading: true, clearError: true);
 
-      // Push current track to history before switching
-      if (state.currentTrack != null) {
-        final updated = [state.currentTrack!, ...state.history];
+      // Report progress for the outgoing track before switching.
+      final outgoing = state.currentTrack;
+      if (outgoing != null) {
+        _api.reportProgress(
+          trackId: outgoing.id,
+          listenedSeconds: state.position.inSeconds,
+          totalSeconds: state.duration.inSeconds,
+        );
+        // Push current track to in-session history.
+        final updated = [outgoing, ...state.history];
         state = state.copyWith(
           history: updated.length > 50 ? updated.sublist(0, 50) : updated,
         );
@@ -131,11 +164,14 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
       state = state.copyWith(currentTrack: track);
 
-      final url = track.audioUrl;
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        await _audioPlayer.setUrl(url);
+      // Resolve the server-authorized HLS URL; fall back to track.audioUrl
+      // if the API is unreachable (e.g. offline or unauthenticated).
+      final streamUrl = await _api.getStreamUrl(track.id) ?? track.audioUrl;
+
+      if (streamUrl.startsWith('http://') || streamUrl.startsWith('https://')) {
+        await _audioPlayer.setUrl(streamUrl);
       } else {
-        await _audioPlayer.setFilePath(url);
+        await _audioPlayer.setFilePath(streamUrl);
       }
 
       await _audioPlayer.play();
@@ -298,6 +334,16 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   // -------------------------------------------------------------------------
 
   void _onTrackCompleted() {
+    // Report full listen for the completed track.
+    final track = state.currentTrack;
+    if (track != null && state.duration.inSeconds > 0) {
+      _api.reportProgress(
+        trackId: track.id,
+        listenedSeconds: state.duration.inSeconds,
+        totalSeconds: state.duration.inSeconds,
+      );
+    }
+
     final queue = state.queue;
     if (queue.isNotEmpty) {
       final nextIndex = state.currentQueueIndex + 1;
@@ -312,6 +358,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   @override
   void dispose() {
+    _heartbeatTimer?.cancel();
     _positionSub.cancel();
     _durationSub.cancel();
     _playerStateSub.cancel();
@@ -326,5 +373,5 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
 final playerProvider =
     StateNotifierProvider<PlayerNotifier, PlayerState>((ref) {
-  return PlayerNotifier();
+  return PlayerNotifier(ref.read(playerApiServiceProvider));
 });
