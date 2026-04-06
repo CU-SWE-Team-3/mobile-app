@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/player/presentation/providers/player_provider.dart';
 import '../themes/app_theme.dart';
 import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 
