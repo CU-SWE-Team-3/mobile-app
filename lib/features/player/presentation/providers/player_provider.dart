@@ -84,6 +84,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   late final StreamSubscription<ja.PlayerState> _playerStateSub;
 
   PlayerNotifier() : super(const PlayerState()) {
+    // Sync the hardware volume to the state default so the UI and player agree
+    // before the first explicit setVolume() call.
+    _audioPlayer.setVolume(const PlayerState().volume);
+
     _positionSub = _audioPlayer.positionStream.listen((pos) {
       state = state.copyWith(position: pos);
     });
@@ -192,6 +196,38 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   void clearQueue() {
     state = state.copyWith(queue: []);
+  }
+
+  /// Reorders the queue without interrupting playback.
+  /// Accepts the raw oldIndex / newIndex from [ReorderableListView.onReorder].
+  void reorderQueue(int oldIndex, int newIndex) {
+    // ReorderableListView passes newIndex as if the item is still present;
+    // adjust before inserting.
+    if (oldIndex < newIndex) newIndex -= 1;
+
+    final queue = List<PlayerTrack>.from(state.queue);
+    final item = queue.removeAt(oldIndex);
+    queue.insert(newIndex, item);
+
+    // Keep currentQueueIndex pointing at the same track.
+    int idx = state.currentQueueIndex;
+    if (oldIndex == idx) {
+      idx = newIndex;
+    } else if (oldIndex < idx && newIndex >= idx) {
+      idx -= 1;
+    } else if (oldIndex > idx && newIndex <= idx) {
+      idx += 1;
+    }
+
+    state = state.copyWith(queue: queue, currentQueueIndex: idx);
+  }
+
+  /// Jumps playback to a specific position in the queue.
+  Future<void> skipToIndex(int index) async {
+    final queue = state.queue;
+    if (index < 0 || index >= queue.length) return;
+    state = state.copyWith(currentQueueIndex: index);
+    await playTrack(queue[index]);
   }
 
   // -------------------------------------------------------------------------
