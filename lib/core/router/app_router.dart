@@ -351,7 +351,20 @@ final appRouter = GoRouter(
     ),
 
     // ── ENGAGEMENT ────────────────────────────────────────────────────
-    GoRoute(path: '/comments', builder: (_, __) => const CommentsSheet()),
+    GoRoute(
+      path: '/comments',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return CommentsSheet(
+          trackId: extra['trackId'] as String?,
+          trackTitle: extra['trackTitle'] as String?,
+          trackArtist: extra['trackArtist'] as String?,
+          trackArtworkUrl: extra['trackArtworkUrl'] as String?,
+          currentPositionSeconds:
+              extra['currentPositionSeconds'] as int? ?? 0,
+        );
+      },
+    ),
     GoRoute(path: '/likers', builder: (_, __) => const LikersListPage()),
     GoRoute(path: '/reposters', builder: (_, __) => const RepostersListPage()),
 

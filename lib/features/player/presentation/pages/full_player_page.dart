@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../providers/player_provider.dart';
+import '../providers/track_like_provider.dart';
+import '../../../engagement/data/models/comment_model.dart';
+import '../../../engagement/presentation/providers/comments_provider.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
   const FullPlayerPage({super.key});
@@ -13,15 +16,32 @@ class FullPlayerPage extends ConsumerStatefulWidget {
 }
 
 class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
-  bool _isLiked = false;
   late final TextEditingController _commentController;
   late final FocusNode _commentFocus;
-
   @override
   void initState() {
     super.initState();
     _commentController = TextEditingController();
     _commentFocus = FocusNode();
+
+    // ── TEST TRACK — remove once feed/home calls playTrack() ──────────
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final current = ref.read(playerProvider).currentTrack;
+      if (current == null) {
+        ref.read(playerProvider.notifier).playTrack(
+          const PlayerTrack(
+            id: '69cefdcda47de9fd5a6da72f',
+            title: 'My track10',
+            artist: 'Unknown',
+            audioUrl:
+                'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/69cefdcda47de9fd5a6da72f/playlist.m3u8',
+            coverUrl: null,
+          ),
+        );
+      }
+    });
+    // ─────────────────────────────────────────────────────────────────
   }
 
   @override
@@ -37,17 +57,61 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
     return '$m:$s';
   }
 
+  void _openComments(
+    BuildContext context, {
+    required int currentPositionSeconds,
+    required String? trackId,
+    required String? trackTitle,
+    required String? trackArtist,
+    required String? trackArtworkUrl,
+  }) {
+    if (trackId == null) return;
+    context.push('/comments', extra: {
+      'trackId': trackId,
+      'trackTitle': trackTitle ?? '',
+      'trackArtist': trackArtist ?? '',
+      'trackArtworkUrl': trackArtworkUrl ?? '',
+      'currentPositionSeconds': currentPositionSeconds,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final playerState = ref.watch(playerProvider);
     final notifier = ref.read(playerProvider.notifier);
     final artworkUrl = playerState.currentTrackArtworkUrl;
+    final trackId = playerState.currentTrack?.id;
+
+    // Like state — keyed by trackId, auto-disposed on track change
+    final likeState = trackId != null
+        ? ref.watch(trackLikeProvider(trackId))
+        : const LikeState();
 
     final progress = playerState.duration.inMilliseconds > 0
         ? (playerState.position.inMilliseconds /
                 playerState.duration.inMilliseconds)
             .clamp(0.0, 1.0)
         : 0.0;
+
+    final currentSec = playerState.position.inSeconds;
+
+    // Family provider — each trackId gets its own instance, shared across pages
+    final commentsState = trackId != null
+        ? ref.watch(commentsProvider(trackId))
+        : const CommentsState();
+
+    // Show snackbar if like fails (e.g. 401 not logged in)
+    // ref.listen must be unconditional — use empty string as fallback key
+    ref.listen(trackLikeProvider(trackId ?? ''), (prev, next) {
+      if (next.error != null && prev?.error == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.error!),
+            backgroundColor: const Color(0xFF2A2A2A),
+          ),
+        );
+      }
+    });
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -57,7 +121,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Layer 1: Full-bleed artwork background ─────────────────────
+          // ── Layer 1: Full-bleed artwork background ──────────────────
           artworkUrl != null
               ? CachedNetworkImage(
                   imageUrl: artworkUrl,
@@ -69,7 +133,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                 )
               : const ColoredBox(color: Color(0xFF1A1A1A)),
 
-          // ── Layer 2: Gradient overlay ───────────────────────────────────
+          // ── Layer 2: Gradient overlay ───────────────────────────────
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -86,15 +150,15 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
             ),
           ),
 
-          // ── Layer 3: UI content ─────────────────────────────────────────
+          // ── Layer 3: UI content ─────────────────────────────────────
           SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Top bar ─────────────────────────────────────────────
+                // ── Top bar ─────────────────────────────────────────
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -110,7 +174,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                   ),
                 ),
 
-                // ── Track title + artist ─────────────────────────────────
+                // ── Track title + artist ─────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
@@ -130,13 +194,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       Text(
                         playerState.currentTrackArtist ?? '',
                         style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 15,
-                        ),
+                            color: Colors.white70, fontSize: 15),
                       ),
                       const SizedBox(height: 10),
-
-                      // ── "Behind this track" row ────────────────────────
                       GestureDetector(
                         onTap: () {},
                         child: const Row(
@@ -157,19 +217,18 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                   ),
                 ),
 
-                // ── Spacer — artwork breathes ────────────────────────────
                 const Spacer(),
 
-                // ── Waveform seek bar ────────────────────────────────────
+                // ── Waveform + floating comment avatars ──────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       return GestureDetector(
                         onTapDown: (details) {
-                          final pct =
-                              (details.localPosition.dx / constraints.maxWidth)
-                                  .clamp(0.0, 1.0);
+                          final pct = (details.localPosition.dx /
+                                  constraints.maxWidth)
+                              .clamp(0.0, 1.0);
                           notifier.seekTo(Duration(
                             milliseconds: (pct *
                                     playerState.duration.inMilliseconds)
@@ -177,9 +236,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                           ));
                         },
                         onHorizontalDragUpdate: (details) {
-                          final pct =
-                              (details.localPosition.dx / constraints.maxWidth)
-                                  .clamp(0.0, 1.0);
+                          final pct = (details.localPosition.dx /
+                                  constraints.maxWidth)
+                              .clamp(0.0, 1.0);
                           notifier.seekTo(Duration(
                             milliseconds: (pct *
                                     playerState.duration.inMilliseconds)
@@ -187,13 +246,35 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                           ));
                         },
                         child: SizedBox(
-                          height: 48,
+                          height: 80,
                           width: constraints.maxWidth,
+<<<<<<< HEAD
                           child: CustomPaint(
                             painter: _WaveformPainter(
                               progress: progress,
                               waveform: playerState.currentTrack?.waveform,
                             ),
+=======
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Positioned.fill(
+                                top: 40,
+                                child: CustomPaint(
+                                  painter:
+                                      _WaveformPainter(progress: progress),
+                                ),
+                              ),
+                              if (playerState.duration.inSeconds > 0)
+                                ..._buildCommentAvatars(
+                                  comments: commentsState.comments,
+                                  totalSeconds:
+                                      playerState.duration.inSeconds,
+                                  width: constraints.maxWidth,
+                                  currentSec: currentSec,
+                                ),
+                            ],
+>>>>>>> 5be6a195622620dd14424635badb839285647019
                           ),
                         ),
                       );
@@ -203,7 +284,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
 
                 const SizedBox(height: 8),
 
-                // ── Time pill ────────────────────────────────────────────
+                // ── Time pill ────────────────────────────────────────
                 Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -222,7 +303,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
 
                 const SizedBox(height: 16),
 
-                // ── Playback controls ────────────────────────────────────
+                // ── Playback controls ────────────────────────────────
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -261,7 +342,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
 
                 const SizedBox(height: 16),
 
-                // ── Comment input bar ────────────────────────────────────
+                // ── Comment input bar ────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Container(
@@ -278,15 +359,12 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                             controller: _commentController,
                             focusNode: _commentFocus,
                             style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                            ),
-                            decoration: const InputDecoration(
-                              hintText: 'Drop a comment...',
-                              hintStyle: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 14,
-                              ),
+                                color: Colors.white, fontSize: 14),
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Drop a comment at ${_formatSec(currentSec)}...',
+                              hintStyle: const TextStyle(
+                                  color: Colors.white54, fontSize: 14),
                               border: InputBorder.none,
                               isDense: true,
                               contentPadding: EdgeInsets.zero,
@@ -296,7 +374,18 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                             textInputAction: TextInputAction.send,
                             keyboardAppearance: Brightness.dark,
                             maxLines: 1,
-                            onSubmitted: (_) {
+                            onSubmitted: (text) async {
+                              if (text.trim().isEmpty || trackId == null) {
+                                return;
+                              }
+                              if (trackId != null) {
+                                await ref
+                                    .read(commentsProvider(trackId).notifier)
+                                    .postComment(
+                                      content: text.trim(),
+                                      timestamp: currentSec,
+                                    );
+                              }
                               _commentController.clear();
                               _commentFocus.unfocus();
                             },
@@ -310,7 +399,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 _commentController.text += '🔥';
                                 _commentController.selection =
                                     TextSelection.collapsed(
-                                        offset: _commentController.text.length);
+                                        offset:
+                                            _commentController.text.length);
                                 _commentFocus.requestFocus();
                               },
                             ),
@@ -321,7 +411,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 _commentController.text += '👏';
                                 _commentController.selection =
                                     TextSelection.collapsed(
-                                        offset: _commentController.text.length);
+                                        offset:
+                                            _commentController.text.length);
                                 _commentFocus.requestFocus();
                               },
                             ),
@@ -332,7 +423,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 _commentController.text += '🤩';
                                 _commentController.selection =
                                     TextSelection.collapsed(
-                                        offset: _commentController.text.length);
+                                        offset:
+                                            _commentController.text.length);
                                 _commentFocus.requestFocus();
                               },
                             ),
@@ -345,26 +437,39 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
 
                 const SizedBox(height: 8),
 
-                // ── Bottom action bar ────────────────────────────────────
+                // ── Bottom action bar ────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _ActionButton(
-                        icon: _isLiked
+                        icon: likeState.isLiked
                             ? Icons.favorite
                             : Icons.favorite_border,
-                        iconColor:
-                            _isLiked ? Colors.orange : Colors.white,
-                        label: '28',
-                        onTap: () =>
-                            setState(() => _isLiked = !_isLiked),
+                        iconColor: likeState.isLiked
+                            ? Colors.orange
+                            : Colors.white,
+                        label: '',
+                        onTap: likeState.isLiking || trackId == null
+                            ? () {}
+                            : () => ref
+                                .read(trackLikeProvider(trackId).notifier)
+                                .toggle(trackId),
                       ),
                       _ActionButton(
                         icon: Icons.comment_outlined,
-                        label: '3',
-                        onTap: () => context.push('/comments'),
+                        label: commentsState.comments.isNotEmpty
+                            ? '${commentsState.comments.length}'
+                            : '',
+                        onTap: () => _openComments(
+                          context,
+                          currentPositionSeconds: currentSec,
+                          trackId: trackId,
+                          trackTitle: playerState.currentTrackTitle,
+                          trackArtist: playerState.currentTrackArtist,
+                          trackArtworkUrl: playerState.currentTrackArtworkUrl,
+                        ),
                       ),
                       _ActionButton(
                         icon: Icons.share_outlined,
@@ -388,16 +493,140 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
       ),
     );
   }
+
+  List<Widget> _buildCommentAvatars({
+    required List<CommentModel> comments,
+    required int totalSeconds,
+    required double width,
+    required int currentSec,
+  }) {
+    if (totalSeconds == 0 || comments.isEmpty) return [];
+
+    // Only show a comment pin when playback is within 3 seconds of its timestamp
+    // This mimics real SoundCloud where avatars appear as the track plays
+    const visibleWindow = 1;
+
+    final Map<int, CommentModel> buckets = {};
+    for (final c in comments) {
+      final bucket = c.timestamp ~/ 3;
+      buckets.putIfAbsent(bucket, () => c);
+    }
+
+    return buckets.entries
+        .where((entry) {
+          final diff = (currentSec - entry.value.timestamp).abs();
+          return diff <= visibleWindow;
+        })
+        .map((entry) {
+          final comment = entry.value;
+          final xFraction = comment.timestamp / totalSeconds;
+          final xPos = (xFraction * width).clamp(0.0, width - 200.0);
+          return Positioned(
+            left: xPos,
+            top: 0,
+            child: _WaveformCommentPin(
+              avatarUrl: comment.user.avatarUrl,
+              displayName: comment.user.displayName,
+              content: comment.content,
+              timestamp: comment.timestamp,
+            ),
+          );
+        })
+        .toList();
+  }
+}
+
+// ── Waveform comment pin ─────────────────────────────────────────────────────
+
+class _WaveformCommentPin extends StatelessWidget {
+  final String? avatarUrl;
+  final String displayName;
+  final String content;
+  final int timestamp;
+
+  const _WaveformCommentPin({
+    required this.avatarUrl,
+    required this.displayName,
+    required this.content,
+    required this.timestamp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isValidUrl = avatarUrl != null &&
+        avatarUrl!.isNotEmpty &&
+        avatarUrl!.startsWith('http');
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Avatar circle
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.orange, width: 2),
+          ),
+          child: ClipOval(
+            child: isValidUrl
+                ? CachedNetworkImage(
+                    imageUrl: avatarUrl!,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => _placeholder(),
+                    errorWidget: (_, __, ___) => _placeholder(),
+                  )
+                : _placeholder(),
+          ),
+        ),
+        const SizedBox(width: 6),
+        // Comment bubble — always visible like real SoundCloud
+        Container(
+          constraints: const BoxConstraints(maxWidth: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.78),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            content,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              height: 1.3,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _placeholder() => Container(
+        color: const Color(0xFF3A3A3A),
+        child: const Icon(Icons.person, color: Colors.white38, size: 12),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+String _formatSec(int seconds) {
+  final m = (seconds ~/ 60).toString();
+  final s = (seconds % 60).toString().padLeft(2, '0');
+  return '$m:$s';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Small widgets
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _CircleButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-
   const _CircleButton({required this.icon, required this.onTap});
 
   @override
@@ -408,9 +637,7 @@ class _CircleButton extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: const BoxDecoration(
-          color: Colors.black38,
-          shape: BoxShape.circle,
-        ),
+            color: Colors.black38, shape: BoxShape.circle),
         child: Icon(icon, color: Colors.white, size: 22),
       ),
     );
@@ -440,10 +667,9 @@ class _ActionButton extends StatelessWidget {
           Icon(icon, color: iconColor, size: 26),
           if (label.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 11),
-            ),
+            Text(label,
+                style:
+                    const TextStyle(color: Colors.white, fontSize: 11)),
           ],
         ],
       ),
@@ -454,7 +680,6 @@ class _ActionButton extends StatelessWidget {
 class _EmojiButton extends StatelessWidget {
   final String emoji;
   final VoidCallback onTap;
-
   const _EmojiButton({required this.emoji, required this.onTap});
 
   @override
@@ -529,6 +754,11 @@ class _WaveformPainter extends CustomPainter {
   }
 
   @override
+<<<<<<< HEAD
   bool shouldRepaint(_WaveformPainter old) =>
       old.progress != progress || old.waveform != waveform;
 }
+=======
+  bool shouldRepaint(_WaveformPainter old) => old.progress != progress;
+}
+>>>>>>> 5be6a195622620dd14424635badb839285647019
