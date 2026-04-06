@@ -92,7 +92,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final status = e.response?.statusCode;
       final message = status == 401
           ? 'Wrong password. Please try again.'
-          : 'Something went wrong. Please try again.';
+          : status == 429
+              ? 'Too many attempts. Please wait a moment and try again.'
+              : 'Something went wrong. Please try again.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: Colors.red),

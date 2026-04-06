@@ -1,6 +1,52 @@
 import 'package:dio/dio.dart';
 
 import '../models/comment_model.dart';
+import '../models/liker_user_model.dart';
+
+// ── Shared track summary model (liked tracks + reposts lists) ─────────────────
+
+class TrackSummary {
+  final String id;
+  final String title;
+  final String artistName;
+  final String? artworkUrl;
+  final String? audioUrl;
+  final int playCount;
+  final int likeCount;
+  final int repostCount;
+
+  const TrackSummary({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    this.artworkUrl,
+    this.audioUrl,
+    this.playCount = 0,
+    this.likeCount = 0,
+    this.repostCount = 0,
+  });
+
+  factory TrackSummary.fromJson(Map<String, dynamic> json) {
+    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final id = json['_id'] as String? ?? '';
+    return TrackSummary(
+      id: id,
+      title: json['title'] as String? ?? '',
+      artistName: artist['displayName'] as String? ?? '',
+      artworkUrl: json['artworkUrl'] as String?,
+      audioUrl: json['audioUrl'] as String? ??
+          json['streamUrl'] as String? ??
+          (id.isNotEmpty
+              ? 'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/$id/playlist.m3u8'
+              : null),
+      playCount: (json['playCount'] as num?)?.toInt() ?? 0,
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class CommentsResponse {
   final List<CommentModel> comments;
@@ -85,5 +131,53 @@ class EngagementRemoteDataSource {
 
   Future<void> unRepostTrack(String trackId) async {
     await _dio.delete('/tracks/$trackId/repost');
+  }
+
+  // ── Likers list ───────────────────────────────────────────────────────────
+
+  Future<List<LikerUser>> getLikers(String trackId) async {
+    final response = await _dio.get('/tracks/$trackId/likers');
+    final data = response.data['data'] as Map<String, dynamic>? ?? {};
+    final raw = (data['users'] as List<dynamic>?) ?? [];
+    return raw
+        .map((u) => LikerUser.fromJson(u as Map<String, dynamic>))
+        .toList();
+  }
+
+  // ── Reposters list ────────────────────────────────────────────────────────
+
+  Future<List<LikerUser>> getReposters(String trackId) async {
+    final response = await _dio.get('/tracks/$trackId/reposters');
+    final data = response.data['data'] as Map<String, dynamic>? ?? {};
+    final raw = (data['users'] as List<dynamic>?) ?? [];
+    return raw
+        .map((u) => LikerUser.fromJson(u as Map<String, dynamic>))
+        .toList();
+  }
+
+  // ── Current user's liked tracks ───────────────────────────────────────────
+
+  Future<List<TrackSummary>> getLikedTracks() async {
+    final response = await _dio.get('/me/likes');
+    final body = response.data['data'];
+    final List<dynamic> raw = body is List
+        ? body
+        : (body as Map<String, dynamic>?)?['tracks'] as List<dynamic>? ?? [];
+    return raw
+        .map((t) => TrackSummary.fromJson(t as Map<String, dynamic>))
+        .toList();
+  }
+
+  // ── Current user's reposted tracks ───────────────────────────────────────
+
+  Future<List<TrackSummary>> getUserReposts() async {
+    final response = await _dio.get('/me/reposts');
+    final body = response.data['data'];
+    final List<dynamic> raw = body is List
+        ? body
+        : (body as Map<String, dynamic>?)?['tracks'] as List<dynamic>? ?? [];
+    return raw
+        .map((t) => TrackSummary.fromJson(t as Map<String, dynamic>))
+        .toList();
   }
 }

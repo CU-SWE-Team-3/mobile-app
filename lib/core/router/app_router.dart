@@ -27,13 +27,13 @@ import '../../features/feed/presentation/pages/pop_genre_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
 
-import '../../features/upload/presentation/pages/upload_page.dart';
-import '../../features/upload/presentation/pages/upload_progress_page.dart';
+import '../../features/library/presentation/pages/upload_edit_page.dart';
+import '../../features/library/presentation/pages/upload_progress_page.dart';
+import '../../features/library/presentation/pages/library_uploads_page.dart';
 
 import '../../features/library/presentation/pages/library_page.dart';
 import '../../features/library/presentation/pages/library_albums_page.dart';
 import '../../features/library/presentation/pages/library_stations_page.dart';
-import '../../features/library/presentation/pages/library_uploads_page.dart';
 import '../../features/library/presentation/pages/library_playlists_page.dart';
 import '../../features/library/presentation/pages/library_likes_page.dart';
 import '../../features/library/presentation/pages/your_insights_page.dart';
@@ -47,6 +47,8 @@ import '../../features/profile/presentation/pages/profile_insights_page.dart';
 import '../../features/profile/presentation/pages/avatar_upload_page.dart';
 import '../../features/profile/presentation/pages/cover_photo_upload_page.dart';
 import '../../features/profile/presentation/pages/avatar_viewer_page.dart';
+import '../../features/profile/presentation/pages/public_profile_page.dart';
+import '../../features/profile/presentation/pages/other_user_profile_page.dart';
 
 import '../../features/followers/presentation/pages/followers_list_page.dart';
 import '../../features/followers/presentation/pages/following_list_page.dart';
@@ -218,7 +220,15 @@ final appRouter = GoRouter(
                     builder: (_, __) => const LibraryStationsPage()),
                 GoRoute(
                     path: 'uploads',
-                    builder: (_, __) => const LibraryUploadsPage()),
+                    builder: (_, __) => const LibraryUploadsPage(),
+                    routes: [
+                      GoRoute(
+                          path: 'edit',
+                          builder: (_, __) => const UploadEditPage()),
+                      GoRoute(
+                          path: 'progress',
+                          builder: (_, __) => const UploadProgressPage()),
+                    ]),
                 GoRoute(
                     path: 'playlists',
                     builder: (_, __) => const LibraryPlaylistsPage()),
@@ -262,7 +272,7 @@ final appRouter = GoRouter(
     // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─
     GoRoute(
       path: '/upload',
-      builder: (_, __) => const UploadPage(),
+      builder: (_, __) => const UploadEditPage(),
       routes: [
         GoRoute(
             path: 'progress', builder: (_, __) => const UploadProgressPage()),
@@ -274,7 +284,10 @@ final appRouter = GoRouter(
       path: '/profile',
       builder: (_, __) => const ProfilePage(),
       routes: [
-        GoRoute(path: 'edit', builder: (_, state) => EditProfilePage(initialData: (state.extra as Map?)?.cast<String, String>())),
+        GoRoute(
+            path: 'edit',
+            builder: (_, state) => EditProfilePage(
+                initialData: (state.extra as Map?)?.cast<String, String>())),
         GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
         GoRoute(
             path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
@@ -286,12 +299,43 @@ final appRouter = GoRouter(
         GoRoute(
             path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
         GoRoute(
-            path: 'followers', builder: (_, __) => const FollowersListPage()),
+          path: 'followers',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            return FollowersListPage(
+                targetUserId: extra?['targetUserId'] as String?);
+          },
+        ),
         GoRoute(
-            path: 'following', builder: (_, __) => const FollowingListPage()),
+          path: 'following',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            return FollowingListPage(
+                targetUserId: extra?['targetUserId'] as String?);
+          },
+        ),
         GoRoute(
             path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),
+        GoRoute(
+          path: 'user/:permalink',
+          builder: (_, state) => PublicProfilePage(
+            permalink: state.pathParameters['permalink']!,
+          ),
+        ),
       ],
+    ),
+
+    // ── OTHER USER PROFILE (global, short URL) ────────────────────────
+    GoRoute(
+      path: '/user/:permalink',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return OtherUserProfilePage(
+          permalink: state.pathParameters['permalink']!,
+          initialDisplayName: extra['displayName'] as String? ?? '',
+          initialUserId: extra['userId'] as String? ?? '',
+        );
+      },
     ),
 
     // ── PLAYER (global, accessible from anywhere) ─────────────────────
@@ -307,9 +351,32 @@ final appRouter = GoRouter(
     ),
 
     // ── ENGAGEMENT ────────────────────────────────────────────────────
-    GoRoute(path: '/comments', builder: (_, __) => const CommentsSheet()),
-    GoRoute(path: '/likers', builder: (_, __) => const LikersListPage()),
-    GoRoute(path: '/reposters', builder: (_, __) => const RepostersListPage()),
+    GoRoute(
+      path: '/comments',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return CommentsSheet(
+          trackId: extra['trackId'] as String?,
+          trackTitle: extra['trackTitle'] as String?,
+          trackArtist: extra['trackArtist'] as String?,
+          trackArtworkUrl: extra['trackArtworkUrl'] as String?,
+          currentPositionSeconds:
+              extra['currentPositionSeconds'] as int? ?? 0,
+        );
+      },
+    ),
+    GoRoute(
+      path: '/likers',
+      builder: (_, state) => LikersListPage(
+        trackId: (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/reposters',
+      builder: (_, state) => RepostersListPage(
+        trackId: (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
+      ),
+    ),
 
     // ── PLAYLISTS ─────────────────────────────────────────────────────
     GoRoute(
@@ -365,7 +432,16 @@ final appRouter = GoRouter(
             path: 'advertising',
             builder: (_, __) => const AdvertisingSettingsPage()),
         GoRoute(
-            path: 'import-music', builder: (_, __) => const ImportMusicPage()),
+            path: 'import-music',
+            builder: (_, __) => const ImportMusicPage(),
+            routes: [
+              GoRoute(
+                  path: 'import',
+                  builder: (_, __) => const ImportFromAppPage()),
+              GoRoute(
+                  path: 'manage',
+                  builder: (_, __) => const ManageImportedLikesPage()),
+            ]),
         GoRoute(path: 'inbox', builder: (_, __) => const InboxSettingsPage()),
         GoRoute(path: 'legal', builder: (_, __) => const LegalPage()),
         GoRoute(path: 'add-widget', builder: (_, __) => const AddWidgetPage()),
