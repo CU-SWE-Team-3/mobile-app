@@ -248,13 +248,6 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         child: SizedBox(
                           height: 80,
                           width: constraints.maxWidth,
-<<<<<<< HEAD
-                          child: CustomPaint(
-                            painter: _WaveformPainter(
-                              progress: progress,
-                              waveform: playerState.currentTrack?.waveform,
-                            ),
-=======
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
@@ -274,7 +267,6 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                   currentSec: currentSec,
                                 ),
                             ],
->>>>>>> 5be6a195622620dd14424635badb839285647019
                           ),
                         ),
                       );
@@ -754,11 +746,5 @@ class _WaveformPainter extends CustomPainter {
   }
 
   @override
-<<<<<<< HEAD
-  bool shouldRepaint(_WaveformPainter old) =>
-      old.progress != progress || old.waveform != waveform;
-}
-=======
   bool shouldRepaint(_WaveformPainter old) => old.progress != progress;
 }
->>>>>>> 5be6a195622620dd14424635badb839285647019
