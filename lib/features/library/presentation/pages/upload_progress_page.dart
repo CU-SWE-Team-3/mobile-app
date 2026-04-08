@@ -21,10 +21,9 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_uploadStarted) {
         _uploadStarted = true;
-        // Call simulateUpload exactly once
-        if (!ref.read(uploadProvider).isUploading) {
-          ref.read(uploadProvider.notifier).simulateUpload();
-        }
+        // Clear stale progress/error state while preserving the track file path
+        ref.read(uploadProvider.notifier).clearUploadStatus();
+        ref.read(uploadProvider.notifier).uploadTrack();
       }
     });
   }
@@ -36,6 +35,7 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
         uploadState.uploadProgress >= 1.0 && !uploadState.isUploading;
     final isProcessing = uploadState.processingState != null &&
         uploadState.processingState != 'Finished';
+    final needsRoleUpgrade = uploadState.needsRoleUpgrade;
 
     // Auto navigate when upload completes successfully
     if (isComplete && uploadState.successMessage != null) {
@@ -225,8 +225,88 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                   ),
                   const SizedBox(height: 32),
 
+                  // ── ROLE UPGRADE REQUIRED ─────────────
+                  if (needsRoleUpgrade)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        border: Border.all(color: Colors.orange),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.lock, color: Colors.orange, size: 18),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Artist Role Required',
+                                  style: TextStyle(
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Only Artist accounts can upload tracks. Upgrade your account to start sharing your music.',
+                            style: TextStyle(color: Colors.white70, fontSize: 13),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: uploadState.isLoading
+                                  ? null
+                                  : () async {
+                                      await ref
+                                          .read(uploadProvider.notifier)
+                                          .upgradeToArtist();
+                                      final s = ref.read(uploadProvider);
+                                      if (s.error == null && !s.needsRoleUpgrade) {
+                                        // Role upgraded — let user retry upload
+                                        ref.read(uploadProvider.notifier).clearUploadStatus();
+                                        ref.read(uploadProvider.notifier).uploadTrack();
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: uploadState.isLoading
+                                  ? const SizedBox(
+                                      height: 16,
+                                      width: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text(
+                                      'Upgrade to Artist',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  if (needsRoleUpgrade) const SizedBox(height: 32),
+
                   // ── ERROR MESSAGE ────────────────────
-                  if (uploadState.error != null)
+                  if (uploadState.error != null && !needsRoleUpgrade)
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -276,7 +356,7 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                       ),
                     ),
 
-                  const Spacer(),
+                  const SizedBox(height: 32),
 
                   // ── ACTION BUTTONS ────────────────────
                   if (uploadState.isUploading || isProcessing)
@@ -346,21 +426,16 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                         ),
                       ],
                     )
-                  else if (uploadState.error != null)
+                  else if (uploadState.error != null && !needsRoleUpgrade)
                     Column(
                       children: [
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
                             onPressed: () {
-                              _uploadStarted = false;
-                              ref.read(uploadProvider.notifier).clearError();
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                ref
-                                    .read(uploadProvider.notifier)
-                                    .simulateUpload();
-                                _uploadStarted = true;
-                              });
+                              _uploadStarted = true;
+                              ref.read(uploadProvider.notifier).clearUploadStatus();
+                              ref.read(uploadProvider.notifier).uploadTrack();
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.primary,
