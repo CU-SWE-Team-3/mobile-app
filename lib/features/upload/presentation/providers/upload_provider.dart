@@ -44,8 +44,8 @@ class UploadState {
 class UploadNotifier extends StateNotifier<UploadState> {
   UploadNotifier()
       : super(
-          UploadState(
-            track: const UploadTrack(
+          const UploadState(
+            track: UploadTrack(
               title: '',
               artist: '',
             ),
@@ -127,8 +127,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
   // Reset upload state
   void resetUpload() {
-    state = UploadState(
-      track: const UploadTrack(
+    state = const UploadState(
+      track: UploadTrack(
         title: '',
         artist: '',
       ),
