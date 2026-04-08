@@ -4,7 +4,6 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/deep_link_state.dart';
 import 'core/network/dio_client.dart';
 import 'core/router/app_router.dart';
 import 'core/themes/app_theme.dart';
@@ -54,14 +53,17 @@ class _MyAppState extends State<MyApp> {
     final token = uri.queryParameters['token'];
     if (token == null || token.isEmpty) return;
 
-    deepLinkHandled = true;
-
     if (uri.path == '/verify-email') {
-      appRouter.go('/verify-email-deep-link', extra: token);
+      try {
+        await dioClient.dio.post('/auth/verify-email', data: {'token': token});
+        // Navigate to login so user can sign in with their verified account
+        appRouter.go('/login-screen');
+      } catch (_) {
+        // Token invalid/expired — send to start so user can request a new one
+        appRouter.go('/start');
+      }
     } else if (uri.path == '/reset-password') {
       appRouter.go('/reset-password', extra: token);
-    } else if (uri.path == '/confirm-email-update') {
-      appRouter.go('/confirm-email-update', extra: token);
     }
   }
 

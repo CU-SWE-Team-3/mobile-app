@@ -1,9 +1,9 @@
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class DioClient {
   static final DioClient _instance = DioClient._internal();
@@ -16,6 +16,7 @@ class DioClient {
       baseUrl: 'https://biobeats.duckdns.org/api',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
+      validateStatus: (status) => status != null && status >= 200 && status < 300,
     ));
   }
 

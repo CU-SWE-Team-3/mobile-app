@@ -301,19 +301,11 @@ final appRouter = GoRouter(
             path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
         GoRoute(
           path: 'followers',
-          builder: (_, state) {
-            final extra = state.extra as Map<String, dynamic>?;
-            return FollowersListPage(
-                targetUserId: extra?['targetUserId'] as String?);
-          },
+          builder: (_, __) => const FollowersListPage(),
         ),
         GoRoute(
           path: 'following',
-          builder: (_, state) {
-            final extra = state.extra as Map<String, dynamic>?;
-            return FollowingListPage(
-                targetUserId: extra?['targetUserId'] as String?);
-          },
+          builder: (_, __) => const FollowingListPage(),
         ),
         GoRoute(
             path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),
@@ -351,6 +343,12 @@ final appRouter = GoRouter(
       ],
     ),
 
+    // ── LIKES (global — accessible from profile and other global routes) ─
+    GoRoute(
+      path: '/likes',
+      builder: (_, __) => const LibraryLikesPage(),
+    ),
+
     // ── ENGAGEMENT ────────────────────────────────────────────────────
     GoRoute(
       path: '/comments',
@@ -366,8 +364,18 @@ final appRouter = GoRouter(
         );
       },
     ),
-    GoRoute(path: '/likers', builder: (_, __) => const LikersListPage()),
-    GoRoute(path: '/reposters', builder: (_, __) => const RepostersListPage()),
+    GoRoute(
+      path: '/likers',
+      builder: (_, state) => LikersListPage(
+        trackId: (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/reposters',
+      builder: (_, state) => RepostersListPage(
+        trackId: (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
+      ),
+    ),
 
     // ── PLAYLISTS ─────────────────────────────────────────────────────
     GoRoute(

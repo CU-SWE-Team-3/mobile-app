@@ -1,41 +1,31 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-// ── Mock data — replace with real data later ──
-const _mockReposts = [
-  _Repost(
-    title: 'Nasser _ ناصر',
-    artist: 'wigexpress',
-    plays: '1M',
-    duration: '2:52',
-    imageUrl: null,
-    imageColor: Color(0xFF1A1A2E),
-  ),
-  _Repost(
-    title: 'ZIAD ZAZA - SAM3 AKHINA | ... زياد',
-    artist: 'Abouelhassan',
-    plays: '1.7M',
-    duration: '2:13',
-    imageUrl: null,
-    imageColor: Color(0xFFB03A2E),
-  ),
-  _Repost(
-    title: 'ZIAD ZAZA - EMSHI | زياد ظاظا - إمشي',
-    artist: 'Maro mafia',
-    plays: '2.3M',
-    duration: '3:40',
-    imageUrl: null,
-    imageColor: Color(0xFF1F618D),
-  ),
-];
+import '../../../../injection_container.dart';
+import '../../../engagement/data/sources/engagement_remote_data_source.dart';
+import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../player/presentation/providers/player_provider.dart';
 
-class ProfileRepostsPage extends StatelessWidget {
+final _userRepostsProvider =
+    FutureProvider.autoDispose<List<TrackSummary>>((ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  final userId = prefs.getString('userId') ?? '';
+  if (userId.isEmpty) return [];
+  return sl<EngagementRemoteDataSource>().getUserReposts(userId);
+});
+
+class ProfileRepostsPage extends ConsumerWidget {
   const ProfileRepostsPage({super.key});
 
   static const _bg = Color(0xFF111111);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(_userRepostsProvider);
+
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -43,8 +33,8 @@ class ProfileRepostsPage extends StatelessWidget {
           children: [
             // ── top bar ──────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
                   GestureDetector(
@@ -56,10 +46,8 @@ class ProfileRepostsPage extends StatelessWidget {
                         color: Colors.white.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white,
-                          size: 18),
+                      child: const Icon(Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white, size: 18),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -89,13 +77,41 @@ class ProfileRepostsPage extends StatelessWidget {
               ),
             ),
 
-            // ── repost list ──────────────────────────────────────────
+            // ── content ──────────────────────────────────────────────
             Expanded(
-              child: ListView.builder(
-                physics: const BouncingScrollPhysics(),
-                itemCount: _mockReposts.length,
-                itemBuilder: (_, i) =>
-                    _RepostTile(repost: _mockReposts[i]),
+              child: async.when(
+                loading: () => const Center(
+                  child:
+                      CircularProgressIndicator(color: Color(0xFFFF5500)),
+                ),
+                error: (_, __) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Failed to load reposts',
+                          style: TextStyle(color: Colors.white54)),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () =>
+                            ref.invalidate(_userRepostsProvider),
+                        child: const Text('Retry',
+                            style: TextStyle(color: Color(0xFFFF5500))),
+                      ),
+                    ],
+                  ),
+                ),
+                data: (tracks) => tracks.isEmpty
+                    ? const Center(
+                        child: Text('No reposts yet',
+                            style: TextStyle(
+                                color: Colors.white54, fontSize: 16)),
+                      )
+                    : ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: tracks.length,
+                        itemBuilder: (_, i) =>
+                            _RepostTile(track: tracks[i]),
+                      ),
               ),
             ),
           ],
@@ -105,33 +121,74 @@ class ProfileRepostsPage extends StatelessWidget {
   }
 }
 
-// ── repost tile ──────────────────────────────────────────────────────────
-class _RepostTile extends StatelessWidget {
-  final _Repost repost;
-  const _RepostTile({required this.repost});
+class _RepostTile extends ConsumerWidget {
+  final TrackSummary track;
+  const _RepostTile({required this.track});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // This tile only exists for reposted tracks — initialize provider with
+    // isReposted:true so it shows correctly if not yet touched by the home feed.
+    // If the provider already exists (toggled or seeded elsewhere), that state wins.
+    final params = EngagementParams(
+      trackId: track.id,
+      isReposted: true,
+      repostCount: track.repostCount,
+      likeCount: track.likeCount,
+    );
+    final engState = ref.watch(engagementProvider(params));
+
+    // Seed authoritative reposted state. Only isReposted is seeded — we don't
+    // know isLiked from this API, so we leave it untouched. No-op if the user
+    // has already toggled this track in the current session.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(engagementProvider(params).notifier).seed(
+        isReposted: true,
+        likeCount: track.likeCount,
+        repostCount: track.repostCount,
+      );
+    });
+
+    // Hide immediately when the user un-reposts this track
+    if (!engState.isReposted) return const SizedBox.shrink();
+
     final sub = Colors.white.withOpacity(0.55);
+    final hasArtwork = track.artworkUrl != null &&
+        track.artworkUrl!.isNotEmpty &&
+        track.artworkUrl!.startsWith('http');
+
     return GestureDetector(
-      onTap: () {},
+      onTap: () {
+        if (track.audioUrl != null) {
+          ref.read(playerProvider.notifier).playTrack(
+                PlayerTrack(
+                  id: track.id,
+                  title: track.title,
+                  artist: track.artistName,
+                  audioUrl: track.audioUrl!,
+                  coverUrl: track.artworkUrl,
+                ),
+              );
+          context.push('/player');
+        }
+      },
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Row(
           children: [
             // Thumbnail
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Container(
+              child: SizedBox(
                 width: 56,
                 height: 56,
-                color: repost.imageColor,
-                child: repost.imageUrl != null
-                    ? Image.network(repost.imageUrl!,
-                        fit: BoxFit.cover)
-                    : const Icon(Icons.music_note,
-                        color: Colors.white38, size: 24),
+                child: hasArtwork
+                    ? CachedNetworkImage(
+                        imageUrl: track.artworkUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _placeholder(),
+                      )
+                    : _placeholder(),
               ),
             ),
             const SizedBox(width: 14),
@@ -141,7 +198,7 @@ class _RepostTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    repost.title,
+                    track.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -151,15 +208,14 @@ class _RepostTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  Text(repost.artist,
+                  Text(track.artistName,
                       style: TextStyle(color: sub, fontSize: 13)),
                   const SizedBox(height: 3),
                   Row(
                     children: [
-                      Icon(Icons.play_arrow_rounded,
-                          size: 13, color: sub),
+                      Icon(Icons.play_arrow_rounded, size: 13, color: sub),
                       Text(
-                        '  ${repost.plays} · ${repost.duration}',
+                        '  ${_formatCount(track.playCount)}',
                         style: TextStyle(color: sub, fontSize: 11),
                       ),
                     ],
@@ -167,34 +223,22 @@ class _RepostTile extends StatelessWidget {
                 ],
               ),
             ),
-            // More button
-            GestureDetector(
-              onTap: () {},
-              child: Icon(Icons.more_vert_rounded,
-                  color: sub, size: 20),
-            ),
+            Icon(Icons.more_vert_rounded, color: sub, size: 20),
           ],
         ),
       ),
     );
   }
-}
 
-// ── model ────────────────────────────────────────────────────────────────
-class _Repost {
-  final String title;
-  final String artist;
-  final String plays;
-  final String duration;
-  final String? imageUrl;
-  final Color imageColor;
+  Widget _placeholder() => const ColoredBox(
+        color: Color(0xFF2A2A2A),
+        child: Center(
+            child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+      );
 
-  const _Repost({
-    required this.title,
-    required this.artist,
-    required this.plays,
-    required this.duration,
-    this.imageUrl,
-    required this.imageColor,
-  });
+  String _formatCount(int count) {
+    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return '$count';
+  }
 }
