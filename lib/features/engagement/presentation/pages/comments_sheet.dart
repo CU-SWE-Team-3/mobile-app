@@ -1,6 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/models/comment_model.dart';
 import '../providers/comments_provider.dart';
@@ -463,8 +465,16 @@ class _CommentTileState extends State<_CommentTile> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Avatar
-              _Avatar(url: c.user.avatarUrl, size: 46),
+              // Avatar — tap to go to profile
+              GestureDetector(
+                onTap: () => _navigateToProfile(
+                  context,
+                  userId: c.user.id,
+                  permalink: c.user.permalink,
+                  displayName: c.user.displayName,
+                ),
+                child: _Avatar(url: c.user.avatarUrl, size: 46),
+              ),
               const SizedBox(width: 12),
 
               // Body
@@ -476,15 +486,23 @@ class _CommentTileState extends State<_CommentTile> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            c.user.displayName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+                          child: GestureDetector(
+                            onTap: () => _navigateToProfile(
+                              context,
+                              userId: c.user.id,
+                              permalink: c.user.permalink,
+                              displayName: c.user.displayName,
                             ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            child: Text(
+                              c.user.displayName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 6),
@@ -898,6 +916,28 @@ class _Avatar extends StatelessWidget {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Navigate to profile — own profile if it's the logged-in user, else other user
+Future<void> _navigateToProfile(
+  BuildContext context, {
+  required String userId,
+  required String permalink,
+  required String displayName,
+}) async {
+  final prefs = await SharedPreferences.getInstance();
+  final myId = prefs.getString('userId') ?? '';
+
+  if (!context.mounted) return;
+
+  if (myId.isNotEmpty && myId == userId) {
+    context.push('/profile');
+  } else {
+    context.push(
+      '/user/$permalink',
+      extra: {'displayName': displayName, 'userId': userId},
+    );
+  }
+}
 
 String _timeAgo(DateTime dt) {
   final diff = DateTime.now().difference(dt);
