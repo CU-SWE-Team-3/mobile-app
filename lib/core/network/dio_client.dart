@@ -1,6 +1,7 @@
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -80,3 +81,8 @@ class DioClient {
 }
 
 final dioClient = DioClient();
+
+// Riverpod provider for DioClient
+final dioClientProvider = Provider<DioClient>((ref) {
+  return dioClient;
+});
