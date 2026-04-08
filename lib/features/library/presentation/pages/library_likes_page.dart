@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
+import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
 final _userLikesProvider =
@@ -123,6 +124,27 @@ class _LikeTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Initialize provider with isLiked:true — these are liked tracks.
+    // Existing provider state wins if already toggled this session.
+    final params = EngagementParams(
+      trackId: track.id,
+      isLiked: true,
+      likeCount: track.likeCount,
+      repostCount: track.repostCount,
+    );
+    ref.watch(engagementProvider(params));
+
+    // Seed authoritative liked state. Only isLiked is seeded — we don't know
+    // isReposted from this API, so we leave it untouched. No-op if user has
+    // already toggled this track in the current session.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(engagementProvider(params).notifier).seed(
+        isLiked: true,
+        likeCount: track.likeCount,
+        repostCount: track.repostCount,
+      );
+    });
+
     final sub = Colors.white.withOpacity(0.55);
     final hasArtwork = track.artworkUrl != null &&
         track.artworkUrl!.isNotEmpty &&

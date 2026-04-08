@@ -1,20 +1,23 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
 import 'package:soundcloud_clone/injection_container.dart';
 
-class ProfilePage extends StatefulWidget {
+class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  ConsumerState<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends ConsumerState<ProfilePage> {
   // ── profile data ─────────────────────────────────────────────────────
   String _username = '';
   String _bio = '';
@@ -53,9 +56,33 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _fetchProfile();
-    _fetchReposts();
-    _fetchLikes();
+    _loadAll();
+  }
+
+  // Runs all profile fetches sequentially to avoid hammering the API
+  Future<void> _loadAll() async {
+    await _fetchProfile();
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _fetchReposts();
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _fetchLikes();
+  }
+
+  // Retries up to 3 times with exponential backoff on 429
+  Future<T> _withRetry<T>(Future<T> Function() call) async {
+    int attempts = 0;
+    while (true) {
+      try {
+        return await call();
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 429 && attempts < 2) {
+          await Future.delayed(Duration(seconds: (attempts + 1) * 2));
+          attempts++;
+          continue;
+        }
+        rethrow;
+      }
+    }
   }
 
   Future<void> _fetchLikes() async {
@@ -63,8 +90,8 @@ class _ProfilePageState extends State<ProfilePage> {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId') ?? '';
       if (userId.isEmpty) return;
-      final results =
-          await sl<EngagementRemoteDataSource>().getUserLikes(userId);
+      final results = await _withRetry(
+          () => sl<EngagementRemoteDataSource>().getUserLikes(userId));
       if (mounted) setState(() => _likes = results);
     } catch (_) {}
   }
@@ -74,8 +101,8 @@ class _ProfilePageState extends State<ProfilePage> {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId') ?? '';
       if (userId.isEmpty) return;
-      final results =
-          await sl<EngagementRemoteDataSource>().getUserReposts(userId);
+      final results = await _withRetry(
+          () => sl<EngagementRemoteDataSource>().getUserReposts(userId));
       if (mounted) setState(() => _reposts = results);
     } catch (_) {}
   }
@@ -95,7 +122,7 @@ class _ProfilePageState extends State<ProfilePage> {
       // If we have a permalink, fetch full profile (includes followerCount + followingCount)
       if (permalink.isNotEmpty) {
         try {
-          final profileResponse = await dioClient.dio.get('/profile/$permalink');
+          final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/$permalink'));
           final data = profileResponse.data['data']['user'] as Map<String, dynamic>;
           if (mounted) {
             setState(() {
@@ -116,19 +143,20 @@ class _ProfilePageState extends State<ProfilePage> {
         }
       }
 
-      // No permalink yet — fetch counts separately
-      final results = await Future.wait([
-        dioClient.dio.get('/network/$userId/followers'),
-        dioClient.dio.get('/network/$userId/following'),
-      ]);
+      // No permalink yet — fetch counts sequentially to avoid rate limits
+      final followersResp = await _withRetry(
+          () => dioClient.dio.get('/network/$userId/followers'));
+      await Future.delayed(const Duration(milliseconds: 200));
+      final followingResp = await _withRetry(
+          () => dioClient.dio.get('/network/$userId/following'));
       if (mounted) {
         setState(() {
           _username       = prefs.getString('displayName') ?? '';
           _bio            = prefs.getString('bio') ?? '';
           _country        = prefs.getString('country') ?? '';
           _city           = prefs.getString('city') ?? '';
-          _followerCount  = _parseInt(results[0].data['count']);
-          _followingCount = _parseInt(results[1].data['count']);
+          _followerCount  = _parseInt(followersResp.data['count']);
+          _followingCount = _parseInt(followingResp.data['count']);
           _isLoading = false;
         });
       }
@@ -162,6 +190,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (mounted) _fetchProfile();
   }
 
+  // ─────────────────────────────────────────────────────────────────────
   // ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -491,8 +520,21 @@ class _ProfilePageState extends State<ProfilePage> {
             style: TextStyle(color: _sub, fontSize: 14)),
       );
     }
+    // Watch each repost's engagement state. Pass isReposted:true in params so
+    // freshly-created providers start visible; existing provider state wins.
+    final visible = _reposts.take(3).where((r) {
+      return ref
+          .watch(engagementProvider(EngagementParams(
+            trackId: r.id,
+            isReposted: true,
+            repostCount: r.repostCount,
+            likeCount: r.likeCount,
+          )))
+          .isReposted;
+    }).toList();
+
     return Column(
-      children: _reposts.take(3).map((r) {
+      children: visible.map((r) {
         final sub = Colors.white.withOpacity(0.55);
         final hasArtwork = r.artworkUrl != null &&
             r.artworkUrl!.isNotEmpty &&

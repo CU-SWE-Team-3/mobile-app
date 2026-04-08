@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
+import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
 final _userRepostsProvider =
@@ -126,6 +127,31 @@ class _RepostTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // This tile only exists for reposted tracks — initialize provider with
+    // isReposted:true so it shows correctly if not yet touched by the home feed.
+    // If the provider already exists (toggled or seeded elsewhere), that state wins.
+    final params = EngagementParams(
+      trackId: track.id,
+      isReposted: true,
+      repostCount: track.repostCount,
+      likeCount: track.likeCount,
+    );
+    final engState = ref.watch(engagementProvider(params));
+
+    // Seed authoritative reposted state. Only isReposted is seeded — we don't
+    // know isLiked from this API, so we leave it untouched. No-op if the user
+    // has already toggled this track in the current session.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(engagementProvider(params).notifier).seed(
+        isReposted: true,
+        likeCount: track.likeCount,
+        repostCount: track.repostCount,
+      );
+    });
+
+    // Hide immediately when the user un-reposts this track
+    if (!engState.isReposted) return const SizedBox.shrink();
+
     final sub = Colors.white.withOpacity(0.55);
     final hasArtwork = track.artworkUrl != null &&
         track.artworkUrl!.isNotEmpty &&

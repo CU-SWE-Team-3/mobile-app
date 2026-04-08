@@ -16,6 +16,7 @@ class DioClient {
       baseUrl: 'https://biobeats.duckdns.org/api',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
+      validateStatus: (status) => status != null && status >= 200 && status < 300,
     ));
   }
 
