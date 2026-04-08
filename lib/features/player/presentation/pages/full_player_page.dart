@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../providers/follow_provider.dart';
 import '../providers/player_provider.dart';
-import '../providers/track_like_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
+import '../../../engagement/presentation/providers/engagement_provider.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
   const FullPlayerPage({super.key});
@@ -26,24 +26,6 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
     _commentController = TextEditingController();
     _commentFocus = FocusNode();
 
-    // ── TEST TRACK — remove once feed/home calls playTrack() ──────────
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final current = ref.read(playerProvider).currentTrack;
-      if (current == null) {
-        ref.read(playerProvider.notifier).playTrack(
-          const PlayerTrack(
-            id: '69cefdcda47de9fd5a6da72f',
-            title: 'My track10',
-            artist: 'Unknown',
-            audioUrl:
-                'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/69cefdcda47de9fd5a6da72f/playlist.m3u8',
-            coverUrl: null,
-          ),
-        );
-      }
-    });
-    // ─────────────────────────────────────────────────────────────────
   }
 
   @override
@@ -89,10 +71,11 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
         ? ref.watch(followProvider(artistId))
         : const FollowState();
 
-    // Like state — keyed by trackId, auto-disposed on track change
-    final likeState = trackId != null
-        ? ref.watch(trackLikeProvider(trackId))
-        : const LikeState();
+    // Engagement state (like + repost) — keyed by trackId
+    final engParams = EngagementParams(trackId: trackId ?? '');
+    final engState = trackId != null
+        ? ref.watch(engagementProvider(engParams))
+        : const EngagementState();
 
     final progress = playerState.duration.inMilliseconds > 0
         ? (playerState.position.inMilliseconds /
@@ -107,18 +90,6 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
         ? ref.watch(commentsProvider(trackId))
         : const CommentsState();
 
-    // Show snackbar if like fails (e.g. 401 not logged in)
-    // ref.listen must be unconditional — use empty string as fallback key
-    ref.listen(trackLikeProvider(trackId ?? ''), (prev, next) {
-      if (next.error != null && prev?.error == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error!),
-            backgroundColor: const Color(0xFF2A2A2A),
-          ),
-        );
-      }
-    });
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -484,18 +455,29 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _ActionButton(
-                        icon: likeState.isLiked
+                        icon: engState.isLiked
                             ? Icons.favorite
                             : Icons.favorite_border,
-                        iconColor: likeState.isLiked
+                        iconColor:
+                            engState.isLiked ? Colors.orange : Colors.white,
+                        label: '',
+                        onTap: engState.isLoadingLike || trackId == null
+                            ? () {}
+                            : () => ref
+                                .read(engagementProvider(engParams).notifier)
+                                .toggleLike(),
+                      ),
+                      _ActionButton(
+                        icon: Icons.repeat,
+                        iconColor: engState.isReposted
                             ? Colors.orange
                             : Colors.white,
                         label: '',
-                        onTap: likeState.isLiking || trackId == null
+                        onTap: engState.isLoadingRepost || trackId == null
                             ? () {}
                             : () => ref
-                                .read(trackLikeProvider(trackId).notifier)
-                                .toggle(trackId),
+                                .read(engagementProvider(engParams).notifier)
+                                .toggleRepost(),
                       ),
                       _ActionButton(
                         icon: Icons.comment_outlined,

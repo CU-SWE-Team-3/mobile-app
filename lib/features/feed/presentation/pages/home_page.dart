@@ -1,10 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/like_button.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/repost_button.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -12,36 +15,44 @@ class _FeedTrack {
   final String id;
   final String title;
   final String artistName;
-  final String? artistId;
   final String? artworkUrl;
+  final String audioUrl;
   final int playCount;
-  final String? hlsUrl;
-  final List<int>? waveform;
+  final int likeCount;
+  final int repostCount;
+  final bool isLiked;
+  final bool isReposted;
 
   _FeedTrack({
     required this.id,
     required this.title,
     required this.artistName,
     required this.artworkUrl,
+    required this.audioUrl,
     required this.playCount,
-    this.artistId,
-    this.hlsUrl,
-    this.waveform,
+    this.likeCount = 0,
+    this.repostCount = 0,
+    this.isLiked = false,
+    this.isReposted = false,
   });
 
   factory _FeedTrack.fromJson(Map<String, dynamic> json) {
     final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final id = json['_id'] as String? ?? '';
+    final audioUrl = json['audioUrl'] as String? ??
+        json['streamUrl'] as String? ??
+        'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/$id/playlist.m3u8';
     return _FeedTrack(
-      id: json['_id'] as String? ?? '',
+      id: id,
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
-      artistId: artist['_id'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
-      playCount: json['playCount'] as int? ?? 0,
-      hlsUrl: json['hlsUrl'] as String?,
-      waveform: (json['waveform'] as List<dynamic>?)
-          ?.map((e) => (e as num).toInt())
-          .toList(),
+      audioUrl: audioUrl,
+      playCount: (json['playCount'] as num?)?.toInt() ?? 0,
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
+      isLiked: json['isLiked'] as bool? ?? false,
+      isReposted: json['isReposted'] as bool? ?? false,
     );
   }
 }
@@ -78,16 +89,8 @@ class _HomePageState extends ConsumerState<HomePage> {
     super.initState();
     _fetchFeed();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeShowSuggestedDialog();
+      _showSuggestedDialog(context);
     });
-  }
-
-  Future<void> _maybeShowSuggestedDialog() async {
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyShown = prefs.getBool('suggested_dialog_shown') ?? false;
-    if (alreadyShown || !mounted) return;
-    await prefs.setBool('suggested_dialog_shown', true);
-    if (mounted) _showSuggestedDialog(context);
   }
 
   Future<void> _fetchFeed() async {
@@ -95,6 +98,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     try {
       final response = await dioClient.dio.get('/network/feed');
       final List<dynamic> data = response.data['data'] as List<dynamic>;
+      // Debug: inspect first track to confirm isLiked/isReposted fields
+      if (data.isNotEmpty) {
+        final first = data.first as Map<String, dynamic>;
+        debugPrint('[Feed] first track keys: ${first.keys.toList()}');
+        debugPrint('[Feed] isLiked=${first['isLiked']}  isReposted=${first['isReposted']}  likeCount=${first['likeCount']}');
+      }
       if (mounted) {
         setState(() {
           _tracks = data
@@ -198,11 +207,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
 
     return Column(
-      children: _tracks.asMap().entries.map((entry) => _TrackRow(
-        track: entry.value,
-        allTracks: _tracks,
-        index: entry.key,
-      )).toList(),
+      children: _tracks.map((track) => _TrackRow(track: track)).toList(),
     );
   }
 
@@ -330,114 +335,118 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 class _TrackRow extends ConsumerWidget {
   final _FeedTrack track;
-  final List<_FeedTrack> allTracks;
-  final int index;
 
-  const _TrackRow({
-    required this.track,
-    required this.allTracks,
-    required this.index,
-  });
+  const _TrackRow({required this.track});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: GestureDetector(
-        onTap: () {
-          final url = track.hlsUrl;
-          if (url == null || url.isEmpty) return;
-          final queue = allTracks
-              .where((t) => t.hlsUrl != null && t.hlsUrl!.isNotEmpty)
-              .map((t) => PlayerTrack(
-                    id: t.id,
-                    title: t.title,
-                    artist: t.artistName,
-                    artistId: t.artistId,
-                    audioUrl: t.hlsUrl!,
-                    coverUrl: t.artworkUrl,
-                    waveform: t.waveform,
-                  ))
-              .toList();
-          final startIndex = allTracks
-              .where((t) => t.hlsUrl != null && t.hlsUrl!.isNotEmpty)
-              .toList()
-              .indexWhere((t) => t.id == track.id);
-          ref.read(playerProvider.notifier).playQueue(
-                queue,
-                startIndex: startIndex < 0 ? 0 : startIndex,
-              );
-        },
+    return GestureDetector(
+      onTap: () {
+        // Seed engagement state so full player + mini player show correct like/repost
+        if (track.id.isNotEmpty) {
+          ref
+              .read(engagementProvider(EngagementParams(trackId: track.id)).notifier)
+              .seed(track.isLiked, track.isReposted, track.likeCount, track.repostCount);
+        }
+        ref.read(playerProvider.notifier).playTrack(
+              PlayerTrack(
+                id: track.id,
+                title: track.title,
+                artist: track.artistName,
+                audioUrl: track.audioUrl,
+                coverUrl: track.artworkUrl,
+              ),
+            );
+        context.push('/player');
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16),
         child: Row(
-        children: [
-          // Artwork
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
-              borderRadius: BorderRadius.circular(4),
+          children: [
+            // Artwork
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child:
+                    track.artworkUrl != null && track.artworkUrl!.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: track.artworkUrl!,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) =>
+                                const _ArtworkPlaceholder(),
+                          )
+                        : const _ArtworkPlaceholder(),
+              ),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: track.artworkUrl != null && track.artworkUrl!.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: track.artworkUrl!,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
-                    )
-                  : const _ArtworkPlaceholder(),
-            ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-          // Title + artist + play count
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  track.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+            // Title + artist + play count
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  track.artistName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF999999),
-                    fontSize: 12,
+                  const SizedBox(height: 2),
+                  Text(
+                    track.artistName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF999999),
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _formatPlayCount(track.playCount),
-                  style: const TextStyle(
-                    color: Color(0xFF666666),
-                    fontSize: 11,
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatPlayCount(track.playCount),
+                    style: const TextStyle(
+                      color: Color(0xFF666666),
+                      fontSize: 11,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          // 3-dot menu
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.more_vert,
-              color: Color(0xFF999999),
-              size: 20,
+            // Like + Repost + 3-dot
+            if (track.id.isNotEmpty) ...[
+              LikeButton(
+                trackId: track.id,
+                initialIsLiked: track.isLiked,
+                initialLikeCount: track.likeCount,
+                iconSize: 20,
+              ),
+              RepostButton(
+                trackId: track.id,
+                initialIsReposted: track.isReposted,
+                initialRepostCount: track.repostCount,
+                iconSize: 20,
+              ),
+            ],
+            IconButton(
+              onPressed: () {},
+              icon: const Icon(
+                Icons.more_vert,
+                color: Color(0xFF999999),
+                size: 20,
+              ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
