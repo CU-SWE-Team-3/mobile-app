@@ -350,6 +350,12 @@ final appRouter = GoRouter(
       ],
     ),
 
+    // ── LIKES (global — accessible from profile and other global routes) ─
+    GoRoute(
+      path: '/likes',
+      builder: (_, __) => const LibraryLikesPage(),
+    ),
+
     // ── ENGAGEMENT ────────────────────────────────────────────────────
     GoRoute(
       path: '/comments',

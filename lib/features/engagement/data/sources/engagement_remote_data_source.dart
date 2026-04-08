@@ -155,29 +155,41 @@ class EngagementRemoteDataSource {
         .toList();
   }
 
-  // ── Current user's liked tracks ───────────────────────────────────────────
-
-  Future<List<TrackSummary>> getLikedTracks() async {
-    final response = await _dio.get('/me/likes');
-    final body = response.data['data'];
-    final List<dynamic> raw = body is List
-        ? body
-        : (body as Map<String, dynamic>?)?['tracks'] as List<dynamic>? ?? [];
-    return raw
-        .map((t) => TrackSummary.fromJson(t as Map<String, dynamic>))
+  // ── Current user's liked tracks ──────────────────────────────────────────
+  // GET /profile/{userId}/likes
+  // Response: { data: { likedTracks: [{ likeDate, track: {...} }], pagination } }
+  Future<List<TrackSummary>> getUserLikes(String userId) async {
+    final response = await _dio.get('/profile/$userId/likes');
+    final data = response.data['data'] as Map<String, dynamic>? ?? {};
+    // Nested shape: { likedTracks: [{ likeDate, track: {...} }] }
+    final rawNested = data['likedTracks'] as List<dynamic>?;
+    if (rawNested != null) {
+      return rawNested.map((item) {
+        final map = item as Map<String, dynamic>;
+        final track = map['track'] as Map<String, dynamic>? ?? map;
+        return TrackSummary.fromJson(track);
+      }).toList();
+    }
+    // Fallback flat shape: { tracks: [...] }
+    final rawFlat = (data['tracks'] as List<dynamic>?) ?? [];
+    return rawFlat
+        .map((e) => TrackSummary.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
   // ── Current user's reposted tracks ───────────────────────────────────────
+  // GET /profile/{userId}/reposts
+  // Response: { data: { repostedTracks: [{ repostDate, track: {...} }], pagination } }
 
-  Future<List<TrackSummary>> getUserReposts() async {
-    final response = await _dio.get('/me/reposts');
-    final body = response.data['data'];
-    final List<dynamic> raw = body is List
-        ? body
-        : (body as Map<String, dynamic>?)?['tracks'] as List<dynamic>? ?? [];
-    return raw
-        .map((t) => TrackSummary.fromJson(t as Map<String, dynamic>))
-        .toList();
+  Future<List<TrackSummary>> getUserReposts(String userId) async {
+    final response = await _dio.get('/profile/$userId/reposts');
+    final data = response.data['data'] as Map<String, dynamic>? ?? {};
+    final raw =
+        (data['repostedTracks'] as List<dynamic>?) ?? [];
+    return raw.map((item) {
+      final map = item as Map<String, dynamic>;
+      final track = map['track'] as Map<String, dynamic>? ?? map;
+      return TrackSummary.fromJson(track);
+    }).toList();
   }
 }

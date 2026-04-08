@@ -85,6 +85,17 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
           repostCount: initialRepostCount,
         ));
 
+  /// Overwrite state with fresh values from an API response.
+  /// Safe to call when the provider already exists with stale/default values.
+  void seed(bool isLiked, bool isReposted, int likeCount, int repostCount) {
+    state = state.copyWith(
+      isLiked: isLiked,
+      isReposted: isReposted,
+      likeCount: likeCount,
+      repostCount: repostCount,
+    );
+  }
+
   Future<void> toggleLike() async {
     if (state.isLoadingLike) return;
     final wasLiked = state.isLiked;

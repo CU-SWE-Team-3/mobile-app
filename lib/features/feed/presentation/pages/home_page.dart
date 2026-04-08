@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/like_button.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/repost_button.dart';
 
@@ -97,6 +98,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     try {
       final response = await dioClient.dio.get('/network/feed');
       final List<dynamic> data = response.data['data'] as List<dynamic>;
+      // Debug: inspect first track to confirm isLiked/isReposted fields
+      if (data.isNotEmpty) {
+        final first = data.first as Map<String, dynamic>;
+        debugPrint('[Feed] first track keys: ${first.keys.toList()}');
+        debugPrint('[Feed] isLiked=${first['isLiked']}  isReposted=${first['isReposted']}  likeCount=${first['likeCount']}');
+      }
       if (mounted) {
         setState(() {
           _tracks = data
@@ -335,6 +342,12 @@ class _TrackRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap: () {
+        // Seed engagement state so full player + mini player show correct like/repost
+        if (track.id.isNotEmpty) {
+          ref
+              .read(engagementProvider(EngagementParams(trackId: track.id)).notifier)
+              .seed(track.isLiked, track.isReposted, track.likeCount, track.repostCount);
+        }
         ref.read(playerProvider.notifier).playTrack(
               PlayerTrack(
                 id: track.id,
