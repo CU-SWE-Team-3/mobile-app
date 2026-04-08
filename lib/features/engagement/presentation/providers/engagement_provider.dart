@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/sources/engagement_remote_data_source.dart';
@@ -70,6 +71,10 @@ class EngagementState {
 class EngagementNotifier extends StateNotifier<EngagementState> {
   final EngagementRemoteDataSource _dataSource;
   final String trackId;
+  /// True only after the user has actively toggled like or repost.
+  /// seed() is a no-op once this is set so live toggle state is never
+  /// overwritten by stale data from any API surface.
+  bool _userToggled = false;
 
   EngagementNotifier(
     this._dataSource,
@@ -85,9 +90,12 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
           repostCount: initialRepostCount,
         ));
 
-  /// Overwrite state with fresh values from an API response.
-  /// Safe to call when the provider already exists with stale/default values.
-  void seed(bool isLiked, bool isReposted, int likeCount, int repostCount) {
+  /// Overwrite state with authoritative values from an API response.
+  /// Named params so callers only supply the fields they actually know —
+  /// omitted fields preserve the current state.
+  /// No-op once the user has toggled, so live toggle state is never clobbered.
+  void seed({bool? isLiked, bool? isReposted, int? likeCount, int? repostCount}) {
+    if (_userToggled) return;
     state = state.copyWith(
       isLiked: isLiked,
       isReposted: isReposted,
@@ -98,6 +106,7 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
 
   Future<void> toggleLike() async {
     if (state.isLoadingLike) return;
+    _userToggled = true;
     final wasLiked = state.isLiked;
     final prevCount = state.likeCount;
     state = state.copyWith(
@@ -112,17 +121,26 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
         await _dataSource.likeTrack(trackId);
       }
       state = state.copyWith(isLoadingLike: false);
-    } catch (_) {
-      state = state.copyWith(
-        isLiked: wasLiked,
-        likeCount: prevCount,
-        isLoadingLike: false,
-      );
+    } catch (e) {
+      // Only rollback on true network failure (no response reached the server).
+      // If the server responded (even 4xx), the action was processed — keep
+      // the optimistic state and just clear the loading flag.
+      final noResponse = e is DioException && e.response == null;
+      if (noResponse) {
+        state = state.copyWith(
+          isLiked: wasLiked,
+          likeCount: prevCount,
+          isLoadingLike: false,
+        );
+      } else {
+        state = state.copyWith(isLoadingLike: false);
+      }
     }
   }
 
   Future<void> toggleRepost() async {
     if (state.isLoadingRepost) return;
+    _userToggled = true;
     final wasReposted = state.isReposted;
     final prevCount = state.repostCount;
     state = state.copyWith(
@@ -137,12 +155,17 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
         await _dataSource.repostTrack(trackId);
       }
       state = state.copyWith(isLoadingRepost: false);
-    } catch (_) {
-      state = state.copyWith(
-        isReposted: wasReposted,
-        repostCount: prevCount,
-        isLoadingRepost: false,
-      );
+    } catch (e) {
+      final noResponse = e is DioException && e.response == null;
+      if (noResponse) {
+        state = state.copyWith(
+          isReposted: wasReposted,
+          repostCount: prevCount,
+          isLoadingRepost: false,
+        );
+      } else {
+        state = state.copyWith(isLoadingRepost: false);
+      }
     }
   }
 }
