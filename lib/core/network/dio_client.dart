@@ -39,9 +39,11 @@ class DioClient {
     // Auto-refresh on 401
     dio.interceptors.add(
       InterceptorsWrapper(
-        onError: (error, handler) async {
-          if (error.response?.statusCode == 401) {
-            try {
+       onError: (error, handler) async {
+  final status = error.response?.statusCode;
+  if (status == 401) {
+    try {
+      // ... your existing refresh logic
               final refreshPrefs = await SharedPreferences.getInstance();
               final refreshToken = refreshPrefs.getString('refreshToken');
               if (refreshToken == null) return handler.next(error);
