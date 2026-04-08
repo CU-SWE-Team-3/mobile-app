@@ -57,8 +57,13 @@ class CommentModel extends Comment {
       id: json['_id'] as String? ?? '',
       content: json['content'] as String? ?? '',
       timestamp: (json['timestamp'] as num?)?.toInt() ?? 0,
-      user: CommentUserModel.fromJson(
-          json['user'] as Map<String, dynamic>? ?? {}),
+      user: json['user'] is Map
+          ? CommentUserModel.fromJson(json['user'] as Map<String, dynamic>)
+          : CommentUserModel(
+              id: json['user'] as String? ?? '',
+              displayName: 'Unknown',
+              permalink: '',
+            ),
       parentCommentId: json['parentComment'] as String?,
       replies: rawReplies
           .map((r) => CommentReplyModel.fromJson(r as Map<String, dynamic>))

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:dio/dio.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 
@@ -57,22 +57,17 @@ class _OAuthLoginPageState extends ConsumerState<OAuthLoginPage> {
       await prefs.setString('userId', user['_id'] as String? ?? '');
       await prefs.setString('displayName', user['displayName'] as String? ?? '');
       await prefs.setString('role', user['role'] as String? ?? '');
+      await prefs.setString('permalink', user['permalink'] as String? ?? '');
       dioClient.setAuthToken(token);
 
       if (mounted) {
         context.go('/home');
       }
-   } catch (error) {
+    } catch (error) {
       if (mounted) {
-        String message = 'Google sign-in failed: ${error.toString()}';
-
-        if (error is DioException && error.response?.statusCode == 429) {
-          message = 'Too many attempts. Please wait a moment and try again.';
-        }
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(message),
+            content: Text('Google sign-in failed: ${error.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
