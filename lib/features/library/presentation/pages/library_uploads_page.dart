@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/entities/upload_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../providers/upload_provider.dart';
+import '../providers/my_tracks_provider.dart';
 
 class LibraryUploadsPage extends ConsumerStatefulWidget {
   const LibraryUploadsPage({super.key});
@@ -18,6 +20,7 @@ class LibraryUploadsPage extends ConsumerStatefulWidget {
 
 class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   late TextEditingController _searchController;
+  List<UploadTrack> _allTracks = [];
   List<UploadTrack> _filteredTracks = [];
 
   @override
@@ -35,12 +38,11 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
 
   void _applyFilter() {
     final query = _searchController.text.toLowerCase().trim();
-    final allTracks = ref.read(uploadedTracksProvider);
     setState(() {
       if (query.isEmpty) {
-        _filteredTracks = List.from(allTracks);
+        _filteredTracks = List.from(_allTracks);
       } else {
-        _filteredTracks = allTracks
+        _filteredTracks = _allTracks
             .where((track) =>
                 track.title.toLowerCase().contains(query) ||
                 track.artist.toLowerCase().contains(query))
@@ -50,6 +52,14 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   }
 
   Future<void> _pickAndUpload(BuildContext context) async {
+    // Check Artist role before opening file picker — saves user from a failed upload attempt.
+    final prefs = await SharedPreferences.getInstance();
+    final role = prefs.getString('role') ?? '';
+    if (role.toLowerCase() != 'artist') {
+      if (context.mounted) _showUpgradeRoleDialog(context);
+      return;
+    }
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.audio,
@@ -74,6 +84,62 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
         );
       }
     }
+  }
+
+  void _showUpgradeRoleDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: const Text(
+          'Artist Role Required',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Only Artist accounts can upload tracks. Upgrade your account to start sharing your music.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF5500),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(uploadProvider.notifier).upgradeToArtist();
+              if (!context.mounted) return;
+              final uploadState = ref.read(uploadProvider);
+              if (uploadState.error != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(uploadState.error!),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Account upgraded! You can now upload tracks.'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              'Upgrade to Artist',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _playTrack(UploadTrack track) {
@@ -144,11 +210,14 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   @override
   Widget build(BuildContext context) {
     final playerState = ref.watch(playerProvider);
-    final uploadedTracks = ref.watch(uploadedTracksProvider);
+    final myTracksAsync = ref.watch(myTracksProvider);
 
-    // Update filtered tracks when the provider changes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _applyFilter();
+    // Sync fetched tracks into local state whenever the provider resolves
+    ref.listen<AsyncValue<List<UploadTrack>>>(myTracksProvider, (_, next) {
+      next.whenData((tracks) {
+        _allTracks = tracks;
+        _applyFilter();
+      });
     });
 
     // Both empty and populated states have the same structure now
@@ -287,21 +356,53 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
               ],
             ),
           ),
-          // Tracks list (empty or populated)
+          // Tracks list (loading / error / populated)
           Expanded(
-            child: _filteredTracks.isEmpty
-                ? Center(
-                    child: Text(
-                      uploadedTracks.isEmpty
-                          ? ''
-                          : 'No results for "${_searchController.text}"',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
-                        fontSize: 14,
+            child: myTracksAsync.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(
+                  color: Color(0xFFFF5500),
+                ),
+              ),
+              error: (e, stack) {
+                // ignore: avoid_print
+                print('[LibraryUploadsPage] fetch error: $e\n$stack');
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Failed to load uploads',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 14,
+                        ),
                       ),
-                    ),
-                  )
-                : ListView.builder(
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () => ref.invalidate(myTracksProvider),
+                        child: const Text(
+                          'Retry',
+                          style: TextStyle(color: Color(0xFFFF5500)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              data: (_) => _filteredTracks.isEmpty
+                  ? Center(
+                      child: Text(
+                        _allTracks.isEmpty
+                            ? ''
+                            : 'No results for "${_searchController.text}"',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 14,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
                     itemCount: _filteredTracks.length,
                     itemBuilder: (context, index) {
                       final track = _filteredTracks[index];
@@ -372,6 +473,32 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                                           fontSize: 12,
                                         ),
                                       ),
+                                      if (track.processingState != null &&
+                                          track.processingState != 'Finished')
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 4),
+                                          child: Row(
+                                            children: [
+                                              const SizedBox(
+                                                width: 10,
+                                                height: 10,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: Color(0xFFFF5500),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              const Text(
+                                                'Processing',
+                                                style: TextStyle(
+                                                  color: Color(0xFFFF5500),
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -393,6 +520,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                       );
                     },
                   ),
+            ),
           ),
         ],
       ),

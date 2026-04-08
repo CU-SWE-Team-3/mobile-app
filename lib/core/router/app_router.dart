@@ -93,6 +93,7 @@ import '../../features/settings/presentation/pages/inbox_settings_page.dart';
 import '../../features/settings/presentation/pages/legal_page.dart';
 import '../../features/settings/presentation/pages/add_widget_page.dart';
 import '../../features/settings/presentation/pages/analytics_page.dart';
+import '../../features/settings/presentation/pages/upload_settings_page.dart';
 import '../../features/settings/presentation/pages/sign_out_page.dart';
 
 import '../widgets/app_shell.dart';
@@ -436,6 +437,7 @@ final appRouter = GoRouter(
         GoRoute(path: 'legal', builder: (_, __) => const LegalPage()),
         GoRoute(path: 'add-widget', builder: (_, __) => const AddWidgetPage()),
         GoRoute(path: 'analytics', builder: (_, __) => const AnalyticsPage()),
+        GoRoute(path: 'upload', builder: (_, __) => const UploadSettingsPage()),
         GoRoute(path: 'sign-out', builder: (_, __) => const SignOutPage()),
       ],
     ),
