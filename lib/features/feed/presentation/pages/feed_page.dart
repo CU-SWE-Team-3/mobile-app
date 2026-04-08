@@ -10,6 +10,7 @@ class FeedPage extends ConsumerStatefulWidget {
 
 class _FeedPageState extends ConsumerState<FeedPage> {
   String _selectedTab = 'Following';
+  bool _isMiniPlayerFollowing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -143,8 +144,17 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
                   // Actions
                   IconButton(
-                    icon: const Icon(Icons.person_add_outlined, color: Colors.white, size: 22),
-                    onPressed: () {},
+                    icon: Icon(
+                      _isMiniPlayerFollowing
+                          ? Icons.person_remove_outlined
+                          : Icons.person_add_outlined,
+                      color: _isMiniPlayerFollowing
+                          ? const Color(0xFFFF5500)
+                          : Colors.white,
+                      size: 22,
+                    ),
+                    onPressed: () =>
+                        setState(() => _isMiniPlayerFollowing = !_isMiniPlayerFollowing),
                   ),
                   IconButton(
                     icon: const Icon(Icons.favorite_border, color: Colors.white, size: 22),

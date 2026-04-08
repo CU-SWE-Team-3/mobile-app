@@ -1,8 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
+import 'package:soundcloud_clone/features/upload/presentation/providers/upload_provider.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -181,6 +184,22 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  Future<void> _pickAudioAndNavigate() async {
+    ref.read(uploadProvider.notifier).resetUpload();
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+      allowMultiple: false,
+    );
+    if (result != null && result.files.isNotEmpty && mounted) {
+      final path = result.files.first.path;
+      if (path != null) {
+        ref.read(uploadProvider.notifier).updateTrackField(audioFilePath: path);
+        ref.read(uploadProvider.notifier).setWaveformLoaded(true);
+        context.push('/upload');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -219,7 +238,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             icon: const Icon(Icons.cast, color: Colors.white, size: 22),
           ),
           IconButton(
-            onPressed: () {},
+            onPressed: _pickAudioAndNavigate,
             icon: const Icon(Icons.upload_rounded, color: Colors.white, size: 22),
           ),
           IconButton(

@@ -235,7 +235,10 @@ class UploadProgressPage extends ConsumerWidget {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () => context.go('/upload'),
+                          onPressed: () {
+                            ref.read(uploadProvider.notifier).resetUpload();
+                            context.go('/upload');
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.surface,
                             padding: const EdgeInsets.symmetric(vertical: 14),
@@ -260,7 +263,10 @@ class UploadProgressPage extends ConsumerWidget {
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: () => context.go('/upload'),
+                          onPressed: () {
+                            ref.read(uploadProvider.notifier).resetUpload();
+                            context.go('/upload');
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primary,
                             padding: const EdgeInsets.symmetric(vertical: 14),

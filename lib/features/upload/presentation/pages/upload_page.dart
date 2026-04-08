@@ -160,13 +160,13 @@ class _UploadPageState extends ConsumerState<UploadPage> {
   }
 
   bool _isFormValid() {
-    final state = ref.watch(uploadProvider);
+    final state = ref.read(uploadProvider);
     return state.track.audioFilePath != null &&
         state.track.title.isNotEmpty &&
         state.track.artist.isNotEmpty;
   }
 
-  Future<void> _submitUpload() async {
+  void _submitUpload() {
     _updateTrackFields();
 
     if (!_isFormValid()) {
@@ -180,12 +180,9 @@ class _UploadPageState extends ConsumerState<UploadPage> {
       return;
     }
 
-    // Start upload simulation
-    await ref.read(uploadProvider.notifier).simulateUpload();
-
-    if (mounted) {
-      context.push('/upload/progress');
-    }
+    // Navigate to progress page immediately, then start simulation in background
+    context.push('/upload/progress');
+    ref.read(uploadProvider.notifier).simulateUpload();
   }
 
   @override
