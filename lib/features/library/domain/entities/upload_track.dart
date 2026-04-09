@@ -12,6 +12,7 @@ class UploadTrack extends Equatable {
   final bool isPublic;
   final String? description;
   final int? duration; // in milliseconds
+  final String? processingState; // "Processing", "Finished", or null
 
   const UploadTrack({
     this.audioFilePath,
@@ -25,6 +26,7 @@ class UploadTrack extends Equatable {
     this.isPublic = true,
     this.description,
     this.duration,
+    this.processingState,
   });
 
   UploadTrack copyWith({
@@ -39,6 +41,7 @@ class UploadTrack extends Equatable {
     bool? isPublic,
     String? description,
     int? duration,
+    String? processingState,
   }) {
     return UploadTrack(
       audioFilePath: audioFilePath ?? this.audioFilePath,
@@ -52,6 +55,7 @@ class UploadTrack extends Equatable {
       isPublic: isPublic ?? this.isPublic,
       description: description ?? this.description,
       duration: duration ?? this.duration,
+      processingState: processingState ?? this.processingState,
     );
   }
 
@@ -68,5 +72,6 @@ class UploadTrack extends Equatable {
         isPublic,
         description,
         duration,
+        processingState,
       ];
 }

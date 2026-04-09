@@ -62,6 +62,8 @@ class _MyAppState extends State<MyApp> {
         // Token invalid/expired — send to start so user can request a new one
         appRouter.go('/start');
       }
+    } else if (uri.path == '/reset-password') {
+      appRouter.go('/reset-password', extra: token);
     }
   }
 

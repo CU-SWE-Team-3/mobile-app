@@ -47,12 +47,20 @@ class _LoginScreenState extends State<LoginScreen> {
         'email': _emailController.text.trim(),
         'password': _passwordController.text,
       });
-      final user = response.data['user'];
+      final user = (response.data?['data']?['user'] ?? response.data?['user']) as Map<String, dynamic>?;
+      if (user == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Login failed. Please try again.'), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userId', user['_id'] ?? '');
-      await prefs.setString('displayName', user['displayName'] ?? '');
-      await prefs.setString('role', user['role'] ?? '');
-      await prefs.setString('permalink', user['permalink'] ?? '');
+      await prefs.setString('userId', user['_id'] as String? ?? '');
+      await prefs.setString('displayName', user['displayName'] as String? ?? '');
+      await prefs.setString('role', user['role'] as String? ?? '');
+      await prefs.setString('permalink', user['permalink'] as String? ?? '');
       // Extract accessToken and refreshToken from Set-Cookie header
       String? refreshToken;
       final setCookie = response.headers['set-cookie'];
@@ -84,7 +92,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final status = e.response?.statusCode;
       final message = status == 401
           ? 'Wrong password. Please try again.'
-          : 'Something went wrong. Please try again.';
+          : status == 429
+              ? 'Too many attempts. Please wait a moment and try again.'
+              : 'Something went wrong. Please try again.';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message), backgroundColor: Colors.red),

@@ -1,7 +1,12 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/player/presentation/providers/player_provider.dart';
 import '../themes/app_theme.dart';
+import '../../features/engagement/presentation/providers/engagement_provider.dart';
 
 class AppShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
@@ -92,64 +97,99 @@ class _MiniPlayerSlot extends StatelessWidget {
   }
 }
 
-class _MiniPlayerBar extends StatelessWidget {
+class _MiniPlayerBar extends ConsumerWidget {
   const _MiniPlayerBar();
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final playerState = ref.watch(playerProvider);
+    final track = playerState.currentTrack;
+
+    // Hide when nothing is loaded yet
+    if (track == null) return const SizedBox.shrink();
+
+    final params = EngagementParams(trackId: track.id);
+    final engState = ref.watch(engagementProvider(params));
+
+    return GestureDetector(
+      onTap: () => context.push('/player'),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(32),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: 64,
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(32),
             ),
-            child: const Icon(Icons.play_arrow, color: Colors.black, size: 22),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
               children: [
-                Text(
-                  "i'm not okay [peril]",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+                // Play / Pause button
+                GestureDetector(
+                  onTap: () =>
+                      ref.read(playerProvider.notifier).togglePlayPause(),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      playerState.isPlaying ? Icons.pause : Icons.play_arrow,
+                      color: Colors.black,
+                      size: 22,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  'Dugis',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                const SizedBox(width: 12),
+
+                // Track info
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '♫  ${track.title}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        track.artist,
+                        style:
+                            const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Like button wired to engagementProvider
+                IconButton(
+                  icon: Icon(
+                    engState.isLiked ? Icons.favorite : Icons.favorite_border,
+                    color: engState.isLiked
+                        ? const Color(0xFFFF5500)
+                        : Colors.white,
+                    size: 22,
+                  ),
+                  onPressed: engState.isLoadingLike
+                      ? null
+                      : () => ref
+                          .read(engagementProvider(params).notifier)
+                          .toggleLike(),
                 ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.person_add_outlined,
-                color: Colors.white, size: 22),
-            onPressed: () {},
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.favorite_border,
-                color: Colors.white, size: 22),
-            onPressed: () {},
-          ),
-        ],
+        ),
       ),
     );
   }

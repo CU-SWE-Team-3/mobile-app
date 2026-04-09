@@ -4,8 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../../core/themes/app_theme.dart';
-import '../providers/upload_provider.dart';
+import '../../../../core/themes/app_theme.dart';
+import '../../../library/presentation/providers/upload_provider.dart';
 
 class UploadPage extends ConsumerStatefulWidget {
   const UploadPage({super.key});

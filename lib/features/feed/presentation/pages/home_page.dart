@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/like_button.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/repost_button.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
-import 'package:soundcloud_clone/features/upload/presentation/providers/upload_provider.dart';
+import 'package:soundcloud_clone/features/library/presentation/providers/upload_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -13,25 +16,47 @@ class _FeedTrack {
   final String id;
   final String title;
   final String artistName;
+  final String? artistId;
   final String? artworkUrl;
+  final String audioUrl;
   final int playCount;
+  final int likeCount;
+  final int repostCount;
+  final bool isLiked;
+  final bool isReposted;
 
   _FeedTrack({
     required this.id,
     required this.title,
     required this.artistName,
+    this.artistId,
     required this.artworkUrl,
+    required this.audioUrl,
     required this.playCount,
+    this.likeCount = 0,
+    this.repostCount = 0,
+    this.isLiked = false,
+    this.isReposted = false,
   });
 
   factory _FeedTrack.fromJson(Map<String, dynamic> json) {
     final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final id = json['_id'] as String? ?? '';
+    final audioUrl = json['audioUrl'] as String? ??
+        json['streamUrl'] as String? ??
+        'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/$id/playlist.m3u8';
     return _FeedTrack(
-      id: json['_id'] as String? ?? '',
+      id: id,
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
-      playCount: json['playCount'] as int? ?? 0,
+      audioUrl: audioUrl,
+      playCount: (json['playCount'] as num?)?.toInt() ?? 0,
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
+      isLiked: json['isLiked'] as bool? ?? false,
+      isReposted: json['isReposted'] as bool? ?? false,
     );
   }
 }
@@ -322,85 +347,116 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 // ── Track row ─────────────────────────────────────────────────────────────────
 
-class _TrackRow extends StatelessWidget {
+class _TrackRow extends ConsumerWidget {
   final _FeedTrack track;
 
   const _TrackRow({required this.track});
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        children: [
-          // Artwork
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A2A2A),
-              borderRadius: BorderRadius.circular(4),
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      onTap: () {
+        ref.read(playerProvider.notifier).playTrack(
+              PlayerTrack(
+                id: track.id,
+                title: track.title,
+                artist: track.artistName,
+                audioUrl: track.audioUrl,
+                coverUrl: track.artworkUrl,
+                artistId: track.artistId,
+              ),
+            );
+        context.push('/player');
+      },
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Row(
+          children: [
+            // Artwork
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child:
+                    track.artworkUrl != null && track.artworkUrl!.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: track.artworkUrl!,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) =>
+                                const _ArtworkPlaceholder(),
+                          )
+                        : const _ArtworkPlaceholder(),
+              ),
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: track.artworkUrl != null && track.artworkUrl!.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: track.artworkUrl!,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
-                    )
-                  : const _ArtworkPlaceholder(),
-            ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-          // Title + artist + play count
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  track.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
+            // Title + artist + play count
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  track.artistName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF999999),
-                    fontSize: 12,
+                  const SizedBox(height: 2),
+                  Text(
+                    track.artistName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF999999),
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _formatPlayCount(track.playCount),
-                  style: const TextStyle(
-                    color: Color(0xFF666666),
-                    fontSize: 11,
+                  const SizedBox(height: 2),
+                  Text(
+                    _formatPlayCount(track.playCount),
+                    style: const TextStyle(
+                      color: Color(0xFF666666),
+                      fontSize: 11,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          // 3-dot menu
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.more_vert,
-              color: Color(0xFF999999),
-              size: 20,
+            // Like + Repost + 3-dot
+            if (track.id.isNotEmpty) ...[
+              LikeButton(
+                trackId: track.id,
+                initialIsLiked: track.isLiked,
+                initialLikeCount: track.likeCount,
+                iconSize: 20,
+              ),
+              RepostButton(
+                trackId: track.id,
+                initialIsReposted: track.isReposted,
+                initialRepostCount: track.repostCount,
+                iconSize: 20,
+              ),
+            ],
+            IconButton(
+              onPressed: () {},
+              icon: const Icon(
+                Icons.more_vert,
+                color: Color(0xFF999999),
+                size: 20,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

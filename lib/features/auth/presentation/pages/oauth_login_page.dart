@@ -57,6 +57,7 @@ class _OAuthLoginPageState extends ConsumerState<OAuthLoginPage> {
       await prefs.setString('userId', user['_id'] as String? ?? '');
       await prefs.setString('displayName', user['displayName'] as String? ?? '');
       await prefs.setString('role', user['role'] as String? ?? '');
+      await prefs.setString('permalink', user['permalink'] as String? ?? '');
       dioClient.setAuthToken(token);
 
       if (mounted) {

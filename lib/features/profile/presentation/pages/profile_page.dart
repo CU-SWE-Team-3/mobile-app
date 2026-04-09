@@ -1,25 +1,30 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
+import 'package:soundcloud_clone/injection_container.dart';
 
-class ProfilePage extends StatefulWidget {
+class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  ConsumerState<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends ConsumerState<ProfilePage> {
   // ── profile data ─────────────────────────────────────────────────────
   String _username = '';
   String _bio = '';
   String _city = '';
   String _country = '';
   String _avatarUrl = '';
-  int _followerCount = 0;
+  int _followerCount = 5;
   int _followingCount = 0;
   bool _bioExpanded = false;
   bool _isLoading = true;
@@ -30,22 +35,10 @@ class _ProfilePageState extends State<ProfilePage> {
     _Track('I am in tiny room', 'SUNDER', '2:44'),
   ];
 
-  final _likes = const [
-    _Track('🕊♡without a trace @@2rel', 'Alis', '2:12',
-        likeColor: Colors.purple),
-    _Track('Girls Like You - Maroon 5 ft. ...', 'Hiderway', '4:57',
-        likeColor: Colors.red),
-  ];
-
   final _playlists = const [_Playlist('my songs', 'SUNDER')];
 
-  final _reposts = const [
-    _Repost('Nasser _ ناصر', 'wigexpress', '1M', '2:52', Color(0xFF1A1A2E)),
-    _Repost('ZIAD ZAZA - SAM3 AKHINA | ... زياد', 'Abouelhassan', '1.7M',
-        '2:13', Color(0xFFB03A2E)),
-    _Repost('ZIAD ZAZA - EMSHI | زياد ظاظا - إمشي', 'Maro mafia', '2.3M',
-        '3:40', Color(0xFF1F618D)),
-  ];
+  List<TrackSummary> _reposts = [];
+  List<TrackSummary> _likes = [];
 
   // ── colors ───────────────────────────────────────────────────────────
   static const _bg = Color(0xFF111111);
@@ -63,68 +56,120 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _fetchProfile();
+    _loadAll();
+  }
+
+  // Runs all profile fetches sequentially to avoid hammering the API
+  Future<void> _loadAll() async {
+    await _fetchProfile();
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _fetchReposts();
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _fetchLikes();
+  }
+
+  // Retries up to 3 times with exponential backoff on 429
+  Future<T> _withRetry<T>(Future<T> Function() call) async {
+    int attempts = 0;
+    while (true) {
+      try {
+        return await call();
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 429 && attempts < 2) {
+          await Future.delayed(Duration(seconds: (attempts + 1) * 2));
+          attempts++;
+          continue;
+        }
+        rethrow;
+      }
+    }
+  }
+
+  Future<void> _fetchLikes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId') ?? '';
+      if (userId.isEmpty) return;
+      final results = await _withRetry(
+          () => sl<EngagementRemoteDataSource>().getUserLikes(userId));
+      if (mounted) setState(() => _likes = results);
+    } catch (_) {}
+  }
+
+  Future<void> _fetchReposts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId') ?? '';
+      if (userId.isEmpty) return;
+      final results = await _withRetry(
+          () => sl<EngagementRemoteDataSource>().getUserReposts(userId));
+      if (mounted) setState(() => _reposts = results);
+    } catch (_) {}
   }
 
   Future<void> _fetchProfile() async {
     setState(() { _isLoading = true; _hasError = false; });
     try {
       final prefs = await SharedPreferences.getInstance();
+      final String userId = prefs.getString('userId') ?? '';
       final String permalink = prefs.getString('permalink') ?? '';
 
+      if (userId.isEmpty) {
+        if (mounted) setState(() { _username = prefs.getString('displayName') ?? ''; _isLoading = false; });
+        return;
+      }
+
+      // If we have a permalink, fetch full profile (includes followerCount + followingCount)
       if (permalink.isNotEmpty) {
-        // Happy path: permalink cached — use proper GET endpoint
         try {
-          final response = await dioClient.dio.get('/profile/$permalink');
-          final responseData = response.data['data'] as Map<String, dynamic>;
-          final data = (responseData['user'] as Map<String, dynamic>?) ?? responseData;
+          final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/$permalink'));
+          final data = profileResponse.data['data']['user'] as Map<String, dynamic>;
           if (mounted) {
             setState(() {
-              _username       = data['displayName'] as String? ?? '';
-              _bio            = data['bio']         as String? ?? '';
-              _city           = data['city']        as String? ?? '';
-              _country        = data['country']     as String? ?? '';
-              _avatarUrl      = data['avatarUrl']   as String? ?? '';
+              _username       = data['displayName']   as String? ?? prefs.getString('displayName') ?? '';
+              _bio            = data['bio']           as String? ?? '';
+              _city           = data['city']          as String? ?? '';
+              _country        = data['country']       as String? ?? '';
+              _avatarUrl      = data['avatarUrl']     as String? ?? '';
               _followerCount  = _parseInt(data['followerCount']);
               _followingCount = _parseInt(data['followingCount']);
               _isLoading = false;
             });
           }
           return;
-        } catch (_) {
-          // Permalink may have changed after an edit — clear it and re-fetch via PATCH
-          await prefs.remove('permalink');
+        } catch (e) {
+          // ignore: avoid_print
+          print('=== PROFILE PERMALINK FETCH ERROR: $e');
         }
       }
 
-      // No permalink yet — use PATCH /profile/update {} to bootstrap all profile data
-      // (PATCH with empty body is a no-op that returns the full user object including permalink)
-      final patchResponse = await dioClient.dio.patch('/profile/update', data: {});
-      final data = patchResponse.data['data'] as Map<String, dynamic>;
-      final fetchedPermalink = data['permalink'] as String? ?? '';
-      if (fetchedPermalink.isNotEmpty) {
-        await prefs.setString('permalink', fetchedPermalink);
-      }
+      // No permalink yet — fetch counts sequentially to avoid rate limits
+      final followersResp = await _withRetry(
+          () => dioClient.dio.get('/network/$userId/followers'));
+      await Future.delayed(const Duration(milliseconds: 200));
+      final followingResp = await _withRetry(
+          () => dioClient.dio.get('/network/$userId/following'));
       if (mounted) {
         setState(() {
-          _username       = data['displayName'] as String? ?? '';
-          _bio            = data['bio']         as String? ?? '';
-          _city           = data['city']        as String? ?? '';
-          _country        = data['country']     as String? ?? '';
-          _avatarUrl      = data['avatarUrl']   as String? ?? '';
-          _followerCount  = _parseInt(data['followerCount']);
-          _followingCount = _parseInt(data['followingCount']);
+          _username       = prefs.getString('displayName') ?? '';
+          _bio            = prefs.getString('bio') ?? '';
+          _country        = prefs.getString('country') ?? '';
+          _city           = prefs.getString('city') ?? '';
+          _followerCount  = _parseInt(followersResp.data['count']);
+          _followingCount = _parseInt(followingResp.data['count']);
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('=== PROFILE FETCH ERROR: $e\n$st');
       if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
   }
 
   // ── navigate to edit, then re-fetch to show latest data ─────────────
   Future<void> _openEdit() async {
-    await context.push('/profile/edit', extra: {
+    final result = await context.push<Map<String, String>>('/profile/edit', extra: {
       'displayName': _username,
       'bio': _bio,
       'country': _country,
@@ -132,9 +177,20 @@ class _ProfilePageState extends State<ProfilePage> {
       'avatarUrl': _avatarUrl,
       'coverUrl': '',
     });
+    if (!mounted) return;
+    // Optimistically update UI with saved values before the re-fetch completes
+    if (result != null) {
+      setState(() {
+        _username = result['displayName'] ?? _username;
+        _bio      = result['bio']         ?? _bio;
+        _city     = result['city']        ?? _city;
+        _country  = result['country']     ?? _country;
+      });
+    }
     if (mounted) _fetchProfile();
   }
 
+  // ─────────────────────────────────────────────────────────────────────
   // ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -194,13 +250,9 @@ class _ProfilePageState extends State<ProfilePage> {
                         _repostsList(),
                         _sectionHeader('Playlists'),
                         _playlistRow(context),
-                        _sectionHeader('Likes', onSeeAll: () {}),
-                        ..._likes.map((t) => _TrackTile(
-                              track: t,
-                              onTap: () {},
-                              onMore: () {},
-                              showHeart: true,
-                            )),
+                        _sectionHeader('Likes',
+                            onSeeAll: () => context.push('/likes')),
+                        _likesList(),
                         const SizedBox(height: 120),
                       ],
                     ),
@@ -460,62 +512,159 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
   // ── reposts list ─────────────────────────────────────────────────────
-  Widget _repostsList() => Column(
-        children: _reposts.take(3).map((r) {
-          final sub = Colors.white.withOpacity(0.55);
-          return GestureDetector(
-            onTap: () {},
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      width: 56,
-                      height: 56,
-                      color: r.imageColor,
-                      child: const Icon(Icons.music_note,
-                          color: Colors.white38, size: 24),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _repostsList() {
+    if (_reposts.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Text('No reposts yet',
+            style: TextStyle(color: _sub, fontSize: 14)),
+      );
+    }
+    // Watch each repost's engagement state. Pass isReposted:true in params so
+    // freshly-created providers start visible; existing provider state wins.
+    final visible = _reposts.take(3).where((r) {
+      return ref
+          .watch(engagementProvider(EngagementParams(
+            trackId: r.id,
+            isReposted: true,
+            repostCount: r.repostCount,
+            likeCount: r.likeCount,
+          )))
+          .isReposted;
+    }).toList();
+
+    return Column(
+      children: visible.map((r) {
+        final sub = Colors.white.withOpacity(0.55);
+        final hasArtwork = r.artworkUrl != null &&
+            r.artworkUrl!.isNotEmpty &&
+            r.artworkUrl!.startsWith('http');
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: hasArtwork
+                      ? Image.network(r.artworkUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _artworkPlaceholder())
+                      : _artworkPlaceholder(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(r.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(r.artistName,
+                        style: TextStyle(color: sub, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Row(
                       children: [
-                        Text(r.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 2),
-                        Text(r.artist,
-                            style: TextStyle(color: sub, fontSize: 13)),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Icon(Icons.play_arrow_rounded,
-                                size: 13, color: sub),
-                            Text('  \${r.plays} · \${r.duration}',
-                                style: TextStyle(color: sub, fontSize: 11)),
-                          ],
-                        ),
+                        Icon(Icons.play_arrow_rounded, size: 13, color: sub),
+                        Text('  ${_fmtCount(r.playCount)}',
+                            style: TextStyle(color: sub, fontSize: 11)),
                       ],
                     ),
-                  ),
-                  GestureDetector(
-                    onTap: () {},
-                    child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          );
-        }).toList(),
+              Icon(Icons.more_vert_rounded, color: sub, size: 20),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  // ── likes list ───────────────────────────────────────────────────────
+  Widget _likesList() {
+    if (_likes.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Text('No liked tracks yet',
+            style: TextStyle(color: _sub, fontSize: 14)),
       );
+    }
+    return Column(
+      children: _likes.take(3).map((r) {
+        final sub = Colors.white.withOpacity(0.55);
+        final hasArtwork = r.artworkUrl != null &&
+            r.artworkUrl!.isNotEmpty &&
+            r.artworkUrl!.startsWith('http');
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: hasArtwork
+                      ? Image.network(r.artworkUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _artworkPlaceholder())
+                      : _artworkPlaceholder(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(r.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(r.artistName,
+                        style: TextStyle(color: sub, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(Icons.play_arrow_rounded, size: 13, color: sub),
+                        Text('  ${_fmtCount(r.playCount)}',
+                            style: TextStyle(color: sub, fontSize: 11)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.more_vert_rounded, color: sub, size: 20),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _artworkPlaceholder() => const ColoredBox(
+        color: Color(0xFF2A2A2A),
+        child:
+            Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+      );
+
+  String _fmtCount(int count) {
+    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K';
+    return '$count';
+  }
 
   // ── playlist row ─────────────────────────────────────────────────────
   Widget _playlistRow(BuildContext context) => SizedBox(
@@ -628,8 +777,7 @@ class _Track {
   final String title;
   final String artist;
   final String duration;
-  final Color? likeColor;
-  const _Track(this.title, this.artist, this.duration, {this.likeColor});
+  const _Track(this.title, this.artist, this.duration);
 }
 
 class _Playlist {
@@ -638,28 +786,16 @@ class _Playlist {
   const _Playlist(this.name, this.owner);
 }
 
-class _Repost {
-  final String title;
-  final String artist;
-  final String plays;
-  final String duration;
-  final Color imageColor;
-  const _Repost(
-      this.title, this.artist, this.plays, this.duration, this.imageColor);
-}
-
 // ── track tile ───────────────────────────────────────────────────────────
 class _TrackTile extends StatelessWidget {
   final _Track track;
   final VoidCallback onTap;
   final VoidCallback onMore;
-  final bool showHeart;
 
   const _TrackTile({
     required this.track,
     required this.onTap,
     required this.onMore,
-    this.showHeart = false,
   });
 
   @override
@@ -676,7 +812,7 @@ class _TrackTile extends StatelessWidget {
               child: Container(
                 width: 56,
                 height: 56,
-                color: track.likeColor ?? const Color(0xFF2A2A2A),
+                color: const Color(0xFF2A2A2A),
                 child: const Icon(Icons.music_note,
                     color: Colors.white38, size: 24),
               ),
@@ -702,11 +838,6 @@ class _TrackTile extends StatelessWidget {
                       Icon(Icons.play_arrow_rounded, size: 13, color: sub),
                       Text('  ${track.duration}',
                           style: TextStyle(color: sub, fontSize: 11)),
-                      if (showHeart) ...[
-                        const SizedBox(width: 6),
-                        const Icon(Icons.favorite,
-                            size: 13, color: Colors.redAccent),
-                      ],
                     ],
                   ),
                 ],

@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/entities/upload_track.dart';
+import '../../../library/domain/entities/upload_track.dart';
 
 class UploadState {
   final UploadTrack track;
