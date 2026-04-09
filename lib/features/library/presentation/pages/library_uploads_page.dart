@@ -194,6 +194,25 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                 },
               ),
               ListTile(
+                key: const ValueKey('track_options_visibility_button'),
+                leading: const Icon(Icons.lock_outline, color: Colors.white),
+                title: const Text('Change visibility',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                key: const ValueKey('track_options_download_button'),
+                leading: const Icon(Icons.download_outlined,
+                    color: Colors.white),
+                title: const Text('Download',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
                 key: const ValueKey('uploads_options_delete_tile'),
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title:

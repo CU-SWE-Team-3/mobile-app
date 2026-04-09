@@ -570,6 +570,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
         children: [
           _buildFormField(
             label: 'Title',
+            fieldKey: const ValueKey('track_metadata_title_field'),
             isRequired: true,
             controller: _titleController,
             maxLines: 3,
@@ -593,6 +594,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
 
   Widget _buildFormField({
     required String label,
+    Key? fieldKey,
     bool isRequired = false,
     TextEditingController? controller,
     String? initialValue,
@@ -622,6 +624,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
           ),
           const SizedBox(height: 8),
           TextField(
+            key: fieldKey,
             controller: controller,
             readOnly: isReadOnly,
             maxLines: maxLines,
@@ -1068,6 +1071,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
           children: [
             Expanded(
               child: GestureDetector(
+                key: const ValueKey('track_metadata_release_date_field'),
                 onTap: _pickDate,
                 child: Container(
                   padding:
@@ -1139,6 +1143,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: ElevatedButton(
+          key: const ValueKey('track_metadata_save_button'),
           onPressed: _saveTrack,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
