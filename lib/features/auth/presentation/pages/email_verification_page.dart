@@ -83,6 +83,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
               Row(
                 children: [
                   GestureDetector(
+                    key: const ValueKey('auth_verification_back_button'),
                     onTap: () => context.pop(),
                     child: Container(
                       width: 40,
@@ -167,6 +168,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                       style: TextStyle(color: Color(0xFF999999), fontSize: 13),
                     ),
                     GestureDetector(
+                      key: const ValueKey('auth_resend_email_button'),
                       onTap: _onResend,
                       child: _isResending
                           ? const SizedBox(
@@ -200,6 +202,7 @@ class _EmailVerificationPageState extends State<EmailVerificationPage> {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
+                  key: const ValueKey('auth_already_verified_button'),
                   onPressed: () => context.go('/login-screen'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF5500),

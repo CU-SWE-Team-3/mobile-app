@@ -177,6 +177,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: GestureDetector(
+          key: const ValueKey('register_screen_back_button'),
           onTap: () => context.pop(),
           child: Container(
             margin: const EdgeInsets.all(10),
@@ -207,6 +208,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
+                key: const ValueKey('register_screen_facebook_button'),
                 onPressed: () {},
                 icon: const Icon(Icons.facebook, color: Colors.white),
                 label: const Text('Continue with Facebook',
@@ -227,6 +229,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('register_screen_google_button'),
                 onPressed: () => context.push('/oauth-login'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2A2A2A),
@@ -259,6 +262,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
+                key: const ValueKey('register_screen_apple_button'),
                 onPressed: () {},
                 icon: const Icon(Icons.apple, color: Colors.white),
                 label: const Text('Continue with Apple',
@@ -383,6 +387,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     : Border.all(color: Colors.transparent),
               ),
               child: TextField(
+                key: const ValueKey('register_screen_password_field'),
                 controller: _passwordController,
                 obscureText: !_isPasswordVisible,
                 style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -394,6 +399,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   suffixIcon: IconButton(
+                    key: const ValueKey('register_screen_password_toggle_button'),
                     icon: Icon(
                       _isPasswordVisible
                           ? Icons.visibility
@@ -427,6 +433,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     : Border.all(color: Colors.transparent),
               ),
               child: TextField(
+                key: const ValueKey('register_screen_confirm_password_field'),
                 controller: _confirmPasswordController,
                 obscureText: !_isConfirmPasswordVisible,
                 style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -438,6 +445,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   suffixIcon: IconButton(
+                    key: const ValueKey('register_screen_confirm_password_toggle_button'),
                     icon: Icon(
                       _isConfirmPasswordVisible
                           ? Icons.visibility
@@ -464,6 +472,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
+                key: const ValueKey('register_screen_continue_button'),
                 onPressed: _onContinue,
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
@@ -491,6 +500,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             // Already have an account?
             Center(
               child: GestureDetector(
+                key: const ValueKey('register_screen_login_button'),
                 onTap: () => context.push('/login-screen'),
                 child: RichText(
                   text: const TextSpan(

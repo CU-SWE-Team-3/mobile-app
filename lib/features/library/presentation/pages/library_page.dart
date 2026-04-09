@@ -43,6 +43,7 @@ class LibraryPage extends ConsumerWidget {
 
                   const SizedBox(width: 12),
                   IconButton(
+                    key: const ValueKey('library_cast_button'),
                     icon: const Icon(Icons.cast_rounded,
                         color: Colors.white, size: 22),
                     onPressed: () {},
@@ -86,9 +87,10 @@ class LibraryPage extends ConsumerWidget {
                 child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  _LibraryMenuItem(title: 'Your likes', onTap: () => context.push('/likes')),
-                  _LibraryMenuItem(title: 'Playlists', onTap: () {}),
+                  _LibraryMenuItem(key: const ValueKey('library_likes_item'), title: 'Your likes', onTap: () => context.push('/likes')),
+                  _LibraryMenuItem(key: const ValueKey('library_playlists_item'), title: 'Playlists', onTap: () {}),
                   _LibraryMenuItem(
+                    key: const ValueKey('library_albums_item'),
                     title: 'Albums',
                     onTap: () => Navigator.push(
                       context,
@@ -97,19 +99,22 @@ class LibraryPage extends ConsumerWidget {
                     ),
                   ),
                   _LibraryMenuItem(
+                    key: const ValueKey('library_following_item'),
                     title: 'Following',
                     onTap: () => context.push('/library/following'),
                   ),
                   _LibraryMenuItem(
+                    key: const ValueKey('library_stations_item'),
                     title: 'Stations',
                     onTap: () => context.push('/library/stations'),
                   ),
-                  // ── Only this line changed ──────────────────────────
                   _LibraryMenuItem(
+                    key: const ValueKey('library_insights_item'),
                     title: 'Your insights',
                     onTap: () => context.push('/library/insights'),
                   ),
                   _LibraryMenuItem(
+                    key: const ValueKey('library_uploads_item'),
                     title: 'Your uploads',
                     onTap: () => context.push('/library/uploads'),
                   ),
@@ -176,7 +181,7 @@ class _LibraryMenuItem extends StatelessWidget {
   final String title;
   final VoidCallback onTap;
 
-  const _LibraryMenuItem({required this.title, required this.onTap});
+  const _LibraryMenuItem({super.key, required this.title, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

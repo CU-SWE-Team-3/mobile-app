@@ -199,6 +199,7 @@ class _RegisterPageState extends State<RegisterPage> {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: IconButton(
+          key: const ValueKey('auth_register_back_button'),
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => context.pop(),
         ),
@@ -227,6 +228,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     : Border.all(color: Colors.transparent),
               ),
               child: TextField(
+                key: const ValueKey('auth_display_name_field'),
                 controller: _displayNameController,
                 onChanged: (_) => setState(() {}),
                 style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -328,6 +330,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     : Border.all(color: Colors.transparent),
               ),
               child: TextField(
+                key: const ValueKey('auth_register_password_field'),
                 controller: _passwordController,
                 obscureText: !_isPasswordVisible,
                 onChanged: (_) => setState(() {}),
@@ -340,6 +343,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   suffixIcon: IconButton(
+                    key: const ValueKey('auth_register_password_toggle_button'),
                     icon: Icon(
                       _isPasswordVisible
                           ? Icons.visibility
@@ -373,6 +377,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     : Border.all(color: Colors.transparent),
               ),
               child: TextField(
+                key: const ValueKey('auth_confirm_password_field'),
                 controller: _confirmPasswordController,
                 obscureText: !_isConfirmPasswordVisible,
                 onChanged: (_) => setState(() {}),
@@ -385,6 +390,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   suffixIcon: IconButton(
+                    key: const ValueKey('auth_confirm_password_toggle_button'),
                     icon: Icon(
                       _isConfirmPasswordVisible
                           ? Icons.visibility
@@ -413,6 +419,7 @@ class _RegisterPageState extends State<RegisterPage> {
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
+                key: const ValueKey('auth_register_submit_button'),
                 onPressed: _onContinue,
                 style: ElevatedButton.styleFrom(
                   backgroundColor:

@@ -113,6 +113,7 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: GestureDetector(
+          key: const ValueKey('auth_back_button'),
           onTap: () => context.pop(),
           child: Container(
             margin: const EdgeInsets.all(10),
@@ -145,6 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
+                key: const ValueKey('auth_facebook_button'),
                 onPressed: () {},
                 icon: const Icon(Icons.facebook, color: Colors.white),
                 label: const Text('Continue with Facebook',
@@ -165,6 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_google_button'),
                 onPressed: () => context.push('/oauth-login'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2A2A2A),
@@ -197,6 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton.icon(
+                key: const ValueKey('auth_apple_button'),
                 onPressed: () {},
                 icon: const Icon(Icons.apple, color: Colors.white),
                 label: const Text('Continue with Apple',
@@ -225,6 +229,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             // Email field
             TextField(
+              key: const ValueKey('auth_email_field'),
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               style: const TextStyle(color: Colors.white),
@@ -245,6 +250,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             // Password field
             TextField(
+              key: const ValueKey('auth_password_field'),
               controller: _passwordController,
               obscureText: !_isPasswordVisible,
               cursorColor: Colors.orange,
@@ -262,6 +268,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                 suffixIcon: IconButton(
+                  key: const ValueKey('auth_password_toggle_button'),
                   icon: Icon(
                     _isPasswordVisible
                         ? Icons.visibility_off
@@ -280,6 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_continue_button'),
                 onPressed: _canContinue ? _onContinue : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
@@ -305,6 +313,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             // Forgot password
             GestureDetector(
+              key: const ValueKey('auth_forgot_password_button'),
               onTap: () => context.push('/forgot-password'),
               child: const Text(
                 'Forgot your password?',
@@ -316,6 +325,7 @@ class _LoginScreenState extends State<LoginScreen> {
             // Don't have an account?
             Center(
               child: GestureDetector(
+                key: const ValueKey('auth_signup_button'),
                 onTap: () => context.push('/register-screen'),
                 child: RichText(
                   text: const TextSpan(
@@ -339,6 +349,7 @@ class _LoginScreenState extends State<LoginScreen> {
             // Need help
             Center(
               child: GestureDetector(
+                key: const ValueKey('auth_help_button'),
                 onTap: () => launchUrl(
                   Uri.parse(
                       'https://help.soundcloud.com/hc/en-us/sections/46266771825691'),

@@ -105,6 +105,7 @@ class _VerifyEmailDeepLinkPageState extends State<VerifyEmailDeepLinkPage> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_verify_success_login_button'),
                 onPressed: () => context.go('/login-screen'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
@@ -155,6 +156,7 @@ class _VerifyEmailDeepLinkPageState extends State<VerifyEmailDeepLinkPage> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_verify_error_back_button'),
                 onPressed: () => context.go('/start'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,

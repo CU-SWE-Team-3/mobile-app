@@ -101,6 +101,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
         ),
         actions: [
           TextButton(
+            key: const ValueKey('uploads_role_cancel_button'),
             onPressed: () => Navigator.pop(ctx),
             child: const Text(
               'Cancel',
@@ -108,6 +109,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
             ),
           ),
           ElevatedButton(
+            key: const ValueKey('uploads_role_upgrade_button'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFFF5500),
             ),
@@ -172,6 +174,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
+                key: const ValueKey('uploads_options_play_tile'),
                 leading: const Icon(Icons.play_arrow, color: Colors.white),
                 title:
                     const Text('Play', style: TextStyle(color: Colors.white)),
@@ -181,6 +184,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                 },
               ),
               ListTile(
+                key: const ValueKey('uploads_options_edit_tile'),
                 leading: const Icon(Icons.edit, color: Colors.white),
                 title:
                     const Text('Edit', style: TextStyle(color: Colors.white)),
@@ -190,6 +194,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                 },
               ),
               ListTile(
+                key: const ValueKey('uploads_options_delete_tile'),
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title:
                     const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -235,6 +240,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: GestureDetector(
+              key: const ValueKey('uploads_playpause_button'),
               onTap: () {
                 if (playerState.currentTrackPath != null) {
                   ref.read(playerProvider.notifier).togglePlayPause();
@@ -267,6 +273,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
+              key: const ValueKey('uploads_search_field'),
               controller: _searchController,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
@@ -276,6 +283,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                     Icon(Icons.search, color: Colors.white.withOpacity(0.5)),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? GestureDetector(
+                        key: const ValueKey('uploads_search_clear_button'),
                         onTap: () {
                           _searchController.clear();
                         },
@@ -380,6 +388,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                       ),
                       const SizedBox(height: 12),
                       TextButton(
+                        key: const ValueKey('uploads_retry_button'),
                         onPressed: () => ref.invalidate(myTracksProvider),
                         child: const Text(
                           'Retry',
@@ -413,6 +422,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         child: GestureDetector(
+                          key: const ValueKey('uploads_track_tile'),
                           onTap: () => _playTrack(track),
                           onLongPress: () => _showTrackOptionsSheet(track),
                           child: Container(
@@ -504,6 +514,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                                 ),
                                 // Options menu
                                 GestureDetector(
+                                  key: const ValueKey('uploads_track_options_button'),
                                   onTap: () => _showTrackOptionsSheet(track),
                                   child: Padding(
                                     padding: const EdgeInsets.all(8),
@@ -525,6 +536,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        key: const ValueKey('uploads_add_fab'),
         onPressed: () => _pickAndUpload(context),
         backgroundColor: const Color(0xFFFF5500),
         child: const Icon(Icons.add, color: Colors.white),

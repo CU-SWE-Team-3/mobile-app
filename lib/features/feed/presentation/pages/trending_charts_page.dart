@@ -76,6 +76,7 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton(
+                        key: const ValueKey('trending_retry_button'),
                         onPressed: _fetchTrending,
                         style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFFF5500)),

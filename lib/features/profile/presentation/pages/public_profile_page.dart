@@ -55,6 +55,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: GestureDetector(
+          key: const ValueKey('profile_public_back_button'),
           onTap: () => context.pop(),
           child: Container(
             margin: const EdgeInsets.all(8),
@@ -82,6 +83,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton(
+                        key: const ValueKey('profile_public_retry_button'),
                         onPressed: _fetchProfile,
                         style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFFF5500)),

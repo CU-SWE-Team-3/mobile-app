@@ -38,6 +38,7 @@ class LibraryLikesPage extends ConsumerWidget {
               child: Row(
                 children: [
                   GestureDetector(
+                    key: const ValueKey('library_likes_back_button'),
                     onTap: () => context.pop(),
                     child: Container(
                       width: 38,
@@ -61,6 +62,7 @@ class LibraryLikesPage extends ConsumerWidget {
                   ),
                   const Spacer(),
                   GestureDetector(
+                    key: const ValueKey('library_likes_cast_button'),
                     onTap: () {},
                     child: Container(
                       width: 38,
@@ -91,6 +93,7 @@ class LibraryLikesPage extends ConsumerWidget {
                           style: TextStyle(color: Colors.white54)),
                       const SizedBox(height: 12),
                       TextButton(
+                        key: const ValueKey('library_likes_retry_button'),
                         onPressed: () => ref.invalidate(_userLikesProvider),
                         child: const Text('Retry',
                             style: TextStyle(color: Color(0xFFFF5500))),
@@ -151,6 +154,7 @@ class _LikeTile extends ConsumerWidget {
         track.artworkUrl!.startsWith('http');
 
     return GestureDetector(
+      key: const ValueKey('library_likes_track_tile'),
       onTap: () {
         if (track.audioUrl != null) {
           ref.read(playerProvider.notifier).playTrack(

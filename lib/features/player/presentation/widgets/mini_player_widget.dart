@@ -41,6 +41,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
         children: [
           // White circle play/pause button
           GestureDetector(
+            key: const ValueKey('mini_player_play_button'),
             onTap: notifier.togglePlayPause,
             child: Container(
               width: 40,
@@ -61,6 +62,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
           // Center: track title + artist — tapping navigates to /player
           Expanded(
             child: GestureDetector(
+              key: const ValueKey('mini_player_expand_button'),
               behavior: HitTestBehavior.opaque,
               onTap: () => context.push('/player'),
               child: Column(
@@ -91,6 +93,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
             const Icon(Icons.person_add_outlined, color: Colors.white, size: 22)
           else
             IconButton(
+              key: const ValueKey('mini_player_follow_button'),
               icon: followState.isLoading
                   ? const SizedBox(
                       width: 16,
@@ -113,6 +116,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
 
           // Heart icon — local UI toggle only
           IconButton(
+            key: const ValueKey('mini_player_like_button'),
             icon: Icon(
               _isLiked ? Icons.favorite : Icons.favorite_border,
               color: Colors.white,

@@ -129,6 +129,7 @@ class _OAuthLoginPageState extends ConsumerState<OAuthLoginPage> {
               ),
             ),
             GestureDetector(
+              key: const ValueKey('auth_oauth_google_button'),
               onTap: _isLoading ? null : _signInWithGoogle,
               child: Container(
                 margin: const EdgeInsets.only(top: 35),

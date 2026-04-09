@@ -35,6 +35,7 @@ class QueueItemTile extends StatelessWidget {
           ? const Color(0xFF242424)
           : const Color(0xFF111111),
       child: InkWell(
+        key: const ValueKey('queue_item_tile'),
         onTap: onTap,
         splashColor: Colors.white10,
         highlightColor: Colors.white10,
@@ -111,6 +112,7 @@ class QueueItemTile extends StatelessWidget {
 
               // ── Remove button ──────────────────────────────────────────
               IconButton(
+                key: const ValueKey('queue_item_remove_button'),
                 icon:
                     const Icon(Icons.close, color: Colors.white38, size: 18),
                 onPressed: onRemove,

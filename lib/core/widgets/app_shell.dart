@@ -112,6 +112,7 @@ class _MiniPlayerBar extends ConsumerWidget {
     final engState = ref.watch(engagementProvider(params));
 
     return GestureDetector(
+      key: const ValueKey('shell_mini_player_expand_button'),
       onTap: () => context.push('/player'),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(32),
@@ -129,6 +130,7 @@ class _MiniPlayerBar extends ConsumerWidget {
               children: [
                 // Play / Pause button
                 GestureDetector(
+                  key: const ValueKey('shell_play_button'),
                   onTap: () =>
                       ref.read(playerProvider.notifier).togglePlayPause(),
                   child: Container(
@@ -173,6 +175,7 @@ class _MiniPlayerBar extends ConsumerWidget {
 
                 // Like button wired to engagementProvider
                 IconButton(
+                  key: const ValueKey('shell_like_button'),
                   icon: Icon(
                     engState.isLiked ? Icons.favorite : Icons.favorite_border,
                     color: engState.isLiked

@@ -224,6 +224,7 @@ class _CommentsBodyState extends ConsumerState<_CommentsBody> {
                 ),
                 const Spacer(),
                 GestureDetector(
+                  key: const ValueKey('comments_cancel_reply_button'),
                   onTap: _cancelReply,
                   child: const Icon(Icons.close,
                       color: Colors.white38, size: 16),
@@ -265,6 +266,7 @@ class _Header extends StatelessWidget {
         children: [
           // X button
           GestureDetector(
+            key: const ValueKey('comments_close_button'),
             onTap: () => Navigator.of(context).pop(),
             child: Container(
               width: 36,
@@ -467,6 +469,7 @@ class _CommentTileState extends State<_CommentTile> {
             children: [
               // Avatar — tap to go to profile
               GestureDetector(
+                key: const ValueKey('comments_avatar_button'),
                 onTap: () => _navigateToProfile(
                   context,
                   userId: c.user.id,
@@ -487,6 +490,7 @@ class _CommentTileState extends State<_CommentTile> {
                       children: [
                         Expanded(
                           child: GestureDetector(
+                            key: const ValueKey('comments_username_button'),
                             onTap: () => _navigateToProfile(
                               context,
                               userId: c.user.id,
@@ -540,6 +544,7 @@ class _CommentTileState extends State<_CommentTile> {
                     Row(
                       children: [
                         GestureDetector(
+                          key: const ValueKey('comments_reply_button'),
                           onTap: widget.onReply,
                           child: const Text(
                             'Reply',
@@ -552,6 +557,7 @@ class _CommentTileState extends State<_CommentTile> {
                         ),
                         const SizedBox(width: 16),
                         GestureDetector(
+                          key: const ValueKey('comments_more_button'),
                           onTap: () => _showOptions(context),
                           child: const Icon(Icons.more_vert,
                               color: Colors.white54, size: 20),
@@ -568,6 +574,7 @@ class _CommentTileState extends State<_CommentTile> {
               Column(
                 children: [
                   GestureDetector(
+                    key: const ValueKey('comments_like_button'),
                     onTap: () => setState(() {
                       _liked = !_liked;
                       _likeCount += _liked ? 1 : -1;
@@ -596,6 +603,7 @@ class _CommentTileState extends State<_CommentTile> {
         // ── Replies toggle ─────────────────────────────────────────────
         if (c.replies.isNotEmpty)
           GestureDetector(
+            key: const ValueKey('comments_replies_toggle_button'),
             onTap: () => setState(() => _showReplies = !_showReplies),
             child: Padding(
               padding: const EdgeInsets.only(left: 74, top: 8),
@@ -647,6 +655,7 @@ class _CommentTileState extends State<_CommentTile> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              key: const ValueKey('comments_delete_tile'),
               leading: const Icon(Icons.delete_outline,
                   color: Colors.red),
               title: const Text('Delete comment',
@@ -657,6 +666,7 @@ class _CommentTileState extends State<_CommentTile> {
               },
             ),
             ListTile(
+              key: const ValueKey('comments_report_tile'),
               leading:
                   const Icon(Icons.flag_outlined, color: Colors.white54),
               title: const Text('Report',
@@ -826,6 +836,7 @@ class _InputBar extends StatelessWidget {
                 children: [
                   Expanded(
                     child: TextField(
+                      key: const ValueKey('comments_input_field'),
                       controller: controller,
                       focusNode: focusNode,
                       style: const TextStyle(
