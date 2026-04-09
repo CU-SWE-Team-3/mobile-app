@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/player/presentation/providers/player_provider.dart';
 import '../themes/app_theme.dart';
-import '../../features/player/presentation/providers/player_provider.dart';
 import '../../features/engagement/presentation/providers/engagement_provider.dart';
 
 class AppShell extends StatelessWidget {
