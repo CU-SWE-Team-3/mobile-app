@@ -502,6 +502,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
         children: [
           _buildFormField(
             label: 'Title',
+            fieldKey: const ValueKey('upload_track_title_field'),
             isRequired: true,
             controller: _titleController,
             maxLines: 3,
@@ -525,6 +526,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
 
   Widget _buildFormField({
     required String label,
+    Key? fieldKey,
     bool isRequired = false,
     TextEditingController? controller,
     String? initialValue,
@@ -554,6 +556,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
           ),
           const SizedBox(height: 8),
           TextField(
+            key: fieldKey,
             controller: controller,
             readOnly: isReadOnly,
             maxLines: maxLines,
@@ -1014,6 +1017,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
           children: [
             Expanded(
               child: GestureDetector(
+                key: const ValueKey('upload_track_release_date_field'),
                 onTap: _pickDate,
                 child: Container(
                   padding:
@@ -1085,6 +1089,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: ElevatedButton(
+          key: const ValueKey('upload_track_submit_button'),
           onPressed: _uploadTrack,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,
