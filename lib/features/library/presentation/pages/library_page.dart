@@ -122,46 +122,58 @@ class LibraryPage extends ConsumerWidget {
                   const SizedBox(height: 32),
 
                   // ── Recently played ───────────
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Recently played',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                  GestureDetector(
+                    onTap: () => context.push('/player/recent'),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Recently played',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Find all your recently played content here.',
-                      style: TextStyle(color: Color(0xFF999999), fontSize: 14),
+                  GestureDetector(
+                    onTap: () => context.push('/player/recent'),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Find all your recently played content here.',
+                        style: TextStyle(color: Color(0xFF999999), fontSize: 14),
+                      ),
                     ),
                   ),
 
                   const SizedBox(height: 32),
 
                   // ── Listening history ─────────
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Listening history',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                  GestureDetector(
+                    onTap: () => context.push('/player/history'),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Listening history',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      "Find all the tracks you've listened to here.",
-                      style: TextStyle(color: Color(0xFF999999), fontSize: 14),
+                  GestureDetector(
+                    onTap: () => context.push('/player/history'),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        "Find all the tracks you've listened to here.",
+                        style: TextStyle(color: Color(0xFF999999), fontSize: 14),
+                      ),
                     ),
                   ),
 

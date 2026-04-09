@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
@@ -14,44 +14,48 @@ class _FeedTrack {
   final String id;
   final String title;
   final String artistName;
+  final String? artistId;
   final String? artworkUrl;
-  final String audioUrl;
+  final String hlsUrl;
   final int playCount;
   final int likeCount;
   final int repostCount;
   final bool isLiked;
   final bool isReposted;
+  final List<int>? waveform;
 
   _FeedTrack({
     required this.id,
     required this.title,
     required this.artistName,
     required this.artworkUrl,
-    required this.audioUrl,
+    required this.hlsUrl,
     required this.playCount,
+    this.artistId,
     this.likeCount = 0,
     this.repostCount = 0,
     this.isLiked = false,
     this.isReposted = false,
+    this.waveform,
   });
 
   factory _FeedTrack.fromJson(Map<String, dynamic> json) {
     final artist = json['artist'] as Map<String, dynamic>? ?? {};
-    final id = json['_id'] as String? ?? '';
-    final audioUrl = json['audioUrl'] as String? ??
-        json['streamUrl'] as String? ??
-        'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/$id/playlist.m3u8';
     return _FeedTrack(
-      id: id,
+      id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
-      audioUrl: audioUrl,
+      hlsUrl: json['hlsUrl'] as String? ?? '',
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
       isLiked: json['isLiked'] as bool? ?? false,
       isReposted: json['isReposted'] as bool? ?? false,
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
     );
   }
 }
@@ -88,8 +92,16 @@ class _HomePageState extends ConsumerState<HomePage> {
     super.initState();
     _fetchFeed();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showSuggestedDialog(context);
+      _maybeShowSuggestedDialog();
     });
+  }
+
+  Future<void> _maybeShowSuggestedDialog() async {
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyShown = prefs.getBool('suggested_dialog_shown') ?? false;
+    if (alreadyShown || !mounted) return;
+    await prefs.setBool('suggested_dialog_shown', true);
+    if (mounted) _showSuggestedDialog(context);
   }
 
   Future<void> _fetchFeed() async {
@@ -202,7 +214,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     }
 
     return Column(
-      children: _tracks.map((track) => _TrackRow(track: track)).toList(),
+      children: _tracks.asMap().entries.map((entry) => _TrackRow(
+        track: entry.value,
+        allTracks: _tracks,
+        index: entry.key,
+      )).toList(),
     );
   }
 
@@ -336,24 +352,41 @@ class _HomePageState extends ConsumerState<HomePage> {
 
 class _TrackRow extends ConsumerWidget {
   final _FeedTrack track;
+  final List<_FeedTrack> allTracks;
+  final int index;
 
-  const _TrackRow({required this.track});
+  const _TrackRow({
+    required this.track,
+    required this.allTracks,
+    required this.index,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       key: const ValueKey('home_track_row'),
       onTap: () {
-        ref.read(playerProvider.notifier).playTrack(
-              PlayerTrack(
-                id: track.id,
-                title: track.title,
-                artist: track.artistName,
-                audioUrl: track.audioUrl,
-                coverUrl: track.artworkUrl,
-              ),
+        if (track.hlsUrl.isEmpty) return;
+        final queue = allTracks
+            .where((t) => t.hlsUrl.isNotEmpty)
+            .map((t) => PlayerTrack(
+                  id: t.id,
+                  title: t.title,
+                  artist: t.artistName,
+                  artistId: t.artistId,
+                  audioUrl: t.hlsUrl,
+                  coverUrl: t.artworkUrl,
+                  waveform: t.waveform,
+                ))
+            .toList();
+        final startIndex = allTracks
+            .where((t) => t.hlsUrl.isNotEmpty)
+            .toList()
+            .indexWhere((t) => t.id == track.id);
+        ref.read(playerProvider.notifier).playQueue(
+              queue,
+              startIndex: startIndex < 0 ? 0 : startIndex,
             );
-        context.push('/player');
       },
       child: Padding(
         padding: const EdgeInsets.only(bottom: 16),

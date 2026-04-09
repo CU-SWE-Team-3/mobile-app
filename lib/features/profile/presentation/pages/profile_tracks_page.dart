@@ -1,17 +1,115 @@
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'dart:math';
 
-class ProfileTracksPage extends StatelessWidget {
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+
+// ── Local model ───────────────────────────────────────────────────────────────
+
+class _MyTrack {
+  final String id;
+  final String title;
+  final String artistName;
+  final String? artworkUrl;
+  final String hlsUrl;
+  final List<int>? waveform;
+  final Duration? duration;
+
+  const _MyTrack({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    required this.artworkUrl,
+    required this.hlsUrl,
+    this.waveform,
+    this.duration,
+  });
+
+  factory _MyTrack.fromJson(Map<String, dynamic> json) {
+    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final durationRaw = json['duration'];
+    return _MyTrack(
+      id: json['_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      artistName: artist['displayName'] as String? ?? '',
+      artworkUrl: json['artworkUrl'] as String?,
+      hlsUrl: json['hlsUrl'] as String? ?? '',
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      duration: durationRaw != null
+          ? Duration(seconds: (durationRaw as num).toInt())
+          : null,
+    );
+  }
+
+  PlayerTrack toPlayerTrack() => PlayerTrack(
+        id: id,
+        title: title,
+        artist: artistName,
+        audioUrl: hlsUrl,
+        coverUrl: artworkUrl,
+        waveform: waveform,
+        duration: duration,
+      );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+class ProfileTracksPage extends ConsumerStatefulWidget {
   const ProfileTracksPage({super.key});
 
+  @override
+  ConsumerState<ProfileTracksPage> createState() => _ProfileTracksPageState();
+}
+
+class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
   static const _bg = Color(0xFF111111);
 
-  // Mock tracks — replace with real data later
-  static const _tracks = [
-    _Track('It_is_realme.mp3', 'SUNDER', '1:20', null),
-    _Track('Sad N Black', 'SUNDER', '1:47', null),
-    _Track('I am in tiny room', 'SUNDER', '2:44', null),
-  ];
+  List<_MyTrack> _tracks = [];
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTracks();
+  }
+
+  Future<void> _fetchTracks() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+    try {
+      final dio = ref.read(dioClientProvider).dio;
+      final response = await dio.get('/tracks/my-tracks');
+      final data = response.data['data'] as List<dynamic>;
+      final tracks = data
+          .cast<Map<String, dynamic>>()
+          .map(_MyTrack.fromJson)
+          .where((t) => t.hlsUrl.isNotEmpty)
+          .toList();
+      setState(() {
+        _tracks = tracks;
+        _isLoading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    }
+  }
+
+  void _playFrom(int index) {
+    if (_tracks.isEmpty) return;
+    final queue = _tracks.map((t) => t.toPlayerTrack()).toList();
+    ref.read(playerProvider.notifier).playQueue(queue, startIndex: index);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +151,6 @@ class ProfileTracksPage extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  // Cast icon
                   GestureDetector(
                     key: const ValueKey('profile_tracks_cast_button'),
                     onTap: () {},
@@ -81,7 +178,10 @@ class ProfileTracksPage extends StatelessWidget {
                   // Shuffle
                   GestureDetector(
                     key: const ValueKey('profile_tracks_shuffle_button'),
-                    onTap: () {},
+                    onTap: () {
+                      if (_tracks.isEmpty) return;
+                      _playFrom(Random().nextInt(_tracks.length));
+                    },
                     child: Container(
                       width: 40,
                       height: 40,
@@ -97,7 +197,7 @@ class ProfileTracksPage extends StatelessWidget {
                   // Play
                   GestureDetector(
                     key: const ValueKey('profile_tracks_play_all_button'),
-                    onTap: () {},
+                    onTap: () => _playFrom(0),
                     child: Container(
                       width: 52,
                       height: 52,
@@ -113,14 +213,42 @@ class ProfileTracksPage extends StatelessWidget {
               ),
             ),
 
-            // ── track list ───────────────────────────────────────────
+            // ── body ─────────────────────────────────────────────────
             Expanded(
-              child: ListView.builder(
-                physics: const BouncingScrollPhysics(),
-                itemCount: _tracks.length,
-                itemBuilder: (_, i) =>
-                    _TrackTile(track: _tracks[i]),
-              ),
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Colors.white))
+                  : _hasError
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('Failed to load tracks',
+                                  style: TextStyle(color: Colors.white70)),
+                              const SizedBox(height: 12),
+                              TextButton(
+                                key: const ValueKey(
+                                    'profile_tracks_retry_button'),
+                                onPressed: _fetchTracks,
+                                child: const Text('Retry',
+                                    style:
+                                        TextStyle(color: Colors.white)),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _tracks.isEmpty
+                          ? const Center(
+                              child: Text('No tracks yet',
+                                  style: TextStyle(color: Colors.white54)))
+                          : ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: _tracks.length,
+                              itemBuilder: (_, i) => _TrackTile(
+                                track: _tracks[i],
+                                onTap: () => _playFrom(i),
+                              ),
+                            ),
             ),
           ],
         ),
@@ -129,34 +257,41 @@ class ProfileTracksPage extends StatelessWidget {
   }
 }
 
-// ── track tile ───────────────────────────────────────────────────────
+// ── Track tile ────────────────────────────────────────────────────────────────
+
 class _TrackTile extends StatelessWidget {
-  final _Track track;
-  const _TrackTile({required this.track});
+  final _MyTrack track;
+  final VoidCallback onTap;
+
+  const _TrackTile({required this.track, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final sub = Colors.white.withOpacity(0.55);
+    final duration = track.duration;
+    final durationLabel = duration != null
+        ? '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}'
+        : '';
+
     return GestureDetector(
       key: const ValueKey('profile_tracks_tile'),
-      onTap: () {},
+      onTap: onTap,
       child: Padding(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Row(
           children: [
             // Thumbnail
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Container(
-                width: 56,
-                height: 56,
-                color: const Color(0xFF6699BB),
-                child: track.imageColor != null
-                    ? ColoredBox(color: track.imageColor!)
-                    : const Icon(Icons.person,
-                        color: Colors.white70, size: 30),
-              ),
+              child: (track.artworkUrl != null && track.artworkUrl!.isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: track.artworkUrl!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _placeholder(),
+                    )
+                  : _placeholder(),
             ),
             const SizedBox(width: 14),
             // Title + artist + duration
@@ -175,11 +310,13 @@ class _TrackTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  Text(track.artist,
+                  Text(track.artistName,
                       style: TextStyle(color: sub, fontSize: 13)),
-                  const SizedBox(height: 3),
-                  Text(track.duration,
-                      style: TextStyle(color: sub, fontSize: 12)),
+                  if (durationLabel.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(durationLabel,
+                        style: TextStyle(color: sub, fontSize: 12)),
+                  ],
                 ],
               ),
             ),
@@ -187,21 +324,18 @@ class _TrackTile extends StatelessWidget {
             GestureDetector(
               key: const ValueKey('profile_tracks_more_button'),
               onTap: () {},
-              child: Icon(Icons.more_vert_rounded,
-                  color: sub, size: 20),
+              child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ),
           ],
         ),
       ),
     );
   }
-}
 
-// ── model ────────────────────────────────────────────────────────────
-class _Track {
-  final String title;
-  final String artist;
-  final String duration;
-  final Color? imageColor;
-  const _Track(this.title, this.artist, this.duration, this.imageColor);
+  Widget _placeholder() => Container(
+        width: 56,
+        height: 56,
+        color: const Color(0xFF6699BB),
+        child: const Icon(Icons.music_note, color: Colors.white70, size: 30),
+      );
 }
