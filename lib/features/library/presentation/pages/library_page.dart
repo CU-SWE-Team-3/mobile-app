@@ -86,7 +86,7 @@ class LibraryPage extends ConsumerWidget {
                 child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  _LibraryMenuItem(title: 'Your likes', onTap: () {}),
+                  _LibraryMenuItem(title: 'Your likes', onTap: () => context.push('/likes')),
                   _LibraryMenuItem(title: 'Playlists', onTap: () {}),
                   _LibraryMenuItem(
                     title: 'Albums',
