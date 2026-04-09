@@ -74,6 +74,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton.icon(
+                  key: const ValueKey('onboarding_facebook_button'),
                   onPressed: () {},
                   icon: const Icon(Icons.facebook, color: Colors.white),
                   label: const Text('Continue with Facebook',
@@ -91,6 +92,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
+                  key: const ValueKey('onboarding_google_button'),
                   onPressed: () => context.push('/oauth-login'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2A2A2A),
@@ -119,6 +121,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton.icon(
+                  key: const ValueKey('onboarding_apple_button'),
                   onPressed: () {},
                   icon: const Icon(Icons.apple, color: Colors.white),
                   label: const Text('Continue with Apple',
@@ -141,6 +144,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
               // Email field
               TextField(
+                key: const ValueKey('onboarding_email_field'),
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 style: const TextStyle(color: Colors.white),
@@ -162,6 +166,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
+                  key: const ValueKey('onboarding_continue_button'),
                   onPressed: _isEmailValid ? _onContinue : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _isEmailValid ? Colors.white : const Color(0xFF888888),
@@ -176,6 +181,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
               // Need help
               GestureDetector(
+                key: const ValueKey('onboarding_help_button'),
                 onTap: () => launchUrl(
                   Uri.parse('https://help.soundcloud.com/hc/en-us/sections/46266771825691'),
                   mode: LaunchMode.externalApplication,

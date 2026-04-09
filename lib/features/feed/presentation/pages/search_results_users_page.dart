@@ -78,6 +78,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: TextField(
+              key: const ValueKey('search_users_field'),
               controller: _controller,
               autofocus: false,
               textInputAction: TextInputAction.search,
@@ -91,6 +92,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                     const Icon(Icons.search, color: Colors.white38),
                 suffixIcon: _controller.text.isNotEmpty
                     ? GestureDetector(
+                        key: const ValueKey('search_users_clear_button'),
                         onTap: () {
                           _controller.clear();
                           setState(() {
@@ -132,6 +134,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                             ),
                             const SizedBox(height: 12),
                             ElevatedButton(
+                              key: const ValueKey('search_users_retry_button'),
                               onPressed: () => _search(_lastQuery),
                               style: ElevatedButton.styleFrom(
                                   backgroundColor:
@@ -183,6 +186,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                                               .contains('default-avatar');
 
                                   return InkWell(
+                                    key: const ValueKey('search_users_tile'),
                                     onTap: () {
                                       if (permalink.isNotEmpty) {
                                         context.push('/user/$permalink',

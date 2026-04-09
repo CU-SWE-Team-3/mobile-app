@@ -227,11 +227,13 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
           ),
           actions: [
             TextButton(
+              key: const ValueKey('other_profile_block_cancel_button'),
               onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('Cancel',
                   style: TextStyle(color: Colors.white54)),
             ),
             TextButton(
+              key: const ValueKey('other_profile_block_confirm_button'),
               onPressed: () => Navigator.of(ctx).pop(true),
               child: const Text('Block',
                   style: TextStyle(color: Color(0xFFFF5500))),
@@ -283,6 +285,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
+            key: const ValueKey('other_profile_block_tile'),
             leading: const Icon(Icons.block, color: Colors.white70),
             title: Text(_isBlocked ? 'Unblock user' : 'Block user',
                 style: const TextStyle(color: Colors.white)),
@@ -304,6 +307,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: GestureDetector(
+          key: const ValueKey('other_profile_back_button'),
           onTap: () => context.pop(),
           child: Container(
             margin: const EdgeInsets.all(8),
@@ -315,6 +319,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
         ),
         actions: [
           IconButton(
+            key: const ValueKey('other_profile_more_button'),
             icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
             onPressed: _showMoreSheet,
           ),
@@ -337,6 +342,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
                 style: TextStyle(color: Colors.grey[400], fontSize: 15)),
             const SizedBox(height: 12),
             ElevatedButton(
+              key: const ValueKey('other_profile_retry_button'),
               onPressed: _fetchProfile,
               style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFF5500)),
@@ -423,6 +429,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
           Center(
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               GestureDetector(
+                key: const ValueKey('other_profile_followers_button'),
                 onTap: _targetUserId.isNotEmpty
                     ? () => context.push('/profile/followers',
                         extra: {'targetUserId': _targetUserId})
@@ -433,6 +440,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
               const Text(' · ',
                   style: TextStyle(color: Colors.grey, fontSize: 14)),
               GestureDetector(
+                key: const ValueKey('other_profile_following_button'),
                 onTap: _targetUserId.isNotEmpty
                     ? () => context.push('/profile/following',
                         extra: {'targetUserId': _targetUserId})
@@ -476,6 +484,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
                     style: const TextStyle(color: Colors.white70, fontSize: 14)),
                 if (_bio.length > 120)
                   GestureDetector(
+                    key: const ValueKey('other_profile_bio_toggle_button'),
                     onTap: () => setState(() => _bioExpanded = !_bioExpanded),
                     child: Padding(
                       padding: const EdgeInsets.only(top: 6),
@@ -531,6 +540,7 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
   }
 
   Widget _followButton() => ElevatedButton(
+        key: const ValueKey('other_profile_follow_button'),
         onPressed: _followLoading ? null : _toggleFollow,
         style: ElevatedButton.styleFrom(
           backgroundColor:

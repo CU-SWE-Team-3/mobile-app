@@ -38,6 +38,7 @@ class ProfileRepostsPage extends ConsumerWidget {
               child: Row(
                 children: [
                   GestureDetector(
+                    key: const ValueKey('profile_reposts_back_button'),
                     onTap: () => context.pop(),
                     child: Container(
                       width: 38,
@@ -61,6 +62,7 @@ class ProfileRepostsPage extends ConsumerWidget {
                   ),
                   const Spacer(),
                   GestureDetector(
+                    key: const ValueKey('profile_reposts_cast_button'),
                     onTap: () {},
                     child: Container(
                       width: 38,
@@ -92,6 +94,7 @@ class ProfileRepostsPage extends ConsumerWidget {
                           style: TextStyle(color: Colors.white54)),
                       const SizedBox(height: 12),
                       TextButton(
+                        key: const ValueKey('profile_reposts_retry_button'),
                         onPressed: () =>
                             ref.invalidate(_userRepostsProvider),
                         child: const Text('Retry',
@@ -158,6 +161,7 @@ class _RepostTile extends ConsumerWidget {
         track.artworkUrl!.startsWith('http');
 
     return GestureDetector(
+      key: const ValueKey('profile_reposts_track_tile'),
       onTap: () {
         if (track.audioUrl != null) {
           ref.read(playerProvider.notifier).playTrack(

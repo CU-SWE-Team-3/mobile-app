@@ -216,6 +216,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           style: TextStyle(color: Colors.white, fontSize: 15)),
                       const SizedBox(height: 12),
                       TextButton(
+                        key: const ValueKey('profile_retry_button'),
                         onPressed: _fetchProfile,
                         child: const Text('Retry',
                             style: TextStyle(color: Color(0xFFFF5500))),
@@ -288,6 +289,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           children: [
             // Avatar — tap to view fullscreen
             GestureDetector(
+              key: const ValueKey('profile_avatar_view_button'),
               onTap: () => context.push('/profile/avatar-view'),
               child: Container(
                 width: 88,
@@ -335,6 +337,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             Row(
               children: [
                 GestureDetector(
+                  key: const ValueKey('profile_followers_button'),
                   onTap: () => context.push('/profile/followers'),
                   child: Text(
                       '$_followerCount ${_followerCount == 1 ? 'Follower' : 'Followers'}',
@@ -342,6 +345,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 ),
                 Text('  ·  ', style: TextStyle(color: _sub, fontSize: 13)),
                 GestureDetector(
+                  key: const ValueKey('profile_following_button'),
                   onTap: () => context.push('/profile/following'),
                   child: Text('$_followingCount Following',
                       style: TextStyle(color: _sub, fontSize: 13)),
@@ -354,6 +358,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               children: [
                 // Edit button → pushes EditProfilePage, awaits result
                 GestureDetector(
+                  key: const ValueKey('profile_edit_button'),
                   onTap: _openEdit,
                   child: Container(
                     padding:
@@ -411,6 +416,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ),
           if (_bio.length > 60)
             GestureDetector(
+              key: const ValueKey('profile_bio_toggle_button'),
               onTap: () => setState(() => _bioExpanded = !_bioExpanded),
               child: Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -428,6 +434,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   // ── insights → navigates to YourInsightsPage ────────────────────────
   Widget _insightsRow(BuildContext context) => GestureDetector(
+        key: const ValueKey('profile_insights_button'),
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => const YourInsightsPage())),
         child: Container(
@@ -464,6 +471,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         fontWeight: FontWeight.w700)),
                 const Spacer(),
                 GestureDetector(
+                  key: const ValueKey('profile_spotlight_edit_button'),
                   onTap: () {},
                   child: Container(
                     padding:
@@ -676,6 +684,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           itemBuilder: (_, i) {
             final p = _playlists[i];
             return GestureDetector(
+              key: const ValueKey('profile_playlist_tile'),
               onTap: () {},
               child: Padding(
                 padding: const EdgeInsets.only(right: 14),
@@ -802,6 +811,7 @@ class _TrackTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final sub = Colors.white.withOpacity(0.55);
     return GestureDetector(
+      key: const ValueKey('profile_track_tile'),
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
@@ -844,6 +854,7 @@ class _TrackTile extends StatelessWidget {
               ),
             ),
             GestureDetector(
+              key: const ValueKey('profile_track_more_button'),
               onTap: onMore,
               child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ),

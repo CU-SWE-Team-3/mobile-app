@@ -61,6 +61,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               child: CircleAvatar(
                 backgroundColor: Colors.grey[850],
                 child: IconButton(
+                  key: const ValueKey('auth_forgot_back_button'),
                   icon: const Icon(Icons.arrow_back_ios_sharp, color: Colors.white, size: 30),
                   onPressed: () => Navigator.pop(context),
                 ),
@@ -86,6 +87,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
               child: Container(
                 margin: const EdgeInsets.only(top: 20),
                 child: TextField(
+                  key: const ValueKey('auth_forgot_email_field'),
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   textAlignVertical: TextAlignVertical.top,
@@ -129,6 +131,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                   ),
                 ),
                 GestureDetector(
+                  key: const ValueKey('auth_send_reset_link_button'),
                   onTap: _onSendResetLink,
                   child: Container(
                     margin: const EdgeInsets.only(top: 20),

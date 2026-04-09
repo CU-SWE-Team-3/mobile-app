@@ -27,6 +27,7 @@ class ProfileTracksPage extends StatelessWidget {
               child: Row(
                 children: [
                   GestureDetector(
+                    key: const ValueKey('profile_tracks_back_button'),
                     onTap: () =>
                         context.canPop() ? context.pop() : null,
                     child: Container(
@@ -54,6 +55,7 @@ class ProfileTracksPage extends StatelessWidget {
                   const Spacer(),
                   // Cast icon
                   GestureDetector(
+                    key: const ValueKey('profile_tracks_cast_button'),
                     onTap: () {},
                     child: Container(
                       width: 38,
@@ -78,6 +80,7 @@ class ProfileTracksPage extends StatelessWidget {
                   const Spacer(),
                   // Shuffle
                   GestureDetector(
+                    key: const ValueKey('profile_tracks_shuffle_button'),
                     onTap: () {},
                     child: Container(
                       width: 40,
@@ -93,6 +96,7 @@ class ProfileTracksPage extends StatelessWidget {
                   const SizedBox(width: 12),
                   // Play
                   GestureDetector(
+                    key: const ValueKey('profile_tracks_play_all_button'),
                     onTap: () {},
                     child: Container(
                       width: 52,
@@ -134,6 +138,7 @@ class _TrackTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final sub = Colors.white.withOpacity(0.55);
     return GestureDetector(
+      key: const ValueKey('profile_tracks_tile'),
       onTap: () {},
       child: Padding(
         padding:
@@ -180,6 +185,7 @@ class _TrackTile extends StatelessWidget {
             ),
             // More button
             GestureDetector(
+              key: const ValueKey('profile_tracks_more_button'),
               onTap: () {},
               child: Icon(Icons.more_vert_rounded,
                   color: sub, size: 20),

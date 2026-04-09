@@ -136,6 +136,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   ),
                   IconButton(
+                    key: const ValueKey('home_suggested_close_button'),
                     onPressed: () => Navigator.of(dialogContext).pop(),
                     icon: const Icon(Icons.close, color: Color(0xFF999999)),
                     padding: EdgeInsets.zero,
@@ -174,6 +175,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
               const SizedBox(height: 12),
               TextButton(
+                key: const ValueKey('home_retry_button'),
                 onPressed: _fetchFeed,
                 child: const Text(
                   'Retry',
@@ -222,6 +224,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
         actions: [
           TextButton(
+            key: const ValueKey('home_get_pro_button'),
             onPressed: () {},
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -238,18 +241,22 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
           IconButton(
+            key: const ValueKey('home_cast_button'),
             onPressed: () {},
             icon: const Icon(Icons.cast, color: Colors.white, size: 22),
           ),
           IconButton(
+            key: const ValueKey('home_upload_button'),
             onPressed: () {},
             icon: const Icon(Icons.upload_rounded, color: Colors.white, size: 22),
           ),
           IconButton(
+            key: const ValueKey('home_messages_button'),
             onPressed: () {},
             icon: const Icon(Icons.mail_outline, color: Colors.white, size: 22),
           ),
           IconButton(
+            key: const ValueKey('home_notifications_button'),
             onPressed: () {},
             icon: const Icon(Icons.notifications_none, color: Colors.white, size: 22),
           ),
@@ -282,6 +289,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               itemBuilder: (context, index) {
                 final isSelected = _selectedGenreIndex == index;
                 return GestureDetector(
+                  key: const ValueKey('home_genre_chip'),
                   onTap: () => setState(() => _selectedGenreIndex = index),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -334,6 +342,7 @@ class _TrackRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
+      key: const ValueKey('home_track_row'),
       onTap: () {
         ref.read(playerProvider.notifier).playTrack(
               PlayerTrack(
@@ -426,6 +435,7 @@ class _TrackRow extends ConsumerWidget {
               ),
             ],
             IconButton(
+              key: const ValueKey('home_track_more_button'),
               onPressed: () {},
               icon: const Icon(
                 Icons.more_vert,

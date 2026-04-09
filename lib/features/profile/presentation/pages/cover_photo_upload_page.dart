@@ -90,6 +90,7 @@ class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
               child: Row(
                 children: [
                   GestureDetector(
+                    key: const ValueKey('profile_cover_close_button'),
                     onTap: _handleClose,
                     child: Container(
                       width: 38,
@@ -114,6 +115,7 @@ class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
                   const Spacer(),
                   if (_pickedImage != null)
                     GestureDetector(
+                      key: const ValueKey('profile_cover_save_button'),
                       onTap: _isUploading ? null : _handleSave,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -148,6 +150,7 @@ class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
 
             // ── cover preview ─────────────────────────────────────────
             GestureDetector(
+              key: const ValueKey('profile_cover_preview_button'),
               onTap: _pickImage,
               child: SizedBox(
                 width: double.infinity,
@@ -208,6 +211,7 @@ class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
               child: Column(
                 children: [
                   GestureDetector(
+                    key: const ValueKey('profile_cover_choose_button'),
                     onTap: _pickImage,
                     child: Container(
                       width: double.infinity,
@@ -232,6 +236,7 @@ class _CoverPhotoUploadPageState extends State<CoverPhotoUploadPage> {
                   if (_pickedImage != null) ...[
                     const SizedBox(height: 12),
                     GestureDetector(
+                      key: const ValueKey('profile_cover_remove_button'),
                       onTap: () => setState(() => _pickedImage = null),
                       child: Container(
                         width: double.infinity,

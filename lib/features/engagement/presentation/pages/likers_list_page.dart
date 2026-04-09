@@ -40,6 +40,7 @@ class LikersListPage extends ConsumerWidget {
                   style: TextStyle(color: Colors.white54)),
               const SizedBox(height: 12),
               TextButton(
+                key: const ValueKey('likers_retry_button'),
                 onPressed: () => ref.invalidate(_likersProvider(trackId)),
                 child: const Text('Retry',
                     style: TextStyle(color: Color(0xFFFF5500))),

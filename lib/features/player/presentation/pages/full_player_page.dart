@@ -141,10 +141,12 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       _CircleButton(
+                        key: const ValueKey('player_back_button'),
                         icon: Icons.keyboard_arrow_down,
                         onTap: () => context.pop(),
                       ),
                       _CircleButton(
+                        key: const ValueKey('player_follow_button'),
                         icon: followState.isFollowing
                             ? Icons.person
                             : Icons.person_add_outlined,
@@ -183,6 +185,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       ),
                       const SizedBox(height: 10),
                       GestureDetector(
+                        key: const ValueKey('player_behind_track_button'),
                         onTap: () {},
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
@@ -210,6 +213,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       return GestureDetector(
+                        key: const ValueKey('player_waveform_seek'),
                         onTapDown: (details) {
                           final pct = (details.localPosition.dx /
                                   constraints.maxWidth)
@@ -319,12 +323,14 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
+                      key: const ValueKey('player_skip_previous_button'),
                       icon: const Icon(Icons.skip_previous_rounded,
                           color: Colors.white, size: 40),
                       onPressed: () => ref.read(playerProvider.notifier).skipPrevious(),
                     ),
                     const SizedBox(width: 24),
                     GestureDetector(
+                      key: const ValueKey('player_play_button'),
                       onTap: notifier.togglePlayPause,
                       child: Container(
                         width: 64,
@@ -344,6 +350,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     ),
                     const SizedBox(width: 24),
                     IconButton(
+                      key: const ValueKey('player_skip_next_button'),
                       icon: const Icon(Icons.skip_next_rounded,
                           color: Colors.white, size: 40),
                       onPressed: () => ref.read(playerProvider.notifier).skipNext(),
@@ -367,6 +374,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       children: [
                         Expanded(
                           child: TextField(
+                            key: const ValueKey('player_comment_input_field'),
                             controller: _commentController,
                             focusNode: _commentFocus,
                             style: const TextStyle(
@@ -455,6 +463,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _ActionButton(
+                        key: const ValueKey('player_like_button'),
                         icon: engState.isLiked
                             ? Icons.favorite
                             : Icons.favorite_border,
@@ -468,6 +477,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 .toggleLike(),
                       ),
                       _ActionButton(
+                        key: const ValueKey('player_repost_button'),
                         icon: Icons.repeat,
                         iconColor: engState.isReposted
                             ? Colors.orange
@@ -480,6 +490,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 .toggleRepost(),
                       ),
                       _ActionButton(
+                        key: const ValueKey('player_comment_button'),
                         icon: Icons.comment_outlined,
                         label: commentsState.comments.isNotEmpty
                             ? '${commentsState.comments.length}'
@@ -494,11 +505,13 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         ),
                       ),
                       _ActionButton(
+                        key: const ValueKey('player_share_button'),
                         icon: Icons.share_outlined,
                         label: '',
                         onTap: () {},
                       ),
                       _ActionButton(
+                        key: const ValueKey('player_queue_button'),
                         icon: Icons.queue_music,
                         label: '',
                         onTap: () => context.push('/player/queue'),
@@ -651,7 +664,7 @@ class _CircleButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool loading;
   const _CircleButton(
-      {required this.icon, required this.onTap, this.loading = false});
+      {super.key, required this.icon, required this.onTap, this.loading = false});
 
   @override
   Widget build(BuildContext context) {
@@ -684,6 +697,7 @@ class _ActionButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ActionButton({
+    super.key,
     required this.icon,
     this.iconColor = Colors.white,
     required this.label,

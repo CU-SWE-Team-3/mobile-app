@@ -102,6 +102,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 const SizedBox(height: 24),
                 // DISCARD
                 GestureDetector(
+                  key: const ValueKey('edit_profile_discard_button'),
                   onTap: () => Navigator.of(context).pop(true),
                   child: Container(
                     width: double.infinity,
@@ -120,6 +121,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                 Divider(color: _dividerColor, height: 1),
                 // CONTINUE EDITING
                 GestureDetector(
+                  key: const ValueKey('edit_profile_continue_editing_button'),
                   onTap: () => Navigator.of(context).pop(false),
                   child: Container(
                     width: double.infinity,
@@ -235,6 +237,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                         fontWeight: FontWeight.w600)),
                 const Spacer(),
                 GestureDetector(
+                  key: const ValueKey('edit_profile_bio_done_button'),
                   onTap: () => Navigator.pop(ctx, ctrl.text),
                   child: const Text('Done',
                       style: TextStyle(color: _orange, fontSize: 15)),
@@ -243,6 +246,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
             ),
             const SizedBox(height: 14),
             TextField(
+              key: const ValueKey('edit_profile_bio_field'),
               controller: ctrl,
               autofocus: true,
               maxLines: 5,
@@ -309,6 +313,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         child: Row(
           children: [
             GestureDetector(
+              key: const ValueKey('edit_profile_back_button'),
               onTap: () async {
                 final should = await _onWillPop();
                 if (should && mounted) context.pop();
@@ -331,6 +336,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     fontWeight: FontWeight.w600)),
             const Spacer(),
             GestureDetector(
+              key: const ValueKey('edit_profile_save_button'),
               onTap: _isLoading ? null : _save,
               child: Container(
                 padding: const EdgeInsets.symmetric(
@@ -364,6 +370,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           children: [
             // Cover photo
             GestureDetector(
+              key: const ValueKey('edit_profile_cover_button'),
               onTap: () => context.push('/profile/cover'),
               child: Container(
                 height: 140,
@@ -390,6 +397,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
               left: 20,
               bottom: 0,
               child: GestureDetector(
+                key: const ValueKey('edit_profile_avatar_button'),
                 onTap: () => context.push('/profile/avatar'),
                 child: Stack(
                   children: [
@@ -444,6 +452,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
             // Country
             GestureDetector(
+              key: const ValueKey('edit_profile_country_button'),
               onTap: _pickCountry,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -469,6 +478,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
             // Bio
             GestureDetector(
+              key: const ValueKey('edit_profile_bio_button'),
               onTap: _editBio,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),

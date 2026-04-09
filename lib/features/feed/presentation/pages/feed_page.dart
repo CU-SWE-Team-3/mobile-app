@@ -33,11 +33,13 @@ class _FeedPageState extends ConsumerState<FeedPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _TabButton(
+                      key: const ValueKey('feed_discover_tab_button'),
                       label: 'Discover',
                       isSelected: _selectedTab == 'Discover',
                       onTap: () => setState(() => _selectedTab = 'Discover'),
                     ),
                     _TabButton(
+                      key: const ValueKey('feed_following_tab_button'),
                       label: 'Following',
                       isSelected: _selectedTab == 'Following',
                       onTap: () => setState(() => _selectedTab = 'Following'),
@@ -103,6 +105,7 @@ class _TabButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _TabButton({
+    super.key,
     required this.label,
     required this.isSelected,
     required this.onTap,
