@@ -61,6 +61,7 @@ class HistoryRepository {
         if (e.track.coverUrl != null) 'coverUrl': e.track.coverUrl,
         if (e.track.duration != null)
           'durationMs': e.track.duration!.inMilliseconds,
+        if (e.track.artistId != null) 'artistId': e.track.artistId,
       };
 
   static HistoryEntry _entryFromMap(Map<String, dynamic> m) => HistoryEntry(
@@ -69,6 +70,7 @@ class HistoryRepository {
           id: m['id'] as String,
           title: m['title'] as String,
           artist: m['artist'] as String,
+          artistId: m['artistId'] as String?,
           audioUrl: m['audioUrl'] as String,
           coverUrl: m['coverUrl'] as String?,
           duration: m['durationMs'] != null

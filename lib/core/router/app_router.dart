@@ -301,11 +301,21 @@ final appRouter = GoRouter(
             path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
         GoRoute(
           path: 'followers',
-          builder: (_, __) => const FollowersListPage(),
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            return FollowersListPage(
+              targetUserId: extra['targetUserId'] as String?,
+            );
+          },
         ),
         GoRoute(
           path: 'following',
-          builder: (_, __) => const FollowingListPage(),
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            return FollowingListPage(
+              targetUserId: extra['targetUserId'] as String?,
+            );
+          },
         ),
         GoRoute(
             path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),

@@ -17,6 +17,7 @@ class _ApiTrack {
   final String id;
   final String title;
   final String artistName;
+  final String? artistId;
   final String? artworkUrl;
   final String hlsUrl;
   final List<int>? waveform;
@@ -28,6 +29,7 @@ class _ApiTrack {
     required this.artistName,
     required this.artworkUrl,
     required this.hlsUrl,
+    this.artistId,
     this.waveform,
     this.durationSeconds,
   });
@@ -39,6 +41,7 @@ class _ApiTrack {
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       hlsUrl: json['hlsUrl'] as String? ?? '',
       waveform: (json['waveform'] as List<dynamic>?)
@@ -59,6 +62,7 @@ class _ApiTrack {
         id: id,
         title: title,
         artist: artistName,
+        artistId: artistId,
         audioUrl: hlsUrl,
         coverUrl: artworkUrl,
         waveform: waveform,

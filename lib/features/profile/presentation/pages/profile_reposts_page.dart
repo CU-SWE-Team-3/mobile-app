@@ -169,6 +169,7 @@ class _RepostTile extends ConsumerWidget {
                   id: track.id,
                   title: track.title,
                   artist: track.artistName,
+                  artistId: track.artistId,
                   audioUrl: track.audioUrl!,
                   coverUrl: track.artworkUrl,
                 ),

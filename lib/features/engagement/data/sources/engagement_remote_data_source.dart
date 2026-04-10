@@ -9,6 +9,7 @@ class TrackSummary {
   final String id;
   final String title;
   final String artistName;
+  final String? artistId;
   final String? artworkUrl;
   final String? audioUrl;
   final int playCount;
@@ -19,6 +20,7 @@ class TrackSummary {
     required this.id,
     required this.title,
     required this.artistName,
+    this.artistId,
     this.artworkUrl,
     this.audioUrl,
     this.playCount = 0,
@@ -33,6 +35,7 @@ class TrackSummary {
       id: id,
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       audioUrl: json['audioUrl'] as String? ??
           json['streamUrl'] as String? ??

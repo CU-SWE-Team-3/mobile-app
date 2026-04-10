@@ -13,6 +13,7 @@ class _MyTrack {
   final String id;
   final String title;
   final String artistName;
+  final String? artistId;
   final String? artworkUrl;
   final String hlsUrl;
   final List<int>? waveform;
@@ -24,6 +25,7 @@ class _MyTrack {
     required this.artistName,
     required this.artworkUrl,
     required this.hlsUrl,
+    this.artistId,
     this.waveform,
     this.duration,
   });
@@ -35,6 +37,7 @@ class _MyTrack {
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       hlsUrl: json['hlsUrl'] as String? ?? '',
       waveform: (json['waveform'] as List<dynamic>?)
@@ -50,6 +53,7 @@ class _MyTrack {
         id: id,
         title: title,
         artist: artistName,
+        artistId: artistId,
         audioUrl: hlsUrl,
         coverUrl: artworkUrl,
         waveform: waveform,

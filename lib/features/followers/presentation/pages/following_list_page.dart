@@ -1,11 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 
 class FollowingListPage extends StatefulWidget {
-  const FollowingListPage({super.key});
+  final String? targetUserId;
+  const FollowingListPage({super.key, this.targetUserId});
 
   @override
   State<FollowingListPage> createState() => _FollowingListPageState();
@@ -33,8 +35,9 @@ class _FollowingListPageState extends State<FollowingListPage> {
     try {
       final userId = await UserSession.getUserId();
       if (userId == null) throw Exception('Not logged in');
+      final fetchId = widget.targetUserId ?? userId;
       final response = await dioClient.dio
-          .get('/network/$userId/following?page=1&limit=20');
+          .get('/network/$fetchId/following?page=1&limit=20');
       final data = response.data['data'] as List;
       final users = data.cast<Map<String, dynamic>>();
       setState(() {
@@ -47,6 +50,24 @@ class _FollowingListPageState extends State<FollowingListPage> {
         _isLoading = false;
         _hasError = true;
       });
+    }
+  }
+
+  Future<void> _navigateToProfile(
+    BuildContext context, {
+    required String userId,
+    required String permalink,
+    required String displayName,
+  }) async {
+    final myId = await UserSession.getUserId() ?? '';
+    if (!context.mounted) return;
+    if (myId.isNotEmpty && myId == userId) {
+      context.push('/profile');
+    } else {
+      context.push(
+        '/user/$permalink',
+        extra: {'displayName': displayName, 'userId': userId},
+      );
     }
   }
 
@@ -136,6 +157,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
               : Column(
                   children: [
                     const SizedBox(height: 12),
+                    if (widget.targetUserId == null)
                     // "True friends" banner
                     GestureDetector(
                       onTap: () => Navigator.push(
@@ -191,6 +213,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
                         ),
                       ),
                     ),
+                    if (widget.targetUserId == null)
                     const SizedBox(height: 12),
                     Expanded(
                       child: _users.isEmpty
@@ -211,6 +234,12 @@ class _FollowingListPageState extends State<FollowingListPage> {
                                   isFollowing: _followingIds.contains(id),
                                   isLoading: _loadingIds.contains(id),
                                   onToggle: () => _toggleFollow(id),
+                                  onTap: () => _navigateToProfile(
+                                    context,
+                                    userId: id,
+                                    permalink: user['permalink'] as String? ?? id,
+                                    displayName: user['displayName'] as String? ?? '',
+                                  ),
                                 );
                               },
                             ),
@@ -273,12 +302,14 @@ class _UserTile extends StatelessWidget {
   final bool isFollowing;
   final bool isLoading;
   final VoidCallback onToggle;
+  final VoidCallback onTap;
 
   const _UserTile({
     required this.user,
     required this.isFollowing,
     required this.isLoading,
     required this.onToggle,
+    required this.onTap,
   });
 
   @override
@@ -293,7 +324,7 @@ class _UserTile extends StatelessWidget {
         avatarUrl.contains('default-avatar');
 
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         child: Row(
