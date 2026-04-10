@@ -37,12 +37,17 @@ class _LoginPageState extends State<LoginPage> {
         'email': widget.email,
         'password': _passwordController.text.trim(),
       });
-      final user = response.data['user'];
+      final token = response.data['data']['token'] as String? ?? '';
+      final refreshToken = response.data['data']['refreshToken'] as String? ?? '';
+      final user = response.data['data']['user'] as Map<String, dynamic>? ?? {};
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userId', user['_id'] ?? '');
-      await prefs.setString('displayName', user['displayName'] ?? '');
-      await prefs.setString('role', user['role'] ?? '');
-      await prefs.setString('permalink', user['permalink'] ?? '');
+      await prefs.setString('accessToken', token);
+      await prefs.setString('refreshToken', refreshToken);
+      await prefs.setString('userId', user['_id'] as String? ?? '');
+      await prefs.setString('displayName', user['displayName'] as String? ?? '');
+      await prefs.setString('role', user['role'] as String? ?? '');
+      await prefs.setString('permalink', user['permalink'] as String? ?? '');
+      dioClient.setAuthToken(token);
       if (mounted) context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;

@@ -97,7 +97,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   List<_ApiTrack> _apiTracks = [];
   bool _tracksLoading = false;
 
-  final _playlists = const [_Playlist('my songs', 'SUNDER')];
+  final _playlists = const <_Playlist>[];
 
   List<TrackSummary> _reposts = [];
   List<TrackSummary> _likes = [];
@@ -779,7 +779,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   // ── playlist row ─────────────────────────────────────────────────────
-  Widget _playlistRow(BuildContext context) => SizedBox(
+  Widget _playlistRow(BuildContext context) {
+    if (_playlists.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Text('No playlists yet',
+            style: TextStyle(color: _sub, fontSize: 14)),
+      );
+    }
+    return SizedBox(
         height: 215,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
@@ -833,6 +841,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           },
         ),
       );
+  }
 
   // ── helpers ──────────────────────────────────────────────────────────
   Widget _iconBtn(IconData icon, VoidCallback? onTap) => GestureDetector(

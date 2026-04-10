@@ -43,7 +43,7 @@ class _FollowersListPageState extends State<FollowersListPage> {
 
       // Fetch current user's following list to determine which followers are already followed back
       final followingResponse = await dioClient.dio
-          .get('/network/$myId/following?page=1&limit=999');
+          .get('/network/$myId/following?page=1&limit=100');
       final followingData = followingResponse.data['data'] as List;
 
       // make a set of following user IDs to easily check if a follower is already followed back
@@ -58,7 +58,12 @@ class _FollowersListPageState extends State<FollowersListPage> {
         _followingIds.addAll(followingIds);
         _isLoading = false;
       });
-    } on DioException {
+    } on DioException catch (_) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    } catch (_) {
       setState(() {
         _isLoading = false;
         _hasError = true;
