@@ -141,68 +141,69 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String userId = prefs.getString('userId') ?? '';
-      final String permalink = prefs.getString('permalink') ?? '';
 
       if (userId.isEmpty) {
         if (mounted) setState(() { _username = prefs.getString('displayName') ?? ''; _isLoading = false; });
         return;
       }
 
-      // If we have a permalink, fetch full profile (includes followerCount + followingCount)
-      if (permalink.isNotEmpty) {
-        try {
-          final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/$permalink'));
-          final data = profileResponse.data['data']['user'] as Map<String, dynamic>;
+      // GET /profile/me — owner-only endpoint: always returns the full profile
+      // regardless of isPrivate, so bio/city/country are never omitted.
+      // Using the permalink endpoint would return the restricted PrivateProfile
+      // shape when the account is private, silently dropping these fields.
+      try {
+        final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/me'));
 
-          // Always fetch counts from the network endpoints — they are authoritative
-          // for the account owner regardless of public/private profile shape.
-          int followerCount  = 0;
-          int followingCount = 0;
-          try {
-            final followersResp = await _withRetry(
-                () => dioClient.dio.get('/network/$userId/followers'));
-            await Future.delayed(const Duration(milliseconds: 200));
-            final followingResp = await _withRetry(
-                () => dioClient.dio.get('/network/$userId/following'));
-            followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
-            followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
-          } catch (_) {}
+        // Null-safe extraction — avoids hard-cast TypeErrors on unexpected shapes.
+        final respBody = profileResponse.data;
+        final dataNode = (respBody is Map) ? respBody['data'] : null;
+        final userNode = (dataNode is Map) ? dataNode['user'] : null;
+        final data     = (userNode is Map) ? Map<String, dynamic>.from(userNode as Map) : null;
 
-          if (mounted) {
-            setState(() {
-              _username       = data['displayName']   as String? ?? prefs.getString('displayName') ?? '';
-              _bio            = data['bio']           as String? ?? '';
-              _city           = data['city']          as String? ?? '';
-              _country        = data['country']       as String? ?? '';
-              _avatarUrl      = data['avatarUrl']     as String? ?? '';
-              _followerCount  = followerCount;
-              _followingCount = followingCount;
-              _isLoading = false;
-            });
-          }
-          return;
-        } catch (e) {
-          // ignore: avoid_print
-          print('=== PROFILE PERMALINK FETCH ERROR: $e');
+        if (data == null) {
+          throw Exception('Unexpected /profile/me response: $respBody');
         }
-      }
 
-      // No permalink yet — fetch counts sequentially to avoid rate limits
-      final followersResp = await _withRetry(
-          () => dioClient.dio.get('/network/$userId/followers'));
-      await Future.delayed(const Duration(milliseconds: 200));
-      final followingResp = await _withRetry(
-          () => dioClient.dio.get('/network/$userId/following'));
-      if (mounted) {
-        setState(() {
-          _username       = prefs.getString('displayName') ?? '';
-          _bio            = prefs.getString('bio') ?? '';
-          _country        = prefs.getString('country') ?? '';
-          _city           = prefs.getString('city') ?? '';
-          _followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
-          _followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
-          _isLoading = false;
-        });
+        // Cache to prefs so edit-page re-fetches and network-error fallbacks
+        // have fresh values.
+        final bio     = data['bio']     as String? ?? '';
+        final city    = data['city']    as String? ?? '';
+        final country = data['country'] as String? ?? '';
+        await prefs.setString('bio',     bio);
+        await prefs.setString('city',    city);
+        await prefs.setString('country', country);
+
+        // Always fetch counts from the network endpoints — they are authoritative.
+        int followerCount  = 0;
+        int followingCount = 0;
+        try {
+          final followersResp = await _withRetry(
+              () => dioClient.dio.get('/network/$userId/followers'));
+          await Future.delayed(const Duration(milliseconds: 200));
+          final followingResp = await _withRetry(
+              () => dioClient.dio.get('/network/$userId/following'));
+          followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
+          followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
+        } catch (_) {}
+
+        if (mounted) {
+          setState(() {
+            _username       = data['displayName'] as String? ?? prefs.getString('displayName') ?? '';
+            _bio            = bio;
+            _city           = city;
+            _country        = country;
+            _avatarUrl      = data['avatarUrl']   as String? ?? '';
+            _followerCount  = followerCount;
+            _followingCount = followingCount;
+            _isLoading = false;
+          });
+        }
+        return;
+      } catch (e, st) {
+        // ignore: avoid_print
+        print('=== PROFILE ME FETCH ERROR: $e\n$st');
+        if (mounted) setState(() { _isLoading = false; _hasError = true; });
+        return;
       }
     } catch (e, st) {
       // ignore: avoid_print
