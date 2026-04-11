@@ -8,6 +8,7 @@ import '../providers/player_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../../core/themes/app_theme.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
   const FullPlayerPage({super.key});
@@ -822,7 +823,7 @@ class _WaveformPainter extends CustomPainter {
     if (!isPlaying) {
       const strokeWidth = 2.0;
       final playedPaint = Paint()
-        ..color = Colors.white
+        ..color = AppTheme.primary
         ..strokeWidth = strokeWidth
         ..style = PaintingStyle.stroke;
       final unplayedPaint = Paint()
@@ -848,7 +849,7 @@ class _WaveformPainter extends CustomPainter {
     final barWidth = (size.width - (barCount - 1) * spacing) / barCount;
 
     final playedPaint = Paint()
-      ..color = Colors.white
+      ..color = AppTheme.primary
       ..style = PaintingStyle.fill;
     final unplayedPaint = Paint()
       ..color = Colors.white.withOpacity(0.25)
