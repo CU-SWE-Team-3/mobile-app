@@ -147,10 +147,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         return;
       }
 
-      // GET /profile/me — owner-only endpoint: always returns the full profile
-      // regardless of isPrivate, so bio/city/country are never omitted.
-      // Using the permalink endpoint would return the restricted PrivateProfile
-      // shape when the account is private, silently dropping these fields.
+      // ── attempt 1: GET /profile/me (auth-required, always full data) ──
+      // Owner-only endpoint — isPrivate never hides bio/city/country here.
+      bool fetchedFromNetwork = false;
+      Map<String, dynamic>? profileData;
+
       try {
         final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/me'));
 
@@ -158,53 +159,102 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         final respBody = profileResponse.data;
         final dataNode = (respBody is Map) ? respBody['data'] : null;
         final userNode = (dataNode is Map) ? dataNode['user'] : null;
-        final data     = (userNode is Map) ? Map<String, dynamic>.from(userNode as Map) : null;
+        profileData    = (userNode is Map) ? Map<String, dynamic>.from(userNode) : null;
 
-        if (data == null) {
+        if (profileData == null) {
           throw Exception('Unexpected /profile/me response: $respBody');
         }
+        fetchedFromNetwork = true;
+      } on DioException catch (e) {
+        // Log status code + body so the exact failure layer is identifiable.
+        final statusCode = e.response?.statusCode;
+        final responseBody = e.response?.data;
+        // ignore: avoid_print
+        print('=== /profile/me FAILED: status=$statusCode body=$responseBody\n$e');
 
-        // Cache to prefs so edit-page re-fetches and network-error fallbacks
-        // have fresh values.
-        final bio     = data['bio']     as String? ?? '';
-        final city    = data['city']    as String? ?? '';
-        final country = data['country'] as String? ?? '';
-        await prefs.setString('bio',     bio);
-        await prefs.setString('city',    city);
-        await prefs.setString('country', country);
-
-        // Always fetch counts from the network endpoints — they are authoritative.
-        int followerCount  = 0;
-        int followingCount = 0;
-        try {
-          final followersResp = await _withRetry(
-              () => dioClient.dio.get('/network/$userId/followers'));
-          await Future.delayed(const Duration(milliseconds: 200));
-          final followingResp = await _withRetry(
-              () => dioClient.dio.get('/network/$userId/following'));
-          followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
-          followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
-        } catch (_) {}
-
-        if (mounted) {
-          setState(() {
-            _username       = data['displayName'] as String? ?? prefs.getString('displayName') ?? '';
-            _bio            = bio;
-            _city           = city;
-            _country        = country;
-            _avatarUrl      = data['avatarUrl']   as String? ?? '';
-            _followerCount  = followerCount;
-            _followingCount = followingCount;
-            _isLoading = false;
-          });
+        // ── attempt 2: fallback to GET /profile/:permalink (no auth needed) ──
+        final permalink = prefs.getString('permalink') ?? '';
+        if (permalink.isNotEmpty) {
+          try {
+            final fallbackResponse = await _withRetry(
+                () => dioClient.dio.get('/profile/$permalink'));
+            final fb = fallbackResponse.data;
+            final fbData = (fb is Map) ? fb['data'] : null;
+            final fbUser = (fbData is Map) ? fbData['user'] : null;
+            if (fbUser is Map) {
+              profileData = Map<String, dynamic>.from(fbUser);
+              fetchedFromNetwork = true;
+            }
+          } catch (fallbackErr) {
+            // ignore: avoid_print
+            print('=== /profile/$permalink ALSO FAILED: $fallbackErr');
+          }
         }
-        return;
       } catch (e, st) {
         // ignore: avoid_print
-        print('=== PROFILE ME FETCH ERROR: $e\n$st');
+        print('=== PROFILE ME FETCH ERROR (non-Dio): $e\n$st');
+      }
+
+      // ── attempt 3: use SharedPreferences cached data ──
+      if (!fetchedFromNetwork) {
+        final cachedName = prefs.getString('displayName') ?? '';
+        if (cachedName.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _username  = cachedName;
+              _bio       = prefs.getString('bio')     ?? '';
+              _city      = prefs.getString('city')    ?? '';
+              _country   = prefs.getString('country') ?? '';
+              _isLoading = false;
+              // Show stale data rather than an error screen — retry is still
+              // available via pull-to-refresh.
+            });
+          }
+          return;
+        }
+        // No cached data at all — surface the error so the retry button appears.
         if (mounted) setState(() { _isLoading = false; _hasError = true; });
         return;
       }
+
+      // ── parse whichever network response succeeded ────────────────────
+      final data = profileData!;
+
+      // Cache to prefs so edit-page re-fetches and network-error fallbacks
+      // have fresh values.
+      final bio     = data['bio']     as String? ?? '';
+      final city    = data['city']    as String? ?? '';
+      final country = data['country'] as String? ?? '';
+      await prefs.setString('bio',     bio);
+      await prefs.setString('city',    city);
+      await prefs.setString('country', country);
+
+      // Always fetch counts from the network endpoints — they are authoritative.
+      int followerCount  = 0;
+      int followingCount = 0;
+      try {
+        final followersResp = await _withRetry(
+            () => dioClient.dio.get('/network/$userId/followers'));
+        await Future.delayed(const Duration(milliseconds: 200));
+        final followingResp = await _withRetry(
+            () => dioClient.dio.get('/network/$userId/following'));
+        followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
+        followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _username       = data['displayName'] as String? ?? prefs.getString('displayName') ?? '';
+          _bio            = bio;
+          _city           = city;
+          _country        = country;
+          _avatarUrl      = data['avatarUrl']   as String? ?? '';
+          _followerCount  = followerCount;
+          _followingCount = followingCount;
+          _isLoading = false;
+        });
+      }
+      return;
     } catch (e, st) {
       // ignore: avoid_print
       print('=== PROFILE FETCH ERROR: $e\n$st');
