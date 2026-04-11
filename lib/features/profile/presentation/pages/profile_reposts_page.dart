@@ -172,6 +172,7 @@ class _RepostTile extends ConsumerWidget {
                   artistId: track.artistId,
                   audioUrl: track.audioUrl!,
                   coverUrl: track.artworkUrl,
+                  waveform: track.waveform,
                 ),
               );
           context.push('/player');

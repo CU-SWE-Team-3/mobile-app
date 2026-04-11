@@ -15,6 +15,7 @@ class TrackSummary {
   final int playCount;
   final int likeCount;
   final int repostCount;
+  final List<int>? waveform;
 
   const TrackSummary({
     required this.id,
@@ -26,6 +27,7 @@ class TrackSummary {
     this.playCount = 0,
     this.likeCount = 0,
     this.repostCount = 0,
+    this.waveform,
   });
 
   factory TrackSummary.fromJson(Map<String, dynamic> json) {
@@ -45,6 +47,9 @@ class TrackSummary {
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
     );
   }
 }
