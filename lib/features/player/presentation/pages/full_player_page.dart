@@ -380,7 +380,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                   painter: _WaveformPainter(
                                       progress: progress,
                                       waveform: playerState
-                                          .currentTrack?.waveform),
+                                          .currentTrack?.waveform,
+                                      isPlaying: playerState.isPlaying),
                                 ),
                               ),
                               if (playerState.duration.inSeconds > 0)
@@ -801,6 +802,7 @@ class _EmojiButton extends StatelessWidget {
 class _WaveformPainter extends CustomPainter {
   final double progress;
   final List<int>? waveform;
+  final bool isPlaying;
 
   static const _fallbackHeights = [
     0.30, 0.50, 0.70, 0.40, 0.90, 0.60, 0.80, 0.50, 0.30, 0.70,
@@ -812,10 +814,28 @@ class _WaveformPainter extends CustomPainter {
     0.40, 0.80, 0.60, 0.30, 0.90, 0.50, 0.70, 0.40, 0.60, 0.30,
   ];
 
-  _WaveformPainter({required this.progress, this.waveform});
+  _WaveformPainter(
+      {required this.progress, this.waveform, required this.isPlaying});
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (!isPlaying) {
+      const strokeWidth = 2.0;
+      final playedPaint = Paint()
+        ..color = Colors.white
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke;
+      final unplayedPaint = Paint()
+        ..color = Colors.white.withOpacity(0.25)
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke;
+      final y = size.height / 2;
+      final splitX = size.width * progress;
+      canvas.drawLine(Offset(0, y), Offset(splitX, y), playedPaint);
+      canvas.drawLine(Offset(splitX, y), Offset(size.width, y), unplayedPaint);
+      return;
+    }
+
     final List<double> heights;
     if (waveform != null && waveform!.isNotEmpty) {
       heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
@@ -848,5 +868,6 @@ class _WaveformPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_WaveformPainter old) => old.progress != progress;
+  bool shouldRepaint(_WaveformPainter old) =>
+      old.progress != progress || old.isPlaying != isPlaying;
 }
