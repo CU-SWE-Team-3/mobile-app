@@ -63,6 +63,10 @@ class SettingsMainPage extends ConsumerWidget {
             title: 'Social settings',
             onTap: () => context.push('/settings/social'),
           ),
+          _SettingsMenuItem(
+            title: 'Privacy',
+            onTap: () => context.push('/settings/privacy'),
+          ),
           _SettingsMenuItem(title: 'Inbox', onTap: () {}),
           _SettingsMenuItem(title: 'Notifications', onTap: () {}),
           _SettingsMenuItem(title: 'Add widgets', onTap: () {}),

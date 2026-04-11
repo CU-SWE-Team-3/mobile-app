@@ -56,9 +56,10 @@ class FollowNotifier extends StateNotifier<FollowState> {
   }
 }
 
-/// Keyed by artistId. Auto-disposes when no widget is watching.
+/// Keyed by artistId. Stays alive for the session so follow state is consistent
+/// across FullPlayerPage and MiniPlayerWidget.
 /// Automatically triggers [checkStatus] when first created for an artistId.
-final followProvider = StateNotifierProvider.autoDispose
+final followProvider = StateNotifierProvider
     .family<FollowNotifier, FollowState, String>((ref, artistId) {
   final notifier = FollowNotifier();
   Future.microtask(() => notifier.checkStatus(artistId));

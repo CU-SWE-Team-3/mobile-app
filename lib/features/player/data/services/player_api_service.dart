@@ -115,6 +115,7 @@ class PlayerApiService {
                 'Unknown') as Object)
             .toString()
         : (artistRaw ?? 'Unknown').toString();
+    final artistId = artistRaw is Map ? artistRaw['_id'] as String? : null;
 
     final listenedAtRaw =
         m['playedAt'] ?? m['listenedAt'] ?? m['createdAt'];
@@ -132,6 +133,7 @@ class PlayerApiService {
         id: (t['_id'] ?? t['id'] ?? '').toString(),
         title: (t['title'] ?? 'Unknown').toString(),
         artist: artistName,
+        artistId: artistId,
         audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
         coverUrl: (t['artworkUrl'] ?? t['coverUrl']) as String?,
         duration: duration,

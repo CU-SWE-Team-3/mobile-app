@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -145,19 +146,33 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   }
 
   void _playTrack(UploadTrack track) {
-    if (track.audioFilePath != null) {
-      ref.read(playerProvider.notifier).playTrackFromFile(
-            filePath: track.audioFilePath!,
-            title: track.title,
-            artist: track.artist,
-          );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Now playing: ${track.title}'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
+    // Build a queue from all currently displayed tracks that have a streamable
+    // HLS URL. Tracks still processing (no hlsUrl) are excluded.
+    final playableTracks = _filteredTracks
+        .where((t) => t.hlsUrl != null && t.hlsUrl!.isNotEmpty)
+        .toList();
+
+    if (playableTracks.isEmpty) return;
+
+    final queue = playableTracks
+        .map((t) => PlayerTrack(
+              id: t.id ?? t.hlsUrl!,
+              title: t.title,
+              artist: t.artist,
+              audioUrl: t.hlsUrl!,
+              coverUrl: t.artworkUrl,
+              waveform: t.waveform,
+            ))
+        .toList();
+
+    final startIndex = playableTracks.indexWhere(
+      (t) => t.id != null && t.id == track.id,
+    );
+
+    ref.read(playerProvider.notifier).playQueue(
+          queue,
+          startIndex: startIndex < 0 ? 0 : startIndex,
+        );
   }
 
   void _showTrackOptionsSheet(UploadTrack track) {
@@ -258,30 +273,38 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: GestureDetector(
-              key: const ValueKey('uploads_playpause_button'),
-              onTap: () {
-                if (playerState.currentTrackPath != null) {
-                  ref.read(playerProvider.notifier).togglePlayPause();
-                } else if (_filteredTracks.isNotEmpty) {
-                  _playTrack(_filteredTracks.first);
-                }
+            child: Builder(
+              builder: (context) {
+                // True only when the active track belongs to this page's list.
+                final currentId = playerState.currentTrack?.id;
+                final isFromThisPage = currentId != null &&
+                    _filteredTracks.any((t) => t.id == currentId);
+                final showPause = isFromThisPage && playerState.isPlaying;
+
+                return GestureDetector(
+                  key: const ValueKey('uploads_playpause_button'),
+                  onTap: () {
+                    if (isFromThisPage) {
+                      ref.read(playerProvider.notifier).togglePlayPause();
+                    } else if (_filteredTracks.isNotEmpty) {
+                      _playTrack(_filteredTracks.first);
+                    }
+                  },
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF1C1C1E),
+                    ),
+                    child: Icon(
+                      showPause ? Icons.pause : Icons.play_arrow,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                );
               },
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFF1C1C1E),
-                ),
-                child: Icon(
-                  playerState.isPlaying && playerState.currentTrackPath != null
-                      ? Icons.pause
-                      : Icons.play_arrow,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
             ),
           ),
         ],
@@ -435,7 +458,8 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                     itemBuilder: (context, index) {
                       final track = _filteredTracks[index];
                       final isCurrentTrack =
-                          playerState.currentTrackPath == track.audioFilePath;
+                          track.id != null &&
+                          playerState.currentTrack?.id == track.id;
 
                       return Padding(
                         padding: const EdgeInsets.symmetric(
@@ -462,16 +486,31 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                                     color: const Color(0xFF3A3A3C),
                                     borderRadius: BorderRadius.circular(4),
                                   ),
-                                  child: track.coverImagePath != null
-                                      ? Image.file(
-                                          File(track.coverImagePath!),
-                                          fit: BoxFit.cover,
+                                  child: track.artworkUrl != null &&
+                                          track.artworkUrl!.isNotEmpty
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: CachedNetworkImage(
+                                            imageUrl: track.artworkUrl!,
+                                            fit: BoxFit.cover,
+                                            errorWidget: (_, __, ___) =>
+                                                const Icon(
+                                              Icons.graphic_eq,
+                                              color: Colors.white,
+                                              size: 24,
+                                            ),
+                                          ),
                                         )
-                                      : const Icon(
-                                          Icons.graphic_eq,
-                                          color: Colors.white,
-                                          size: 24,
-                                        ),
+                                      : track.coverImagePath != null
+                                          ? Image.file(
+                                              File(track.coverImagePath!),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : const Icon(
+                                              Icons.graphic_eq,
+                                              color: Colors.white,
+                                              size: 24,
+                                            ),
                                 ),
                                 const SizedBox(width: 12),
                                 // Track info

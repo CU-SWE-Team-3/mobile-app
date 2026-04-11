@@ -61,7 +61,9 @@ class DioClient {
                     final newToken = cookie.split(';')[0].split('=')[1];
                     setAuthToken(newToken);
                     await refreshPrefs.setString('accessToken', newToken);
-                    break;
+                  } else if (cookie.startsWith('refreshToken=')) {
+                    final newRefreshToken = cookie.split(';')[0].split('=')[1];
+                    await refreshPrefs.setString('refreshToken', newRefreshToken);
                   }
                 }
               }

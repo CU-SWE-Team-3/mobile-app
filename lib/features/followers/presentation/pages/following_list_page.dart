@@ -1,11 +1,13 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 
 class FollowingListPage extends StatefulWidget {
-  const FollowingListPage({super.key});
+  final String? targetUserId;
+  const FollowingListPage({super.key, this.targetUserId});
 
   @override
   State<FollowingListPage> createState() => _FollowingListPageState();
@@ -33,8 +35,9 @@ class _FollowingListPageState extends State<FollowingListPage> {
     try {
       final userId = await UserSession.getUserId();
       if (userId == null) throw Exception('Not logged in');
+      final fetchId = widget.targetUserId ?? userId;
       final response = await dioClient.dio
-          .get('/network/$userId/following?page=1&limit=20');
+          .get('/network/$fetchId/following?page=1&limit=20');
       final data = response.data['data'] as List;
       final users = data.cast<Map<String, dynamic>>();
       setState(() {
@@ -47,6 +50,24 @@ class _FollowingListPageState extends State<FollowingListPage> {
         _isLoading = false;
         _hasError = true;
       });
+    }
+  }
+
+  Future<void> _navigateToProfile(
+    BuildContext context, {
+    required String userId,
+    required String permalink,
+    required String displayName,
+  }) async {
+    final myId = await UserSession.getUserId() ?? '';
+    if (!context.mounted) return;
+    if (myId.isNotEmpty && myId == userId) {
+      context.push('/profile');
+    } else {
+      context.push(
+        '/user/$permalink',
+        extra: {'displayName': displayName, 'userId': userId},
+      );
     }
   }
 
@@ -136,6 +157,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
               : Column(
                   children: [
                     const SizedBox(height: 12),
+                    if (widget.targetUserId == null)
                     // "True friends" banner
                     GestureDetector(
                       onTap: () => Navigator.push(
@@ -191,6 +213,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
                         ),
                       ),
                     ),
+                    if (widget.targetUserId == null)
                     const SizedBox(height: 12),
                     Expanded(
                       child: _users.isEmpty
@@ -211,6 +234,12 @@ class _FollowingListPageState extends State<FollowingListPage> {
                                   isFollowing: _followingIds.contains(id),
                                   isLoading: _loadingIds.contains(id),
                                   onToggle: () => _toggleFollow(id),
+                                  onTap: () => _navigateToProfile(
+                                    context,
+                                    userId: id,
+                                    permalink: user['permalink'] as String? ?? id,
+                                    displayName: user['displayName'] as String? ?? '',
+                                  ),
                                 );
                               },
                             ),
@@ -224,8 +253,115 @@ class _FollowingListPageState extends State<FollowingListPage> {
 // ─────────────────────────────────────────────
 //  TRUE FRIENDS PAGE (mutual followers)
 // ─────────────────────────────────────────────
-class _TrueFriendsPage extends StatelessWidget {
+class _TrueFriendsPage extends StatefulWidget {
   const _TrueFriendsPage();
+
+  @override
+  State<_TrueFriendsPage> createState() => _TrueFriendsPageState();
+}
+
+class _TrueFriendsPageState extends State<_TrueFriendsPage> {
+  List<Map<String, dynamic>> _mutuals = [];
+  final Set<String> _followingIds = {};
+  final Set<String> _loadingIds = {};
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMutuals();
+  }
+
+  Future<void> _fetchMutuals() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
+    try {
+      final myId = await UserSession.getUserId();
+      if (myId == null) throw Exception('Not logged in');
+
+      final results = await Future.wait([
+        dioClient.dio.get('/network/$myId/followers?page=1&limit=100'),
+        dioClient.dio.get('/network/$myId/following?page=1&limit=100'),
+      ]);
+
+      final followersData = results[0].data['data'] as List;
+      final followingData = results[1].data['data'] as List;
+
+      final followingIds = followingData
+          .map((u) => u['_id'] as String?)
+          .whereType<String>()
+          .toSet();
+
+      final mutuals = followersData
+          .cast<Map<String, dynamic>>()
+          .where((u) => followingIds.contains(u['_id'] as String?))
+          .toList();
+
+      setState(() {
+        _mutuals = mutuals;
+        _followingIds.clear();
+        _followingIds.addAll(mutuals.map((u) => u['_id'] as String));
+        _isLoading = false;
+      });
+    } on DioException catch (_) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    } catch (_) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    }
+  }
+
+  Future<void> _navigateToProfile(
+    BuildContext context, {
+    required String userId,
+    required String permalink,
+    required String displayName,
+  }) async {
+    final myId = await UserSession.getUserId() ?? '';
+    if (!context.mounted) return;
+    if (myId.isNotEmpty && myId == userId) {
+      context.push('/profile');
+    } else {
+      context.push(
+        '/user/$permalink',
+        extra: {'displayName': displayName, 'userId': userId},
+      );
+    }
+  }
+
+  Future<void> _toggleFollow(String userId) async {
+    if (_loadingIds.contains(userId)) return;
+    final isFollowing = _followingIds.contains(userId);
+    setState(() => _loadingIds.add(userId));
+    try {
+      if (isFollowing) {
+        await dioClient.dio.delete('/network/$userId/follow');
+        setState(() => _followingIds.remove(userId));
+      } else {
+        await dioClient.dio.post('/network/$userId/follow');
+        setState(() => _followingIds.add(userId));
+      }
+    } on DioException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action failed. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingIds.remove(userId));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -255,12 +391,55 @@ class _TrueFriendsPage extends StatelessWidget {
               onPressed: () {}),
         ],
       ),
-      body: Center(
-        child: Text(
-          'No mutual followers yet',
-          style: TextStyle(color: Colors.grey[600], fontSize: 15),
-        ),
-      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF5500)))
+          : _hasError
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Couldn't load mutual followers",
+                        style: TextStyle(color: Colors.grey[400], fontSize: 15),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _fetchMutuals,
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF5500)),
+                        child: const Text('Retry',
+                            style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                )
+              : _mutuals.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No mutual followers yet',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 15),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: _mutuals.length,
+                      itemBuilder: (context, i) {
+                        final user = _mutuals[i];
+                        final id = user['_id'] as String;
+                        return _UserTile(
+                          user: user,
+                          isFollowing: _followingIds.contains(id),
+                          isLoading: _loadingIds.contains(id),
+                          onToggle: () => _toggleFollow(id),
+                          onTap: () => _navigateToProfile(
+                            context,
+                            userId: id,
+                            permalink: user['permalink'] as String? ?? id,
+                            displayName: user['displayName'] as String? ?? '',
+                          ),
+                        );
+                      },
+                    ),
     );
   }
 }
@@ -273,12 +452,14 @@ class _UserTile extends StatelessWidget {
   final bool isFollowing;
   final bool isLoading;
   final VoidCallback onToggle;
+  final VoidCallback onTap;
 
   const _UserTile({
     required this.user,
     required this.isFollowing,
     required this.isLoading,
     required this.onToggle,
+    required this.onTap,
   });
 
   @override
@@ -293,7 +474,7 @@ class _UserTile extends StatelessWidget {
         avatarUrl.contains('default-avatar');
 
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         child: Row(

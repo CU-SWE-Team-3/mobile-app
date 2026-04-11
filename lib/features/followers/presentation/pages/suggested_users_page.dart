@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 
@@ -45,6 +46,25 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
         _isLoading = false;
         _hasError = true;
       });
+    }
+  }
+
+  Future<void> _navigateToProfile(
+    BuildContext context, {
+    required String userId,
+    required String permalink,
+    required String displayName,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final myId = prefs.getString('userId') ?? '';
+    if (!context.mounted) return;
+    if (myId.isNotEmpty && myId == userId) {
+      context.push('/profile');
+    } else {
+      context.push(
+        '/user/$permalink',
+        extra: {'displayName': displayName, 'userId': userId},
+      );
     }
   }
 
@@ -139,7 +159,15 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
                         final isFollowing = _followingIds.contains(id);
                         final isButtonLoading = _loadingIds.contains(id);
 
-                        return Padding(
+                        final permalink = user['permalink'] as String? ?? id;
+                        return InkWell(
+                          onTap: () => _navigateToProfile(
+                            context,
+                            userId: id,
+                            permalink: permalink,
+                            displayName: displayName,
+                          ),
+                          child: Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 10),
                           child: Row(
@@ -242,6 +270,7 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
                                 ),
                               ),
                             ],
+                          ),
                           ),
                         );
                       },

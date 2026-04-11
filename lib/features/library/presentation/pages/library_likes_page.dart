@@ -162,8 +162,10 @@ class _LikeTile extends ConsumerWidget {
                   id: track.id,
                   title: track.title,
                   artist: track.artistName,
+                  artistId: track.artistId,
                   audioUrl: track.audioUrl!,
                   coverUrl: track.artworkUrl,
+                  waveform: track.waveform,
                 ),
               );
           context.push('/player');

@@ -9,21 +9,25 @@ class TrackSummary {
   final String id;
   final String title;
   final String artistName;
+  final String? artistId;
   final String? artworkUrl;
   final String? audioUrl;
   final int playCount;
   final int likeCount;
   final int repostCount;
+  final List<int>? waveform;
 
   const TrackSummary({
     required this.id,
     required this.title,
     required this.artistName,
+    this.artistId,
     this.artworkUrl,
     this.audioUrl,
     this.playCount = 0,
     this.likeCount = 0,
     this.repostCount = 0,
+    this.waveform,
   });
 
   factory TrackSummary.fromJson(Map<String, dynamic> json) {
@@ -33,6 +37,7 @@ class TrackSummary {
       id: id,
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       audioUrl: json['audioUrl'] as String? ??
           json['streamUrl'] as String? ??
@@ -42,6 +47,9 @@ class TrackSummary {
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
     );
   }
 }
