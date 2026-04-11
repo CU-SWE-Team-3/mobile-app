@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/follow_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
@@ -59,17 +60,17 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
           ),
           const SizedBox(width: 10),
 
-          // Center: track title + artist — tapping navigates to /player
+          // Center: title taps to expand player; artist taps to profile
           Expanded(
-            child: GestureDetector(
-              key: const ValueKey('mini_player_expand_button'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => context.push('/player'),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  key: const ValueKey('mini_player_expand_button'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => context.push('/player'),
+                  child: Text(
                     currentTrack.title,
                     style: const TextStyle(
                       color: Colors.white,
@@ -78,13 +79,30 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    final id = currentTrack.artistId;
+                    final permalink = currentTrack.artistPermalink;
+                    if (id != null && permalink != null) {
+                      navigateToUserProfile(
+                        context,
+                        userId: id,
+                        permalink: permalink,
+                        displayName: currentTrack.artist,
+                      );
+                    } else {
+                      context.push('/player');
+                    }
+                  },
+                  child: Text(
                     currentTrack.artist,
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 

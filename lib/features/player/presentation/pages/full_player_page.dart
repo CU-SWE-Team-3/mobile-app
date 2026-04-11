@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/network/user_session.dart';
+import '../../../../core/utils/profile_navigation.dart';
 import '../providers/follow_provider.dart';
 import '../providers/player_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
@@ -19,13 +21,16 @@ class FullPlayerPage extends ConsumerStatefulWidget {
 class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
   late final TextEditingController _commentController;
   late final FocusNode _commentFocus;
+  String? _myUserId;
 
   @override
   void initState() {
     super.initState();
     _commentController = TextEditingController();
     _commentFocus = FocusNode();
-
+    UserSession.getUserId().then((id) {
+      if (mounted) setState(() => _myUserId = id);
+    });
   }
 
   @override
@@ -145,18 +150,17 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         icon: Icons.keyboard_arrow_down,
                         onTap: () => context.pop(),
                       ),
-                      _CircleButton(
-                        key: const ValueKey('player_follow_button'),
-                        icon: followState.isFollowing
-                            ? Icons.person
-                            : Icons.person_add_outlined,
-                        onTap: artistId != null
-                            ? () => ref
-                                .read(followProvider(artistId).notifier)
-                                .toggle(artistId)
-                            : () {},
-                        loading: followState.isLoading,
-                      ),
+                      if (artistId != null &&
+                          artistId != _myUserId &&
+                          !followState.isFollowing)
+                        _CircleButton(
+                          key: const ValueKey('player_follow_button'),
+                          icon: Icons.person_add_outlined,
+                          onTap: () => ref
+                              .read(followProvider(artistId).notifier)
+                              .toggle(artistId),
+                          loading: followState.isLoading,
+                        ),
                     ],
                   ),
                 ),
@@ -178,10 +182,26 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        playerState.currentTrackArtist ?? '',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 15),
+                      GestureDetector(
+                        onTap: () {
+                          final id = playerState.currentTrack?.artistId;
+                          final permalink =
+                              playerState.currentTrack?.artistPermalink;
+                          if (id != null && permalink != null) {
+                            navigateToUserProfile(
+                              context,
+                              userId: id,
+                              permalink: permalink,
+                              displayName:
+                                  playerState.currentTrackArtist ?? '',
+                            );
+                          }
+                        },
+                        child: Text(
+                          playerState.currentTrackArtist ?? '',
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 15),
+                        ),
                       ),
                       const SizedBox(height: 10),
                       GestureDetector(
@@ -469,7 +489,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                             : Icons.favorite_border,
                         iconColor:
                             engState.isLiked ? Colors.orange : Colors.white,
-                        label: '',
+                        label: engState.likeCount > 0
+                            ? '${engState.likeCount}'
+                            : '',
                         onTap: engState.isLoadingLike || trackId == null
                             ? () {}
                             : () => ref
@@ -482,7 +504,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         iconColor: engState.isReposted
                             ? Colors.orange
                             : Colors.white,
-                        label: '',
+                        label: engState.repostCount > 0
+                            ? '${engState.repostCount}'
+                            : '',
                         onTap: engState.isLoadingRepost || trackId == null
                             ? () {}
                             : () => ref

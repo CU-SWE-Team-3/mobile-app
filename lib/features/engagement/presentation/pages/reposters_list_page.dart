@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/utils/profile_navigation.dart';
 import '../../../../injection_container.dart';
 import '../../data/models/liker_user_model.dart';
 import '../../data/sources/engagement_remote_data_source.dart';
@@ -74,6 +75,13 @@ class _UserTile extends StatelessWidget {
         user.avatarUrl!.isNotEmpty &&
         user.avatarUrl!.startsWith('http');
     return ListTile(
+      key: const ValueKey('reposters_user_tile'),
+      onTap: () => navigateToUserProfile(
+        context,
+        userId: user.id,
+        permalink: user.permalink,
+        displayName: user.displayName,
+      ),
       leading: CircleAvatar(
         radius: 22,
         backgroundColor: const Color(0xFF2A2A2A),

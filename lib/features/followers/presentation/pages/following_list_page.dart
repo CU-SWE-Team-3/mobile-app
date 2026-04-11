@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
+import '../../../../core/utils/profile_navigation.dart';
 
 class FollowingListPage extends StatefulWidget {
   const FollowingListPage({super.key});
@@ -293,7 +294,18 @@ class _UserTile extends StatelessWidget {
         avatarUrl.contains('default-avatar');
 
     return InkWell(
-      onTap: () {},
+      onTap: () {
+        final permalink = user['permalink'] as String?;
+        final id = user['_id'] as String? ?? '';
+        if (permalink != null && permalink.isNotEmpty) {
+          navigateToUserProfile(
+            context,
+            userId: id,
+            permalink: permalink,
+            displayName: displayName,
+          );
+        }
+      },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         child: Row(
