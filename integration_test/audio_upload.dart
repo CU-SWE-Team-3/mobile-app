@@ -14,20 +14,32 @@ import 'helpers/test_data.dart';
 // Owner: Abdelrahman Osama
 // Phase 3 — Real server, no mock.
 //
+// API Upload Flow (6 steps):
+//   1. POST  /tracks/upload            → {trackId, uploadUrl (SAS, 15-min)}
+//   2. PUT   <Azure SAS URL>           → binary upload (client-side, with progress)
+//   3. PATCH /tracks/{id}/confirm      → triggers FFmpeg (HLS + waveform)
+//   4. PATCH /tracks/{id}/metadata     → title, genre, description, tags, releaseDate
+//   5. PATCH /tracks/{id}/artwork      → cover image (optional multipart)
+//   6. GET   /tracks/{permalink} poll  → wait for processingState == "Finished"
+//
+// Supported audio formats: audio/mpeg, audio/mp3, audio/wav, audio/x-wav, audio/wave
+// Track visibility: isPublic=true (searchable) | isPublic=false (link-only)
+// Waveform: generated server-side (150 normalised peak values 0–100)
+//
 // IMPORTANT — FilePicker & ImagePicker:
 //   Both open native OS dialogs that cannot be driven by the Flutter
-//   test framework. Any test that requires actual file selection is
-//   marked skip: true and documented for Phase 4 mock injection.
+//   test framework. Tests requiring actual file selection are marked
+//   skip:true and documented for Phase 4 mock injection.
 //
-// All tests use find.byKey(ValueKey('...')) where Keys exist in the
-//   source, and find.text() / find.byType() as fallback.
+// Active Routes (confirmed from app_router.dart):
+//   /upload                   → UploadEditPage   (metadata form, new upload)
+//   /upload/progress          → UploadProgressPage
+//   /library/uploads          → LibraryUploadsPage (GET /tracks/my-tracks)
+//   /library/uploads/edit     → UploadEditPage   (same widget, edit-metadata mode)
+//   /library/uploads/progress → UploadProgressPage
 //
-// Routes (confirmed from app_router.dart):
-//   /upload              → UploadPage        (Choose Audio File screen)
-//   /upload/edit         → UploadEditPage    (metadata form — needs file first)
-//   /upload/progress     → UploadProgressPage
-//   /library/uploads     → LibraryUploadsPage
-//   /library/uploads/edit → EditTrackPage
+// NOTE: UploadPage (upload_page.dart) and EditTrackPage (edit_track_page.dart)
+//   are not registered in the router and are therefore NOT tested here.
 // ─────────────────────────────────────────────────────────────────
 
 void main() {
@@ -49,14 +61,13 @@ void main() {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // bootAndLogin — launches app with real server, logs in, writes
-  // userId + role=artist to prefs so upload pages don't gate-keep.
+  // bootAndLogin — launches app, logs in with real server, writes
+  // role=artist so upload guards don't block.
   // ─────────────────────────────────────────────────────────────
   Future<void> bootAndLogin(WidgetTester tester) async {
     app.main();
     await Future.delayed(const Duration(seconds: 2));
 
-    // Wait for start screen — recover from any leftover screen
     for (var i = 0; i < 40; i++) {
       await tester.pumpAndSettle(const Duration(milliseconds: 500));
       final onStart = find.text('Log in').evaluate().isNotEmpty &&
@@ -68,115 +79,280 @@ void main() {
 
     await loginAs(tester, validEmail, validPassword);
 
-    // Write userId and role=artist so upload pages don't block
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userId', 'test_user_id');
     await prefs.setString('displayName', validName);
-    await prefs.setString('role', 'artist'); // required by _pickAndUpload guard
+    await prefs.setString('role', 'artist');
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // Navigation helpers
-  // ─────────────────────────────────────────────────────────────
   Future<void> goTo(WidgetTester tester, String route) async {
     appRouter.push(route);
     await tester.pumpAndSettle(const Duration(seconds: 4));
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // GROUP: UploadPage — /upload  (Choose Audio File screen)
+  // GROUP 1: UploadEditPage — /upload
+  // Entry point for new track uploads. Collects metadata sent to:
+  //   POST /tracks/upload → format, size, duration (required)
+  //   PATCH /tracks/{id}/metadata → title, genre, description, tags, releaseDate
+  //   PATCH /tracks/{id}/artwork  → cover image (optional)
+  // On submit → navigates to /upload/progress
   // ═══════════════════════════════════════════════════════════════
-  group('Upload page — /upload', () {
+  group('Upload edit page — /upload', () {
 
-    testWidgets('should show Upload Your Track title', (tester) async {
+    testWidgets('should show title field', (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/upload');
 
-      // Act — no action needed
-
-      // Assert
-      expect(find.text('Upload Your Track'), findsOneWidget);
+      // Assert — title is required by POST /tracks/upload
+      expect(
+        find.byKey(const ValueKey('upload_track_title_field')),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('should show Choose Audio File button with correct key',
+    testWidgets('should show Upload Track submit button', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — triggers the 6-step upload flow
+      expect(
+        find.byKey(const ValueKey('upload_track_submit_button')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should show description field', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — maps to PATCH /tracks/{id}/metadata description field
+      expect(
+        find.byKey(const ValueKey('upload_description_field')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should show tags field', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — maps to PATCH /tracks/{id}/metadata tags array
+      expect(
+        find.byKey(const ValueKey('upload_tags_field')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should show cover image button', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — triggers PATCH /tracks/{id}/artwork (optional)
+      expect(
+        find.byKey(const ValueKey('upload_cover_image_button')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should show Replace file button', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — allows re-selecting a different audio file before upload
+      expect(
+        find.byKey(const ValueKey('upload_replace_file_button')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should show release date field', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — maps to releaseDate in PATCH /tracks/{id}/metadata
+      expect(
+        find.byKey(const ValueKey('upload_track_release_date_field')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should show genre picker', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — maps to genre in PATCH /tracks/{id}/metadata
+      expect(
+        find.byKey(const ValueKey('upload_genre_picker')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('should show Public privacy option', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — isPublic=true: track is searchable (PATCH /tracks/{id}/visibility)
+      expect(find.text('Public'), findsOneWidget);
+    });
+
+    testWidgets('should show Unlisted (Private) privacy option', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Assert — isPublic=false: track accessible via link only
+      expect(find.text('Unlisted (Private)'), findsOneWidget);
+    });
+
+    testWidgets('should default privacy to Public (isPublic = true)',
         (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/upload');
 
-      // Act — no action needed
-
-      // Assert — uses ValueKey confirmed in upload_page.dart
+      // Assert — API default: isPublic=true; check icon appears next to Public row
+      expect(find.text('Public'), findsOneWidget);
+      expect(find.text('Unlisted (Private)'), findsOneWidget);
       expect(
-        find.byKey(const ValueKey('upload_track_pick_file_button')),
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Public'),
+            matching: find.byType(GestureDetector),
+          ),
+          matching: find.byIcon(Icons.check),
+        ),
         findsOneWidget,
       );
     });
 
-    testWidgets('should show Cancel button with correct key', (tester) async {
+    testWidgets('should add a tag when text is entered and add button tapped',
+        (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/upload');
 
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('upload_track_cancel_button')),
-        findsOneWidget,
+      // Act — type a tag and tap add
+      await tester.enterText(
+        find.byKey(const ValueKey('upload_tags_field')),
+        'indie',
       );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('upload_add_tag_button')));
+      await tester.pumpAndSettle();
+
+      // Assert — tag chip appears; sent as tags[] array in PATCH /tracks/{id}/metadata
+      expect(find.text('indie'), findsOneWidget);
     });
 
-    testWidgets('should show upload_file icon', (tester) async {
-      // Arrange
+    testWidgets('should remove tag when close button tapped', (tester) async {
+      // Arrange — add a tag first
       await bootAndLogin(tester);
       await goTo(tester, '/upload');
+      await tester.enterText(
+        find.byKey(const ValueKey('upload_tags_field')),
+        'pop',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('upload_add_tag_button')));
+      await tester.pumpAndSettle();
 
-      // Act — no action needed
+      // Act
+      await tester.tap(find.byKey(const ValueKey('upload_tag_remove_button')));
+      await tester.pumpAndSettle();
 
       // Assert
-      expect(find.byIcon(Icons.upload_file), findsOneWidget);
+      expect(find.text('pop'), findsNothing);
     });
 
-    testWidgets('should navigate back when Cancel tapped', (tester) async {
+    testWidgets('should open genre picker sheet when genre chip tapped',
+        (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/upload');
 
       // Act
+      await tester.tap(find.byKey(const ValueKey('upload_genre_picker')));
+      await tester.pumpAndSettle();
+
+      // Assert — searchable genre list sheet shown
+      expect(find.text('Select Genre'), findsOneWidget);
+    });
+
+    testWidgets('should navigate back when Replace file button tapped',
+        (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Act — Replace file pops the current page to re-select audio
       await tester.tap(
-        find.byKey(const ValueKey('upload_track_cancel_button')),
+        find.byKey(const ValueKey('upload_replace_file_button')),
       );
       await tester.pumpAndSettle();
 
-      // Assert — page is gone
-      expect(find.text('Upload Your Track'), findsNothing);
+      // Assert — upload edit page gone
+      expect(
+        find.byKey(const ValueKey('upload_track_submit_button')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('should navigate back when back button tapped', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload');
+
+      // Act
+      await tester.tap(find.byKey(const ValueKey('upload_back_button')));
+      await tester.pumpAndSettle();
+
+      // Assert
+      expect(
+        find.byKey(const ValueKey('upload_track_submit_button')),
+        findsNothing,
+      );
     });
 
     testWidgets(
-      'Choose Audio File button is tappable (FilePicker native — skip)',
+      'cover image button is tappable (ImagePicker native — skip)',
       (tester) async {
         // Arrange
         await bootAndLogin(tester);
         await goTo(tester, '/upload');
 
-        // Act — tap the button (FilePicker opens native OS dialog)
+        // Act — opens native image picker; cannot be driven in test framework
         await tester.tap(
-          find.byKey(const ValueKey('upload_track_pick_file_button')),
+          find.byKey(const ValueKey('upload_cover_image_button')),
         );
         await tester.pumpAndSettle(const Duration(seconds: 2));
 
         // Assert — button was tappable (no crash)
-        expect(find.text('Upload Your Track'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('upload_track_submit_button')),
+          findsOneWidget,
+        );
       },
-      skip: true, // Phase 4: inject mock FilePicker — native dialog blocks test
+      skip: true, // Phase 4: inject mock ImagePicker — native dialog blocks test
     );
 
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // GROUP: LibraryUploadsPage — /library/uploads
+  // GROUP 2: LibraryUploadsPage — /library/uploads
+  // Calls GET /tracks/my-tracks → all Finished tracks for the user.
+  // Track tiles show processingState != "Finished" with a spinner.
+  // Options sheet: play, edit (→ /library/uploads/edit), change
+  // visibility (PATCH /tracks/{id}/visibility), delete (DELETE /tracks/{id}).
   // ═══════════════════════════════════════════════════════════════
   group('Library uploads page — /library/uploads', () {
 
@@ -185,20 +361,16 @@ void main() {
       await bootAndLogin(tester);
       await goTo(tester, '/library/uploads');
 
-      // Act — no action needed
-
       // Assert
       expect(find.text('Your Uploads'), findsOneWidget);
     });
 
-    testWidgets('should show search field with correct key', (tester) async {
+    testWidgets('should show search field', (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/library/uploads');
 
-      // Act — no action needed
-
-      // Assert
+      // Assert — filters GET /tracks/my-tracks results client-side
       expect(
         find.byKey(const ValueKey('uploads_search_field')),
         findsOneWidget,
@@ -210,8 +382,6 @@ void main() {
       await bootAndLogin(tester);
       await goTo(tester, '/library/uploads');
 
-      // Act — no action needed
-
       // Assert
       expect(find.text('No Amplify credits'), findsOneWidget);
     });
@@ -221,20 +391,16 @@ void main() {
       await bootAndLogin(tester);
       await goTo(tester, '/library/uploads');
 
-      // Act — no action needed
-
       // Assert
       expect(find.text('24/120 mins used'), findsOneWidget);
     });
 
-    testWidgets('should show upload FAB with correct key', (tester) async {
+    testWidgets('should show upload FAB', (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/library/uploads');
 
-      // Act — no action needed
-
-      // Assert
+      // Assert — FAB opens file picker then navigates to /upload
       expect(find.byKey(const ValueKey('uploads_add_fab')), findsOneWidget);
     });
 
@@ -244,14 +410,14 @@ void main() {
         // Arrange — override prefs to non-artist role
         await bootAndLogin(tester);
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('role', 'user'); // not artist
+        await prefs.setString('role', 'user');
         await goTo(tester, '/library/uploads');
 
-        // Act — tap FAB which checks role before opening FilePicker
+        // Act — FAB checks role before opening FilePicker
         await tester.tap(find.byKey(const ValueKey('uploads_add_fab')));
         await tester.pumpAndSettle();
 
-        // Assert — dialog shown instead of FilePicker
+        // Assert — role gate shown; use PATCH /profile/tier to upgrade
         expect(find.text('Artist Role Required'), findsOneWidget);
       },
     );
@@ -269,7 +435,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('uploads_add_fab')));
         await tester.pumpAndSettle();
 
-        // Assert
+        // Assert — calls PATCH /profile/tier {role: "artist"}
         expect(
           find.byKey(const ValueKey('uploads_role_upgrade_button')),
           findsOneWidget,
@@ -294,27 +460,27 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Assert — dialog dismissed
+        // Assert — dialog dismissed, library page remains
         expect(find.text('Artist Role Required'), findsNothing);
         expect(find.text('Your Uploads'), findsOneWidget);
       },
     );
 
     testWidgets(
-      'should type in search field and show clear button',
+      'should show clear button when search text is entered',
       (tester) async {
         // Arrange
         await bootAndLogin(tester);
         await goTo(tester, '/library/uploads');
 
-        // Act — enter search text
+        // Act
         await tester.enterText(
           find.byKey(const ValueKey('uploads_search_field')),
           'test',
         );
         await tester.pumpAndSettle();
 
-        // Assert — clear button appears
+        // Assert
         expect(
           find.byKey(const ValueKey('uploads_search_clear_button')),
           findsOneWidget,
@@ -351,18 +517,136 @@ void main() {
   });
 
   // ═══════════════════════════════════════════════════════════════
-  // GROUP: UploadEditPage — /upload/edit (metadata form)
-  // Reached after file selection — FilePicker-dependent tests skipped
-  // Static UI tests run directly by navigating to the route
+  // GROUP 3: UploadProgressPage — /upload/progress
+  // Monitors the 6-step upload + transcoding pipeline:
+  //   Uploading (10–75%) → Confirm (80%) → Metadata (85%) →
+  //   Artwork (90%) → Processing server (polled) → Finished (100%)
+  //
+  // When navigated to directly (no file in provider state), the
+  // upload attempt fails immediately → error state is shown.
   // ═══════════════════════════════════════════════════════════════
-  group('Upload edit page — /upload/edit', () {
+  group('Upload progress page — /upload/progress', () {
 
-    testWidgets('should show title field with correct key', (tester) async {
+    testWidgets('should show circular progress indicator', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
+      await goTo(tester, '/upload/progress');
 
-      // Act — no action needed
+      // Assert — 150×150 circular progress shown while uploading or processing
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
+    });
+
+    testWidgets('should show fallback track title when no track is loaded',
+        (tester) async {
+      // Arrange — provider has empty state (no file selected)
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload/progress');
+      await tester.pumpAndSettle(const Duration(seconds: 3));
+
+      // Assert — "Untitled Track" shown when UploadTrack.title is empty
+      expect(find.text('Untitled Track'), findsOneWidget);
+    });
+
+    testWidgets('should show fallback artist when no track is loaded',
+        (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload/progress');
+      await tester.pumpAndSettle(const Duration(seconds: 3));
+
+      // Assert — "Unknown Artist" shown when UploadTrack.artist is empty
+      expect(find.text('Unknown Artist'), findsOneWidget);
+    });
+
+    testWidgets('should show Try Again button on upload error', (tester) async {
+      // Arrange — no file in state → POST /tracks/upload fails → error state
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload/progress');
+      await tester.pumpAndSettle(const Duration(seconds: 3));
+
+      // Assert
+      expect(
+        find.byKey(const ValueKey('upload_progress_retry_button')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'should show back button after upload error (not during active upload)',
+        (tester) async {
+      // Arrange — PopScope blocks back nav only while isUploading==true
+      await bootAndLogin(tester);
+      await goTo(tester, '/upload/progress');
+      await tester.pumpAndSettle(const Duration(seconds: 3));
+
+      // Assert — back button visible once error state is reached
+      expect(
+        find.byKey(const ValueKey('upload_progress_back_button')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'should show View in My Uploads button after successful upload',
+      (tester) async {
+        // Cannot reach success state without a real file upload + server processing
+        await bootAndLogin(tester);
+        await goTo(tester, '/upload/progress');
+        await tester.pumpAndSettle(const Duration(seconds: 3));
+        expect(
+          find.byKey(const ValueKey('upload_progress_view_uploads_button')),
+          findsOneWidget,
+        );
+      },
+      skip: true, // Phase 4: inject mock upload provider to simulate Finished state
+    );
+
+    testWidgets(
+      'should show Upload Another Track button after successful upload',
+      (tester) async {
+        await bootAndLogin(tester);
+        await goTo(tester, '/upload/progress');
+        await tester.pumpAndSettle(const Duration(seconds: 3));
+        expect(
+          find.byKey(const ValueKey('upload_progress_upload_another_button')),
+          findsOneWidget,
+        );
+      },
+      skip: true, // Phase 4: inject mock upload provider to simulate Finished state
+    );
+
+    testWidgets(
+      'should show Artist Role Required upgrade button when role upgrade needed',
+      (tester) async {
+        // needsRoleUpgrade flag is set by PATCH /profile/tier failure path
+        await bootAndLogin(tester);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('role', 'user');
+        await goTo(tester, '/upload/progress');
+        await tester.pumpAndSettle(const Duration(seconds: 3));
+        expect(
+          find.byKey(const ValueKey('upload_progress_upgrade_button')),
+          findsOneWidget,
+        );
+      },
+      skip: true, // Phase 4: inject mock provider to force needsRoleUpgrade=true
+    );
+
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // GROUP 4: UploadEditPage (edit-metadata mode) — /library/uploads/edit
+  // Same widget as /upload. Reached via the track options sheet
+  // ("Edit" tile → /library/uploads/edit). On submit, patches:
+  //   PATCH /tracks/{id}/metadata → title, genre, description, tags, releaseDate
+  //   PATCH /tracks/{id}/artwork  → cover image (optional)
+  // ═══════════════════════════════════════════════════════════════
+  group('Upload edit page (edit mode) — /library/uploads/edit', () {
+
+    testWidgets('should show title field', (tester) async {
+      // Arrange
+      await bootAndLogin(tester);
+      await goTo(tester, '/library/uploads/edit');
 
       // Assert
       expect(
@@ -371,27 +655,22 @@ void main() {
       );
     });
 
-    testWidgets('should show Upload Track submit button with correct key',
-        (tester) async {
+    testWidgets('should show Submit/Save button', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
+      await goTo(tester, '/library/uploads/edit');
 
-      // Act — no action needed
-
-      // Assert
+      // Assert — triggers PATCH /tracks/{id}/metadata + optional artwork patch
       expect(
         find.byKey(const ValueKey('upload_track_submit_button')),
         findsOneWidget,
       );
     });
 
-    testWidgets('should show description field with correct key', (tester) async {
+    testWidgets('should show description field', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — no action needed
+      await goTo(tester, '/library/uploads/edit');
 
       // Assert
       expect(
@@ -400,12 +679,10 @@ void main() {
       );
     });
 
-    testWidgets('should show tags field with correct key', (tester) async {
+    testWidgets('should show tags field', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — no action needed
+      await goTo(tester, '/library/uploads/edit');
 
       // Assert
       expect(
@@ -414,309 +691,64 @@ void main() {
       );
     });
 
-    testWidgets('should show cover image button with correct key', (tester) async {
+    testWidgets('should show release date field', (tester) async {
       // Arrange
       await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
+      await goTo(tester, '/library/uploads/edit');
 
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('upload_cover_image_button')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('should show Replace file button with correct key', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('upload_replace_file_button')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('should show release date field with correct key', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — no action needed
-
-      // Assert
+      // Assert — releaseDate sent as ISO8601 in PATCH /tracks/{id}/metadata
       expect(
         find.byKey(const ValueKey('upload_track_release_date_field')),
         findsOneWidget,
       );
     });
 
-    testWidgets('should show genre picker chip', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('upload_genre_picker')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('should show Public privacy option', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(find.text('Public'), findsOneWidget);
-    });
-
-    testWidgets('should show Unlisted (Private) privacy option', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(find.text('Unlisted (Private)'), findsOneWidget);
-    });
-
-    testWidgets('should default privacy to Public', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — no action needed
-
-      // Assert — Public option shows check icon (isSelected=true)
-      // The check icon only renders when the option is selected
-      expect(find.byIcon(Icons.check), findsWidgets);
-    });
-
-    testWidgets('should add a tag when text is entered and add button tapped',
-        (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — type a tag and tap add
-      await tester.enterText(
-        find.byKey(const ValueKey('upload_tags_field')),
-        'indie',
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('upload_add_tag_button')));
-      await tester.pumpAndSettle();
-
-      // Assert — tag chip appears with the entered text
-      expect(find.text('indie'), findsOneWidget);
-    });
-
-    testWidgets('should remove tag when close button tapped', (tester) async {
-      // Arrange — add a tag first
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-      await tester.enterText(
-        find.byKey(const ValueKey('upload_tags_field')),
-        'pop',
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('upload_add_tag_button')));
-      await tester.pumpAndSettle();
-
-      // Act — tap the remove button on the tag chip
-      await tester.tap(find.byKey(const ValueKey('upload_tag_remove_button')));
-      await tester.pumpAndSettle();
-
-      // Assert — tag is gone
-      expect(find.text('pop'), findsNothing);
-    });
-
-    testWidgets('should open genre picker sheet when genre chip tapped',
-        (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act
-      await tester.tap(find.byKey(const ValueKey('upload_genre_picker')));
-      await tester.pumpAndSettle();
-
-      // Assert — genre picker sheet is shown
-      expect(find.text('Select Genre'), findsOneWidget);
-    });
-
-    testWidgets('should navigate back when Replace file button tapped',
-        (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act — Replace file taps context.pop()
-      await tester.tap(
-        find.byKey(const ValueKey('upload_replace_file_button')),
-      );
-      await tester.pumpAndSettle();
-
-      // Assert — upload edit page gone
-      expect(
-        find.byKey(const ValueKey('upload_track_submit_button')),
-        findsNothing,
-      );
-    });
-
-    testWidgets('should navigate back when back button tapped', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/upload/edit');
-
-      // Act
-      await tester.tap(find.byKey(const ValueKey('upload_back_button')));
-      await tester.pumpAndSettle();
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('upload_track_submit_button')),
-        findsNothing,
-      );
-    });
-
-  });
-
-  // ═══════════════════════════════════════════════════════════════
-  // GROUP: EditTrackPage — /library/uploads/edit
-  // ═══════════════════════════════════════════════════════════════
-  group('Edit track page — /library/uploads/edit', () {
-
-    testWidgets('should show title field with correct key', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/library/uploads/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('track_metadata_title_field')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('should show Save button with correct key', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/library/uploads/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('track_metadata_save_button')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('should show description field with correct key', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/library/uploads/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('edit_track_description_field')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('should show tags field with correct key', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/library/uploads/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('edit_track_tags_field')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('should show release date field with correct key', (tester) async {
-      // Arrange
-      await bootAndLogin(tester);
-      await goTo(tester, '/library/uploads/edit');
-
-      // Act — no action needed
-
-      // Assert
-      expect(
-        find.byKey(const ValueKey('track_metadata_release_date_field')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('should update title field when text entered', (tester) async {
+    testWidgets('should update title field when text is entered', (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/library/uploads/edit');
 
       // Act — enter a new title
       await tester.enterText(
-        find.byKey(const ValueKey('track_metadata_title_field')),
+        find.byKey(const ValueKey('upload_track_title_field')),
         'Updated Track Name',
       );
       await tester.pumpAndSettle();
 
-      // Assert — new title text is present
+      // Assert
       expect(find.text('Updated Track Name'), findsOneWidget);
     });
 
-    testWidgets('should add tag in edit track page', (tester) async {
+    testWidgets('should add a tag in edit mode', (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/library/uploads/edit');
 
       // Act
       await tester.enterText(
-        find.byKey(const ValueKey('edit_track_tags_field')),
+        find.byKey(const ValueKey('upload_tags_field')),
         'electronic',
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('edit_track_add_tag_button')));
+      await tester.tap(find.byKey(const ValueKey('upload_add_tag_button')));
       await tester.pumpAndSettle();
 
-      // Assert
+      // Assert — tag chip appears; will be included in tags[] array on submit
       expect(find.text('electronic'), findsOneWidget);
     });
 
-    testWidgets('should navigate back when Save tapped', (tester) async {
+    testWidgets('should navigate back when back button tapped', (tester) async {
       // Arrange
       await bootAndLogin(tester);
       await goTo(tester, '/library/uploads/edit');
 
-      // Act — Save calls context.pop()
-      await tester.tap(
-        find.byKey(const ValueKey('track_metadata_save_button')),
-      );
+      // Act
+      await tester.tap(find.byKey(const ValueKey('upload_back_button')));
       await tester.pumpAndSettle();
 
-      // Assert — edit page gone
+      // Assert — edit page gone (returns to /library/uploads)
       expect(
-        find.byKey(const ValueKey('track_metadata_save_button')),
+        find.byKey(const ValueKey('upload_track_submit_button')),
         findsNothing,
       );
     });
