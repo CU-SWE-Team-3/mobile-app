@@ -123,20 +123,41 @@ class ProfileTracksPage extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  GestureDetector(
-                    key: const ValueKey('profile_tracks_play_all_button'),
-                    onTap: () => _playFrom(ref, playable, 0),
-                    child: Container(
-                      width: 52,
-                      height: 52,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
+                  Builder(builder: (context) {
+                    final playerState = ref.watch(playerProvider);
+                    final currentId = playerState.currentTrack?.id;
+                    final isFromHere = currentId != null &&
+                        playable.any((t) => t.id == currentId);
+                    final showPause = isFromHere && playerState.isPlaying;
+
+                    return GestureDetector(
+                      key: const ValueKey('profile_tracks_play_all_button'),
+                      onTap: () {
+                        if (isFromHere) {
+                          ref
+                              .read(playerProvider.notifier)
+                              .togglePlayPause();
+                        } else if (playable.isNotEmpty) {
+                          _playFrom(ref, playable, 0);
+                        }
+                      },
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          showPause
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          color: Colors.black,
+                          size: 28,
+                        ),
                       ),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          color: Colors.black, size: 28),
-                    ),
-                  ),
+                    );
+                  }),
                 ],
               ),
             ),
