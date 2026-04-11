@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/utils/profile_navigation.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -192,7 +193,14 @@ class _UserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final showImage = !_isDefaultAvatar(user.avatarUrl);
 
-    return Container(
+    return GestureDetector(
+      onTap: () => navigateToUserProfile(
+        context,
+        userId: user.id,
+        permalink: user.permalink,
+        displayName: user.displayName,
+      ),
+      child: Container(
       width: 130,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -308,6 +316,7 @@ class _UserCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

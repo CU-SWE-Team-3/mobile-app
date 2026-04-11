@@ -8,6 +8,64 @@ import 'package:soundcloud_clone/features/library/domain/entities/upload_track.d
 import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
+// ── Local model ───────────────────────────────────────────────────────────────
+
+class _MyTrack {
+  final String id;
+  final String title;
+  final String artistName;
+  final String? artistId;
+  final String? artistPermalink;
+  final String? artworkUrl;
+  final String hlsUrl;
+  final List<int>? waveform;
+  final Duration? duration;
+
+  const _MyTrack({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    required this.artworkUrl,
+    required this.hlsUrl,
+    this.artistId,
+    this.artistPermalink,
+    this.waveform,
+    this.duration,
+  });
+
+  factory _MyTrack.fromJson(Map<String, dynamic> json) {
+    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final durationRaw = json['duration'];
+    return _MyTrack(
+      id: json['_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
+      artistPermalink: artist['permalink'] as String?,
+      artworkUrl: json['artworkUrl'] as String?,
+      hlsUrl: json['hlsUrl'] as String? ?? '',
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      duration: durationRaw != null
+          ? Duration(seconds: (durationRaw as num).toInt())
+          : null,
+    );
+  }
+
+  PlayerTrack toPlayerTrack() => PlayerTrack(
+        id: id,
+        title: title,
+        artist: artistName,
+        audioUrl: hlsUrl,
+        coverUrl: artworkUrl,
+        waveform: waveform,
+        duration: duration,
+        artistId: artistId,
+        artistPermalink: artistPermalink,
+      );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 class ProfileTracksPage extends ConsumerWidget {

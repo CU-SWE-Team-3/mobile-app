@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
+import '../../../../core/utils/profile_navigation.dart';
 
 class FollowingListPage extends StatefulWidget {
   final String? targetUserId;

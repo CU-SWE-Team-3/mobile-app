@@ -1,8 +1,8 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/utils/profile_navigation.dart';
 
 class SearchResultsUsersPage extends StatefulWidget {
   const SearchResultsUsersPage({super.key});
@@ -189,11 +189,12 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                                     key: const ValueKey('search_users_tile'),
                                     onTap: () {
                                       if (permalink.isNotEmpty) {
-                                        context.push('/user/$permalink',
-                                            extra: {
-                                              'userId': userId,
-                                              'displayName': displayName,
-                                            });
+                                        navigateToUserProfile(
+                                          context,
+                                          userId: userId,
+                                          permalink: permalink,
+                                          displayName: displayName,
+                                        );
                                       }
                                     },
                                     child: Padding(

@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/pages/likers_list_page.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/pages/reposters_list_page.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/like_button.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/repost_button.dart';
 
@@ -15,6 +18,7 @@ class _FeedTrack {
   final String title;
   final String artistName;
   final String? artistId;
+  final String? artistPermalink;
   final String? artworkUrl;
   final String hlsUrl;
   final int playCount;
@@ -32,6 +36,7 @@ class _FeedTrack {
     required this.hlsUrl,
     required this.playCount,
     this.artistId,
+    this.artistPermalink,
     this.likeCount = 0,
     this.repostCount = 0,
     this.isLiked = false,
@@ -46,6 +51,7 @@ class _FeedTrack {
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
       artistId: artist['_id'] as String?,
+      artistPermalink: artist['permalink'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       hlsUrl: json['hlsUrl'] as String? ?? '',
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
@@ -374,6 +380,7 @@ class _TrackRow extends ConsumerWidget {
                   title: t.title,
                   artist: t.artistName,
                   artistId: t.artistId,
+                  artistPermalink: t.artistPermalink,
                   audioUrl: t.hlsUrl,
                   coverUrl: t.artworkUrl,
                   waveform: t.waveform,
@@ -431,13 +438,27 @@ class _TrackRow extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    track.artistName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF999999),
-                      fontSize: 12,
+                  GestureDetector(
+                    onTap: () {
+                      final id = track.artistId;
+                      final permalink = track.artistPermalink;
+                      if (id != null && permalink != null) {
+                        navigateToUserProfile(
+                          context,
+                          userId: id,
+                          permalink: permalink,
+                          displayName: track.artistName,
+                        );
+                      }
+                    },
+                    child: Text(
+                      track.artistName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF999999),
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -459,17 +480,66 @@ class _TrackRow extends ConsumerWidget {
                 initialIsLiked: track.isLiked,
                 initialLikeCount: track.likeCount,
                 iconSize: 20,
+                showCount: true,
               ),
               RepostButton(
                 trackId: track.id,
                 initialIsReposted: track.isReposted,
                 initialRepostCount: track.repostCount,
                 iconSize: 20,
+                showCount: true,
               ),
             ],
             IconButton(
               key: const ValueKey('home_track_more_button'),
-              onPressed: () {},
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: const Color(0xFF1E1E1E),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  builder: (_) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.favorite_border,
+                            color: Colors.white70),
+                        title: const Text('People who liked this track',
+                            style: TextStyle(color: Colors.white)),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  LikersListPage(trackId: track.id),
+                            ),
+                          );
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.repeat,
+                            color: Colors.white70),
+                        title: const Text('People who reposted this track',
+                            style: TextStyle(color: Colors.white)),
+                        onTap: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  RepostersListPage(trackId: track.id),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                );
+              },
               icon: const Icon(
                 Icons.more_vert,
                 color: Color(0xFF999999),

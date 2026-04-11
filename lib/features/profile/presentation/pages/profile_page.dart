@@ -13,6 +13,72 @@ import 'package:soundcloud_clone/features/library/presentation/providers/my_trac
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/injection_container.dart';
 
+// ── API track model ───────────────────────────────────────────────────────────
+
+class _ApiTrack {
+  final String id;
+  final String title;
+  final String artistName;
+  final String? artistId;
+  final String? artistPermalink;
+  final String? artworkUrl;
+  final String hlsUrl;
+  final List<int>? waveform;
+  final int? durationSeconds;
+
+  const _ApiTrack({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    required this.artworkUrl,
+    required this.hlsUrl,
+    this.artistId,
+    this.artistPermalink,
+    this.waveform,
+    this.durationSeconds,
+  });
+
+  factory _ApiTrack.fromJson(Map<String, dynamic> json) {
+    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final dur = json['duration'];
+    return _ApiTrack(
+      id: json['_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
+      artistPermalink: artist['permalink'] as String?,
+      artworkUrl: json['artworkUrl'] as String?,
+      hlsUrl: json['hlsUrl'] as String? ?? '',
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      durationSeconds: dur != null ? (dur as num).toInt() : null,
+    );
+  }
+
+  String get durationLabel {
+    if (durationSeconds == null) return '';
+    final m = durationSeconds! ~/ 60;
+    final s = (durationSeconds! % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  PlayerTrack toPlayerTrack() => PlayerTrack(
+        id: id,
+        title: title,
+        artist: artistName,
+        audioUrl: hlsUrl,
+        coverUrl: artworkUrl,
+        waveform: waveform,
+        duration: durationSeconds != null
+            ? Duration(seconds: durationSeconds!)
+            : null,
+        artistId: artistId,
+        artistPermalink: artistPermalink,
+      );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/utils/profile_navigation.dart';
 import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
@@ -173,6 +174,7 @@ class _RepostTile extends ConsumerWidget {
                   audioUrl: track.audioUrl!,
                   coverUrl: track.artworkUrl,
                   waveform: track.waveform,
+                  artistPermalink: track.artistPermalink,
                 ),
               );
           context.push('/player');
@@ -214,8 +216,22 @@ class _RepostTile extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  Text(track.artistName,
-                      style: TextStyle(color: sub, fontSize: 13)),
+                  GestureDetector(
+                    onTap: () {
+                      final id = track.artistId;
+                      final permalink = track.artistPermalink;
+                      if (id != null && permalink != null) {
+                        navigateToUserProfile(
+                          context,
+                          userId: id,
+                          permalink: permalink,
+                          displayName: track.artistName,
+                        );
+                      }
+                    },
+                    child: Text(track.artistName,
+                        style: TextStyle(color: sub, fontSize: 13)),
+                  ),
                   const SizedBox(height: 3),
                   Row(
                     children: [

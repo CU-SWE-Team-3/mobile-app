@@ -109,13 +109,21 @@ class PlayerApiService {
     final t = (m['track'] is Map ? m['track'] : m) as Map<String, dynamic>;
 
     final artistRaw = t['artist'];
-    final artistName = artistRaw is Map
-        ? ((artistRaw['displayName'] ??
-                artistRaw['name'] ??
-                'Unknown') as Object)
-            .toString()
-        : (artistRaw ?? 'Unknown').toString();
-    final artistId = artistRaw is Map ? artistRaw['_id'] as String? : null;
+    final String artistName;
+    final String? artistId;
+    final String? artistPermalink;
+    if (artistRaw is Map) {
+      artistName = ((artistRaw['displayName'] ??
+              artistRaw['name'] ??
+              'Unknown') as Object)
+          .toString();
+      artistId = artistRaw['_id'] as String?;
+      artistPermalink = artistRaw['permalink'] as String?;
+    } else {
+      artistName = (artistRaw ?? 'Unknown').toString();
+      artistId = null;
+      artistPermalink = null;
+    }
 
     final listenedAtRaw =
         m['playedAt'] ?? m['listenedAt'] ?? m['createdAt'];
@@ -137,6 +145,7 @@ class PlayerApiService {
         audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
         coverUrl: (t['artworkUrl'] ?? t['coverUrl']) as String?,
         duration: duration,
+        artistPermalink: artistPermalink,
       ),
       playedAt: playedAt,
     );

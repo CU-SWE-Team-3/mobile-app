@@ -516,7 +516,7 @@ class _CommentTileState extends State<_CommentTile> {
                               color: Colors.white54, fontSize: 13),
                         ),
                         const SizedBox(width: 6),
-                        _TimestampPill(seconds: c.timestamp),
+                        _TimestampPill(key: const ValueKey('comments_timestamp_pill'), seconds: c.timestamp),
                         const SizedBox(width: 8),
                         Text(
                           _timeAgo(c.createdAt),
@@ -729,7 +729,7 @@ class _ReplyRow extends StatelessWidget {
                         style: TextStyle(
                             color: Colors.white54, fontSize: 12)),
                     const SizedBox(width: 6),
-                    _TimestampPill(seconds: timestamp),
+                    _TimestampPill(key: const ValueKey('comments_timestamp_pill'), seconds: timestamp),
                     const SizedBox(width: 8),
                     Text(
                       _timeAgo(createdAt),
@@ -758,7 +758,7 @@ class _ReplyRow extends StatelessWidget {
 class _TimestampPill extends StatelessWidget {
   final int seconds;
 
-  const _TimestampPill({required this.seconds});
+  const _TimestampPill({super.key, required this.seconds});
 
   @override
   Widget build(BuildContext context) {
