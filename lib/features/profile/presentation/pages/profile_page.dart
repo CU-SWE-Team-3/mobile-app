@@ -154,28 +154,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/$permalink'));
           final data = profileResponse.data['data']['user'] as Map<String, dynamic>;
 
-          // Public profiles include followerCount + followingCount directly.
-          // Private profiles omit these fields — fetch them from the network
-          // endpoints, which always return the real counts for the account owner.
-          int followerCount;
-          int followingCount;
-          if (data.containsKey('followerCount')) {
-            followerCount  = _parseInt(data['followerCount']);
-            followingCount = _parseInt(data['followingCount']);
-          } else {
-            try {
-              final followersResp = await _withRetry(
-                  () => dioClient.dio.get('/network/$userId/followers'));
-              await Future.delayed(const Duration(milliseconds: 200));
-              final followingResp = await _withRetry(
-                  () => dioClient.dio.get('/network/$userId/following'));
-              followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
-              followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
-            } catch (_) {
-              followerCount  = 0;
-              followingCount = 0;
-            }
-          }
+          // Always fetch counts from the network endpoints — they are authoritative
+          // for the account owner regardless of public/private profile shape.
+          int followerCount  = 0;
+          int followingCount = 0;
+          try {
+            final followersResp = await _withRetry(
+                () => dioClient.dio.get('/network/$userId/followers'));
+            await Future.delayed(const Duration(milliseconds: 200));
+            final followingResp = await _withRetry(
+                () => dioClient.dio.get('/network/$userId/following'));
+            followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
+            followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
+          } catch (_) {}
 
           if (mounted) {
             setState(() {
