@@ -207,27 +207,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             SizedBox(
               width: double.infinity,
               height: 52,
-              child: ElevatedButton.icon(
-                key: const ValueKey('register_screen_facebook_button'),
-                onPressed: () {},
-                icon: const Icon(Icons.facebook, color: Colors.white),
-                label: const Text('Continue with Facebook',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1877F2),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            SizedBox(
-              width: double.infinity,
-              height: 52,
               child: ElevatedButton(
                 key: const ValueKey('register_screen_google_button'),
                 onPressed: () => context.push('/oauth-login'),
@@ -253,29 +232,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             fontSize: 16,
                             fontWeight: FontWeight.bold)),
                   ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                key: const ValueKey('register_screen_apple_button'),
-                onPressed: () {},
-                icon: const Icon(Icons.apple, color: Colors.white),
-                label: const Text('Continue with Apple',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    side: const BorderSide(color: Color(0xFF444444)),
-                  ),
                 ),
               ),
             ),
