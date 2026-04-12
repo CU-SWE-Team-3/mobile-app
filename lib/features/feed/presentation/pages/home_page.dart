@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import 'package:soundcloud_clone/features/followers/presentation/widgets/suggest
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/pages/likers_list_page.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/pages/reposters_list_page.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/like_button.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/repost_button.dart';
 
@@ -113,13 +116,81 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _fetchFeed() async {
     setState(() { _isLoading = true; _hasError = false; });
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId') ?? '';
+
       final response = await dioClient.dio.get('/network/feed');
       final List<dynamic> data = response.data['data'] as List<dynamic>;
+      var tracks = data
+          .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      // Fetch the user's liked and reposted track IDs so we can correctly
+      // reflect engagement state on the feed — the feed endpoint itself does
+      // not return per-user isLiked / isReposted fields.
+      Set<String> likedIds = {};
+      Set<String> repostedIds = {};
+      if (userId.isNotEmpty) {
+        await Future.wait([
+          dioClient.dio.get('/profile/$userId/likes').then((r) {
+            final d = r.data['data'] as Map<String, dynamic>? ?? {};
+            final raw = d['likedTracks'] as List<dynamic>? ?? [];
+            for (final item in raw) {
+              final trackId =
+                  ((item as Map<String, dynamic>)['track']
+                          as Map<String, dynamic>?)?['_id'] as String?;
+              if (trackId != null && trackId.isNotEmpty) likedIds.add(trackId);
+            }
+          }).catchError((_) {}),
+          dioClient.dio.get('/profile/$userId/reposts').then((r) {
+            final d = r.data['data'] as Map<String, dynamic>? ?? {};
+            final raw = d['repostedTracks'] as List<dynamic>? ?? [];
+            for (final item in raw) {
+              final trackId =
+                  ((item as Map<String, dynamic>)['track']
+                          as Map<String, dynamic>?)?['_id'] as String?;
+              if (trackId != null && trackId.isNotEmpty) repostedIds.add(trackId);
+            }
+          }).catchError((_) {}),
+        ]);
+      }
+
+      // Rebuild tracks with correct isLiked / isReposted from the sets above.
+      tracks = tracks.map((t) => _FeedTrack(
+            id: t.id,
+            title: t.title,
+            artistName: t.artistName,
+            artworkUrl: t.artworkUrl,
+            hlsUrl: t.hlsUrl,
+            playCount: t.playCount,
+            artistId: t.artistId,
+            artistPermalink: t.artistPermalink,
+            isLiked: likedIds.contains(t.id),
+            isReposted: repostedIds.contains(t.id),
+            likeCount: likedIds.contains(t.id) ? max(t.likeCount, 1) : t.likeCount,
+            repostCount: repostedIds.contains(t.id) ? max(t.repostCount, 1) : t.repostCount,
+            waveform: t.waveform,
+          )).toList();
+
       if (mounted) {
+        // Seed engagement providers BEFORE setState so every LikeButton /
+        // RepostButton sees the correct isLiked / isReposted the first time
+        // it calls ref.watch — no flicker, no dependency on addPostFrameCallback.
+        for (final track in tracks) {
+          if (track.id.isEmpty) continue;
+          ref
+              .read(engagementProvider(
+                      EngagementParams(trackId: track.id))
+                  .notifier)
+              .seed(
+                isLiked: track.isLiked,
+                isReposted: track.isReposted,
+                likeCount: track.likeCount,
+                repostCount: track.repostCount,
+              );
+        }
         setState(() {
-          _tracks = data
-              .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
-              .toList();
+          _tracks = tracks;
           _isLoading = false;
         });
       }

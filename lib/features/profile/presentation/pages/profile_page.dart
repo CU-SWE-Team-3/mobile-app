@@ -11,6 +11,7 @@ import 'package:soundcloud_clone/features/library/domain/entities/upload_track.d
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
 import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 import 'package:soundcloud_clone/injection_container.dart';
 
 // ── API track model ───────────────────────────────────────────────────────────
@@ -146,6 +147,52 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               title: t.title,
               artist: t.artist,
               audioUrl: t.hlsUrl!,
+              coverUrl: t.artworkUrl,
+              waveform: t.waveform,
+            ))
+        .toList();
+    ref.read(playerProvider.notifier).playQueue(
+          queue,
+          startIndex: index.clamp(0, queue.length - 1),
+        );
+  }
+
+  void _playFromReposts(int index) {
+    final playable = _reposts
+        .where((t) => t.audioUrl != null && t.audioUrl!.isNotEmpty)
+        .toList();
+    if (playable.isEmpty) return;
+    final queue = playable
+        .map((t) => PlayerTrack(
+              id: t.id,
+              title: t.title,
+              artist: t.artistName,
+              artistId: t.artistId,
+              artistPermalink: t.artistPermalink,
+              audioUrl: t.audioUrl!,
+              coverUrl: t.artworkUrl,
+              waveform: t.waveform,
+            ))
+        .toList();
+    ref.read(playerProvider.notifier).playQueue(
+          queue,
+          startIndex: index.clamp(0, queue.length - 1),
+        );
+  }
+
+  void _playFromLikes(int index) {
+    final playable = _likes
+        .where((t) => t.audioUrl != null && t.audioUrl!.isNotEmpty)
+        .toList();
+    if (playable.isEmpty) return;
+    final queue = playable
+        .map((t) => PlayerTrack(
+              id: t.id,
+              title: t.title,
+              artist: t.artistName,
+              artistId: t.artistId,
+              artistPermalink: t.artistPermalink,
+              audioUrl: t.audioUrl!,
               coverUrl: t.artworkUrl,
               waveform: t.waveform,
             ))
@@ -363,7 +410,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
     return Scaffold(
       backgroundColor: _bg,
-      body: SafeArea(
+      body: Stack(
+        children: [
+          SafeArea(
         child: Column(
           children: [
             _topBar(context),
@@ -410,12 +459,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                             onSeeAll: () => context.push('/profile/tracks')),
                         _tracksSection(myTracksAsync),
                         _sectionHeader('Reposts',
-                            onSeeAll: () => context.push('/profile/reposts')),
+                            onSeeAll: () { _playFromReposts(0); context.push('/profile/reposts'); }),
                         _repostsList(),
                         _sectionHeader('Playlists'),
                         _playlistRow(context),
                         _sectionHeader('Likes',
-                            onSeeAll: () => context.push('/likes')),
+                            onSeeAll: () { _playFromLikes(0); context.push('/likes'); }),
                         _likesList(),
                         const SizedBox(height: 120),
                       ],
@@ -425,6 +474,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
           ],
         ),
+          ),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: MiniPlayerWidget(),
+          ),
+        ],
       ),
     );
   }
@@ -753,12 +810,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }).toList();
 
     return Column(
-      children: visible.map((r) {
+      children: visible.asMap().entries.map((e) {
+        final r = e.value;
         final sub = Colors.white.withOpacity(0.55);
         final hasArtwork = r.artworkUrl != null &&
             r.artworkUrl!.isNotEmpty &&
             r.artworkUrl!.startsWith('http');
-        return Padding(
+        return GestureDetector(
+          onTap: () => _playFromReposts(e.key),
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           child: Row(
             children: [
@@ -803,6 +863,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ],
           ),
+          ),
         );
       }).toList(),
     );
@@ -818,12 +879,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       );
     }
     return Column(
-      children: _likes.take(3).map((r) {
+      children: _likes.take(3).toList().asMap().entries.map((e) {
+        final r = e.value;
         final sub = Colors.white.withOpacity(0.55);
         final hasArtwork = r.artworkUrl != null &&
             r.artworkUrl!.isNotEmpty &&
             r.artworkUrl!.startsWith('http');
-        return Padding(
+        return GestureDetector(
+          onTap: () => _playFromLikes(e.key),
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           child: Row(
             children: [
@@ -867,6 +931,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
               Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ],
+          ),
           ),
         );
       }).toList(),

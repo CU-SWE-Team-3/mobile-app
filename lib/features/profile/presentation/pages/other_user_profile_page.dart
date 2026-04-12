@@ -1,11 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../player/presentation/providers/player_provider.dart';
+import '../../../player/presentation/widgets/mini_player_widget.dart';
 
-class OtherUserProfilePage extends StatefulWidget {
+class OtherUserProfilePage extends ConsumerStatefulWidget {
   final String permalink;
   final String initialDisplayName;
   final String initialUserId;
@@ -18,10 +21,10 @@ class OtherUserProfilePage extends StatefulWidget {
   });
 
   @override
-  State<OtherUserProfilePage> createState() => _OtherUserProfilePageState();
+  ConsumerState<OtherUserProfilePage> createState() => _OtherUserProfilePageState();
 }
 
-class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
+class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   String _username = '';
   String _bio = '';
   String _city = '';
@@ -199,6 +202,37 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
     }
   }
 
+  // ── Playback ──────────────────────────────────────────────────────
+  void _playFrom(List<Map<String, dynamic>> tracks, int index) {
+    final queue = tracks.map((t) {
+      final artistRaw = t['artist'];
+      final artistId = artistRaw is Map<String, dynamic>
+          ? artistRaw['_id'] as String?
+          : t['artistId'] as String?;
+      final artistPermalink = artistRaw is Map<String, dynamic>
+          ? artistRaw['permalink'] as String?
+          : null;
+      final artistName = artistRaw is Map<String, dynamic>
+          ? (artistRaw['displayName'] as String? ?? '')
+          : (t['artistName'] as String? ?? '');
+      return PlayerTrack(
+        id: (t['_id'] ?? t['id'] ?? '').toString(),
+        title: (t['title'] ?? '').toString(),
+        artist: artistName,
+        artistId: artistId,
+        artistPermalink: artistPermalink,
+        audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
+        coverUrl: t['artworkUrl'] as String? ?? t['coverUrl'] as String?,
+        waveform: (t['waveform'] as List<dynamic>?)
+            ?.map((e) => (e as num).toInt())
+            .toList(),
+      );
+    }).where((t) => t.audioUrl.isNotEmpty).toList();
+    if (queue.isEmpty) return;
+    final clampedIndex = index.clamp(0, queue.length - 1);
+    ref.read(playerProvider.notifier).playQueue(queue, startIndex: clampedIndex);
+  }
+
   // ── Optimistic toggle with revert on failure ───────────────────────
   Future<void> _toggleFollow() async {
     if (_followLoading || _targetUserId.isEmpty) return;
@@ -370,12 +404,22 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFFF5500)))
-          : _hasError
-              ? _buildError()
-              : _buildBody(),
+      body: Stack(
+        children: [
+          _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFFFF5500)))
+              : _hasError
+                  ? _buildError()
+                  : _buildBody(),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: MiniPlayerWidget(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -600,7 +644,10 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
                 ),
               )
             else
-              ..._tracks.map((t) => _TrackRow(track: t)),
+              ..._tracks.asMap().entries.map((e) => _TrackRow(
+                    track: e.value,
+                    onTap: () => _playFrom(_tracks, e.key),
+                  )),
           ],
           if (_selectedTabIndex == 1) ...[
             if (_isLoadingReposts)
@@ -638,7 +685,11 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
                 ),
               )
             else
-              ..._repostedTracks!.take(10).map((t) => _TrackRow(track: t)),
+              ..._repostedTracks!.take(10).toList().asMap().entries.map((e) =>
+                  _TrackRow(
+                    track: e.value,
+                    onTap: () => _playFrom(_repostedTracks!.take(10).toList(), e.key),
+                  )),
           ],
           if (_selectedTabIndex == 2) ...[
             if (_isLoadingLikes)
@@ -676,7 +727,11 @@ class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
                 ),
               )
             else
-              ..._likedTracks!.take(10).map((t) => _TrackRow(track: t)),
+              ..._likedTracks!.take(10).toList().asMap().entries.map((e) =>
+                  _TrackRow(
+                    track: e.value,
+                    onTap: () => _playFrom(_likedTracks!.take(10).toList(), e.key),
+                  )),
           ],
 
           const SizedBox(height: 32),
@@ -806,7 +861,8 @@ class _CircleIconBtn extends StatelessWidget {
 
 class _TrackRow extends StatelessWidget {
   final Map<String, dynamic> track;
-  const _TrackRow({required this.track});
+  final VoidCallback? onTap;
+  const _TrackRow({required this.track, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -828,7 +884,9 @@ class _TrackRow extends StatelessWidget {
         ? '${duration ~/ 60}:${(duration % 60).toString().padLeft(2, '0')}'
         : '';
 
-    return Padding(
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(children: [
         ClipRRect(
@@ -874,6 +932,7 @@ class _TrackRow extends StatelessWidget {
         ],
         const Icon(Icons.more_vert, color: Colors.grey, size: 20),
       ]),
+      ),
     );
   }
 }
