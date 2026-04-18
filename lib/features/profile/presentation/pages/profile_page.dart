@@ -341,6 +341,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       await prefs.setString('bio',     bio);
       await prefs.setString('city',    city);
       await prefs.setString('country', country);
+      final avatarUrl = data['avatarUrl'] as String? ?? '';
+      if (avatarUrl.isNotEmpty) {
+        await prefs.setString('avatarUrl', avatarUrl);
+        debugPrint('[Profile] avatarUrl persisted: $avatarUrl');
+      }
 
       // Always fetch counts from the network endpoints — they are authoritative.
       int followerCount  = 0;
