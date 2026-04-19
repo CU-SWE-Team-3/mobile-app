@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/entities/playlist.dart';
 import '../../../library/presentation/pages/library_playlists_page.dart';
+import '../../../../core/network/dio_client.dart';
 
 final _avatarUrlProvider = FutureProvider<String>((ref) async {
   final prefs = await SharedPreferences.getInstance();
@@ -20,26 +21,78 @@ const _bg = Color(0xFF111111);
 const _surface = Color(0xFF1F1F1F);
 const _secondary = Color(0xFF999999);
 
-class PlaylistDetailsPage extends ConsumerWidget {
+bool _isMongoId(String id) {
+  if (id.length != 24) return false;
+  final hexRegex = RegExp(r'^[0-9a-fA-F]+$');
+  return hexRegex.hasMatch(id);
+}
+
+String _formatDuration(int? seconds) {
+  if (seconds == null) return '';
+  final m = seconds ~/ 60;
+  final s = seconds % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+class PlaylistDetailsPage extends ConsumerStatefulWidget {
   final Playlist? playlist;
 
   const PlaylistDetailsPage({super.key, this.playlist});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Always read the live version from the provider so visibility changes
-    // and deletions reflect immediately. Falls back to the constructor arg
-    // while the provider's async _load() is still completing.
+  ConsumerState<PlaylistDetailsPage> createState() =>
+      _PlaylistDetailsPageState();
+}
+
+class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
+  List<_PlaylistTrack> _tracks = [];
+  bool _isLoadingTracks = false;
+  String? _firstTrackArtworkUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.playlist?.id;
+    if (id != null && _isMongoId(id)) {
+      _loadTracks(id);
+    }
+  }
+
+  Future<void> _loadTracks(String playlistId) async {
+    setState(() => _isLoadingTracks = true);
+    try {
+      final response =
+          await dioClient.dio.get('/playlists/$playlistId');
+      final raw = response.data['data']['playlist']['tracks'] as List<dynamic>;
+      final tracks =
+          raw.map((t) => _PlaylistTrack.fromJson(t as Map<String, dynamic>)).toList();
+      setState(() {
+        _tracks = tracks;
+        _firstTrackArtworkUrl = tracks.isNotEmpty ? tracks.first.artworkUrl : null;
+        _isLoadingTracks = false;
+      });
+    } catch (e) {
+      debugPrint('[PlaylistDetails] Failed to load tracks: $e');
+      setState(() {
+        _tracks = [];
+        _firstTrackArtworkUrl = null;
+        _isLoadingTracks = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final playlists = ref.watch(playlistsProvider);
     Playlist? current;
-    if (playlist != null) {
+    if (widget.playlist != null) {
       for (final pl in playlists) {
-        if (pl.id == playlist!.id) {
+        if (pl.id == widget.playlist!.id) {
           current = pl;
           break;
         }
       }
-      current ??= playlist;
+      current ??= widget.playlist;
     }
 
     if (current == null) {
@@ -95,30 +148,30 @@ class PlaylistDetailsPage extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Square artwork thumbnail
-              _ArtworkThumbnail(playlist: p, avatarUrl: resolvedAvatarUrl),
+              _ArtworkThumbnail(
+                playlist: p,
+                avatarUrl: resolvedAvatarUrl,
+                firstTrackArtworkUrl: _firstTrackArtworkUrl,
+              ),
               const SizedBox(width: 14),
-              // Metadata column
               Expanded(
                 child: SizedBox(
-                  height: 130,
+                  height: 160,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Title
                       Text(
                         p.title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 18,
+                          fontSize: 22,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      // Subtitle: Playlist · N Tracks · 0:00 · Just now [lock]
                       Row(
                         children: [
                           Expanded(
@@ -127,7 +180,7 @@ class PlaylistDetailsPage extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                  color: _secondary, fontSize: 12),
+                                  color: _secondary, fontSize: 13),
                             ),
                           ),
                           if (!p.isPublic)
@@ -139,7 +192,6 @@ class PlaylistDetailsPage extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      // Owner row
                       Row(
                         children: [
                           _buildOwnerAvatar(resolvedAvatarUrl),
@@ -152,7 +204,7 @@ class PlaylistDetailsPage extends ConsumerWidget {
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
@@ -165,7 +217,7 @@ class PlaylistDetailsPage extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Action row: three-dot left, shuffle + play right
+          // Action row
           Row(
             children: [
               GestureDetector(
@@ -179,8 +231,8 @@ class PlaylistDetailsPage extends ConsumerWidget {
                   builder: (_) => _PlaylistOptionsSheet(playlist: p),
                 ),
                 child: Container(
-                  width: 36,
-                  height: 36,
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
@@ -191,8 +243,8 @@ class PlaylistDetailsPage extends ConsumerWidget {
               ),
               const Spacer(),
               Container(
-                width: 42,
-                height: 42,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
@@ -202,40 +254,63 @@ class PlaylistDetailsPage extends ConsumerWidget {
               ),
               const SizedBox(width: 12),
               Container(
-                width: 56,
-                height: 56,
+                width: 64,
+                height: 64,
                 decoration: const BoxDecoration(
                   color: Colors.white,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.play_arrow_rounded,
-                    color: Colors.black, size: 32),
+                    color: Colors.black, size: 36),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          // Tracks area — empty when no tracks
+          // Track list
+          if (_isLoadingTracks)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator(color: Colors.white54)),
+            )
+          else
+            ..._tracks.map(
+              (t) => _TrackTile(
+                title: t.title,
+                artist: t.artistName,
+                isPaused: false,
+                playCount: _formatPlayCount(t.playCount),
+                duration: _formatDuration(t.durationSeconds),
+                artworkUrl: t.artworkUrl,
+              ),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildOwnerAvatar(String url) {
+    debugPrint('[PlaylistDetails] _buildOwnerAvatar resolved url: "$url"');
     final hasValidUrl =
         url.isNotEmpty && !url.contains('default-avatar');
     if (hasValidUrl) {
       return CircleAvatar(
-        radius: 16,
+        radius: 18,
         backgroundColor: _surface,
         backgroundImage: CachedNetworkImageProvider(url),
       );
     }
     return const CircleAvatar(
-      radius: 16,
+      radius: 18,
       backgroundColor: _surface,
       child: Icon(Icons.person, color: _secondary, size: 18),
     );
   }
+}
+
+String _formatPlayCount(int count) {
+  if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+  if (count >= 1000) return '${(count / 1000).toStringAsFixed(0)}K';
+  return count.toString();
 }
 
 // ── Playlist options sheet ────────────────────────────────────────────────────
@@ -253,7 +328,6 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Drag handle
             Container(
               width: 36,
               height: 4,
@@ -263,7 +337,6 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            // Header: artwork + title/owner
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -313,7 +386,6 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
               ),
             ),
             const Divider(color: Colors.white12, height: 28),
-            // Edit
             _optionRow(
               icon: Icons.edit_outlined,
               label: 'Edit',
@@ -328,7 +400,6 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
                 );
               },
             ),
-            // Make private / Make public
             _optionRow(
               icon: Icons.lock_outline,
               label: playlist.isPublic ? 'Make private' : 'Make public',
@@ -340,18 +411,16 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
                     );
               },
             ),
-            // Delete
             _optionRow(
               icon: Icons.delete_outline,
               label: 'Delete',
               onTap: () {
                 final nav = Navigator.of(context);
-                nav.pop(); // close sheet
+                nav.pop();
                 ref.read(playlistsProvider.notifier).remove(playlist.id);
-                nav.maybePop(); // go back to playlists list
+                nav.maybePop();
               },
             ),
-            // Copy playlist
             _optionRow(
               icon: Icons.copy_rounded,
               label: 'Copy playlist',
@@ -396,23 +465,139 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+class _TrackTile extends StatelessWidget {
+  final String title;
+  final String artist;
+  final bool isPaused;
+  final String? playCount;
+  final String? duration;
+  final String? artworkUrl;
+
+  const _TrackTile({
+    required this.title,
+    required this.artist,
+    this.isPaused = false,
+    this.playCount,
+    this.duration,
+    this.artworkUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              width: 80,
+              height: 80,
+              child: artworkUrl != null && artworkUrl!.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: artworkUrl!,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: const Color(0xFF2A2A2A),
+                        child: const Center(
+                          child: Icon(Icons.music_note,
+                              color: Colors.white24, size: 32),
+                        ),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: const Color(0xFF2A2A2A),
+                        child: const Center(
+                          child: Icon(Icons.music_note,
+                              color: Colors.white24, size: 32),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: const Color(0xFF2A2A2A),
+                      child: const Center(
+                        child:
+                            Icon(Icons.music_note, color: Colors.white24, size: 32),
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _secondary, fontSize: 13),
+                ),
+                const SizedBox(height: 3),
+                if (isPaused)
+                  Row(
+                    children: const [
+                      Icon(Icons.pause_rounded, color: _secondary, size: 13),
+                      SizedBox(width: 4),
+                      Text('Paused',
+                          style:
+                              TextStyle(color: _secondary, fontSize: 12)),
+                    ],
+                  )
+                else
+                  Text(
+                    '▶ ${playCount ?? '0'} · ${duration ?? '0:00'}',
+                    style: const TextStyle(color: _secondary, fontSize: 12),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.more_horiz_rounded, color: _secondary, size: 22),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _ArtworkThumbnail extends StatelessWidget {
   final Playlist playlist;
   final String avatarUrl;
+  final String? firstTrackArtworkUrl;
 
-  const _ArtworkThumbnail({required this.playlist, required this.avatarUrl});
+  const _ArtworkThumbnail({
+    required this.playlist,
+    required this.avatarUrl,
+    this.firstTrackArtworkUrl,
+  });
 
   @override
   Widget build(BuildContext context) {
     final p = playlist;
-    final hasArtwork =
-        p.artworkUrl != null && p.artworkUrl!.isNotEmpty;
+    final hasArtwork = p.artworkUrl != null && p.artworkUrl!.isNotEmpty;
+    final hasFirstTrack =
+        firstTrackArtworkUrl != null && firstTrackArtworkUrl!.isNotEmpty;
     final hasValidAvatar =
         avatarUrl.isNotEmpty && !avatarUrl.contains('default-avatar');
 
     ImageProvider? imageProvider;
     if (hasArtwork) {
       imageProvider = CachedNetworkImageProvider(p.artworkUrl!);
+    } else if (hasFirstTrack) {
+      imageProvider = CachedNetworkImageProvider(firstTrackArtworkUrl!);
     } else if (p.trackCount == 0 && hasValidAvatar) {
       imageProvider = CachedNetworkImageProvider(avatarUrl);
     }
@@ -420,8 +605,8 @@ class _ArtworkThumbnail extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: 130,
-        height: 130,
+        width: 160,
+        height: 160,
         color: _surface,
         child: imageProvider != null
             ? Image(image: imageProvider, fit: BoxFit.cover)
@@ -430,6 +615,41 @@ class _ArtworkThumbnail extends StatelessWidget {
                     color: Colors.white24, size: 48),
               ),
       ),
+    );
+  }
+}
+
+// ── UI-only track model ───────────────────────────────────────────────────────
+
+class _PlaylistTrack {
+  final String id;
+  final String title;
+  final String artistName;
+  final String? artworkUrl;
+  final int playCount;
+  final int? durationSeconds;
+
+  const _PlaylistTrack({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    this.artworkUrl,
+    required this.playCount,
+    this.durationSeconds,
+  });
+
+  factory _PlaylistTrack.fromJson(Map<String, dynamic> json) {
+    final artist = json['artist'];
+    final artistName = artist is Map<String, dynamic>
+        ? (artist['displayName'] as String? ?? '')
+        : '';
+    return _PlaylistTrack(
+      id: json['_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      artistName: artistName,
+      artworkUrl: json['artworkUrl'] as String?,
+      playCount: json['playCount'] as int? ?? 0,
+      durationSeconds: json['duration'] as int?,
     );
   }
 }

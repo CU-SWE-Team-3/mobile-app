@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -425,12 +426,70 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _PlaylistTile extends StatelessWidget {
+class _PlaylistTile extends StatefulWidget {
   final Playlist playlist;
   const _PlaylistTile({required this.playlist});
 
   @override
+  State<_PlaylistTile> createState() => _PlaylistTileState();
+}
+
+class _PlaylistTileState extends State<_PlaylistTile> {
+  String _avatarUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAvatar();
+  }
+
+  Future<void> _loadAvatar() async {
+    final prefs = await SharedPreferences.getInstance();
+    final url = prefs.getString('avatarUrl') ?? '';
+    if (mounted) setState(() => _avatarUrl = url);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final playlist = widget.playlist;
+    final hasArtwork = playlist.artworkUrl != null && playlist.artworkUrl!.isNotEmpty;
+    final hasValidAvatar =
+        _avatarUrl.isNotEmpty && !_avatarUrl.contains('default-avatar');
+
+    Widget thumbnailChild;
+    if (hasArtwork) {
+      thumbnailChild = CachedNetworkImage(
+        imageUrl: playlist.artworkUrl!,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => const ColoredBox(
+          color: Color(0xFF2A2A2A),
+          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+        ),
+        errorWidget: (_, __, ___) => const ColoredBox(
+          color: Color(0xFF2A2A2A),
+          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+        ),
+      );
+    } else if (playlist.trackCount == 0 && hasValidAvatar) {
+      thumbnailChild = CachedNetworkImage(
+        imageUrl: _avatarUrl,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => const ColoredBox(
+          color: Color(0xFF2A2A2A),
+          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+        ),
+        errorWidget: (_, __, ___) => const ColoredBox(
+          color: Color(0xFF2A2A2A),
+          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+        ),
+      );
+    } else {
+      thumbnailChild = const ColoredBox(
+        color: Color(0xFF2A2A2A),
+        child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+      );
+    }
+
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
@@ -448,15 +507,7 @@ class _PlaylistTile extends StatelessWidget {
             child: SizedBox(
               width: 56,
               height: 56,
-              child: playlist.artworkUrl != null
-                  ? Image.network(playlist.artworkUrl!, fit: BoxFit.cover)
-                  : const ColoredBox(
-                      color: Color(0xFF2A2A2A),
-                      child: Center(
-                        child: Icon(Icons.music_note,
-                            color: Colors.white38, size: 24),
-                      ),
-                    ),
+              child: thumbnailChild,
             ),
           ),
           const SizedBox(width: 14),
