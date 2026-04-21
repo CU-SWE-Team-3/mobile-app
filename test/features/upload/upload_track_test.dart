@@ -425,7 +425,7 @@ void main() {
         duration: 180000,
       );
 
-      expect(track.props.length, 11);
+      expect(track.props.length, 16); // id, hlsUrl, artworkUrl, waveform, audioFilePath, coverImagePath, title, artist, album, genre, tags, releaseDate, isPublic, description, duration, processingState
     });
   });
 }

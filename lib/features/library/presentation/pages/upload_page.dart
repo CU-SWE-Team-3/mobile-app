@@ -11,7 +11,8 @@ class UploadPage extends ConsumerWidget {
   Future<void> _pickAudioFile(BuildContext context, WidgetRef ref) async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav'],
         allowMultiple: false,
       );
 

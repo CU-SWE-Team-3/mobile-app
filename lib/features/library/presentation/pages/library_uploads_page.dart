@@ -63,7 +63,8 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
 
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav'],
         allowMultiple: false,
       );
       if (result != null && result.files.isNotEmpty) {
