@@ -152,7 +152,7 @@ class _PrivacySettingsPageState extends ConsumerState<PrivacySettingsPage> {
                             : Switch(
                                 value: _isPrivate,
                                 onChanged: _savePrivacy,
-                                activeColor: const Color(0xFFFF5500),
+                                activeThumbColor: const Color(0xFFFF5500),
                               ),
                       ],
                     ),

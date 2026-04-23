@@ -254,7 +254,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
       if (state.track.title.isNotEmpty) metadataBody['title'] = state.track.title;
       if (state.track.description != null) metadataBody['description'] = state.track.description;
       if (state.track.genre != null) metadataBody['genre'] = state.track.genre;
-      if (state.track.tags != null && state.track.tags!.isNotEmpty) {
+      if (state.track.tags.isNotEmpty) {
         metadataBody['tags'] = state.track.tags;
       }
       if (state.track.releaseDate != null) {

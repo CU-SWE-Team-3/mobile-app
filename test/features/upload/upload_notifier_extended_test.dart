@@ -64,18 +64,18 @@ void main() {
 
   group('UploadState — processingState', () {
     test('defaults to null', () {
-      final s = UploadState(track: const UploadTrack(title: '', artist: ''));
+      const s = UploadState(track: const UploadTrack(title: '', artist: ''));
       expect(s.processingState, isNull);
     });
 
     test('copyWith sets processingState to "Processing"', () {
-      final s = UploadState(track: const UploadTrack(title: '', artist: ''));
+      const s = UploadState(track: const UploadTrack(title: '', artist: ''));
       expect(s.copyWith(processingState: 'Processing').processingState,
           'Processing');
     });
 
     test('copyWith sets processingState to "Finished"', () {
-      final s = UploadState(
+      const s = UploadState(
           track: const UploadTrack(title: '', artist: ''),
           processingState: 'Processing');
       expect(s.copyWith(processingState: 'Finished').processingState,
@@ -83,14 +83,14 @@ void main() {
     });
 
     test('copyWith with null clears processingState', () {
-      final s = UploadState(
+      const s = UploadState(
           track: const UploadTrack(title: '', artist: ''),
           processingState: 'Processing');
       expect(s.copyWith(processingState: null).processingState, isNull);
     });
 
     test('all three processing states are storable', () {
-      final base = UploadState(track: const UploadTrack(title: '', artist: ''));
+      const base = UploadState(track: const UploadTrack(title: '', artist: ''));
       expect(base.copyWith(processingState: 'Processing').processingState,
           'Processing');
       expect(base.copyWith(processingState: 'Finished').processingState,
@@ -104,24 +104,24 @@ void main() {
 
   group('UploadState — needsRoleUpgrade', () {
     test('defaults to false', () {
-      final s = UploadState(track: const UploadTrack(title: '', artist: ''));
+      const s = UploadState(track: const UploadTrack(title: '', artist: ''));
       expect(s.needsRoleUpgrade, isFalse);
     });
 
     test('copyWith sets needsRoleUpgrade to true', () {
-      final s = UploadState(track: const UploadTrack(title: '', artist: ''));
+      const s = UploadState(track: const UploadTrack(title: '', artist: ''));
       expect(s.copyWith(needsRoleUpgrade: true).needsRoleUpgrade, isTrue);
     });
 
     test('copyWith resets needsRoleUpgrade to false', () {
-      final s = UploadState(
+      const s = UploadState(
           track: const UploadTrack(title: '', artist: ''),
           needsRoleUpgrade: true);
       expect(s.copyWith(needsRoleUpgrade: false).needsRoleUpgrade, isFalse);
     });
 
     test('unrelated copyWith call preserves needsRoleUpgrade', () {
-      final s = UploadState(
+      const s = UploadState(
           track: const UploadTrack(title: '', artist: ''),
           needsRoleUpgrade: true);
       expect(s.copyWith(isLoading: true).needsRoleUpgrade, isTrue);

@@ -1,14 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
-import '../../../player/presentation/providers/player_provider.dart';
-import '../../../player/presentation/widgets/mini_player_widget.dart';
 
-class OtherUserProfilePage extends ConsumerStatefulWidget {
+class OtherUserProfilePage extends StatefulWidget {
   final String permalink;
   final String initialDisplayName;
   final String initialUserId;
@@ -21,10 +18,10 @@ class OtherUserProfilePage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<OtherUserProfilePage> createState() => _OtherUserProfilePageState();
+  State<OtherUserProfilePage> createState() => _OtherUserProfilePageState();
 }
 
-class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
+class _OtherUserProfilePageState extends State<OtherUserProfilePage> {
   String _username = '';
   String _bio = '';
   String _city = '';
@@ -42,14 +39,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   bool _bioExpanded = false;
   bool _followLoading = false;
   bool _isBlocked = false;
-  int _selectedTabIndex = 0;
-  List<Map<String, dynamic>> _tracks = [];
-  List<Map<String, dynamic>>? _repostedTracks;
-  bool _isLoadingReposts = false;
-  bool _hasRepostsError = false;
-  List<Map<String, dynamic>>? _likedTracks;
-  bool _isLoadingLikes = false;
-  bool _hasLikesError = false;
 
   String get _permalink => widget.permalink;
 
@@ -59,42 +48,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
     _targetUserId = widget.initialUserId;
     _username = widget.initialDisplayName;
     _fetchProfile();
-  }
-
-  Future<void> _fetchLikes() async {
-    if (_isLoadingLikes) return;
-    setState(() { _isLoadingLikes = true; _hasLikesError = false; });
-    try {
-      final response =
-          await dioClient.dio.get('/profile/$_targetUserId/likes');
-      final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final raw = (data['likedTracks'] as List<dynamic>?) ?? [];
-      final tracks = raw.map((item) {
-        final map = item as Map<String, dynamic>;
-        return (map['track'] as Map<String, dynamic>? ?? map);
-      }).toList();
-      if (mounted) setState(() { _likedTracks = tracks; _isLoadingLikes = false; });
-    } catch (_) {
-      if (mounted) setState(() { _isLoadingLikes = false; _hasLikesError = true; });
-    }
-  }
-
-  Future<void> _fetchReposts() async {
-    if (_isLoadingReposts) return;
-    setState(() { _isLoadingReposts = true; _hasRepostsError = false; });
-    try {
-      final response =
-          await dioClient.dio.get('/profile/$_targetUserId/reposts');
-      final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final raw = (data['repostedTracks'] as List<dynamic>?) ?? [];
-      final tracks = raw.map((item) {
-        final map = item as Map<String, dynamic>;
-        return (map['track'] as Map<String, dynamic>? ?? map);
-      }).toList();
-      if (mounted) setState(() { _repostedTracks = tracks; _isLoadingReposts = false; });
-    } catch (_) {
-      if (mounted) setState(() { _isLoadingReposts = false; _hasRepostsError = true; });
-    }
   }
 
   static int _parseInt(dynamic val) {
@@ -192,7 +145,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
                   ?.whereType<Map<String, dynamic>>()
                   .toList() ??
               [];
-          _tracks = List.of(_topTracks);
           _isLoading = false;
         });
       }
@@ -200,37 +152,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       debugPrint('=== PROFILE FETCH ERROR: $e');
       if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
-  }
-
-  // ── Playback ──────────────────────────────────────────────────────
-  void _playFrom(List<Map<String, dynamic>> tracks, int index) {
-    final queue = tracks.map((t) {
-      final artistRaw = t['artist'];
-      final artistId = artistRaw is Map<String, dynamic>
-          ? artistRaw['_id'] as String?
-          : t['artistId'] as String?;
-      final artistPermalink = artistRaw is Map<String, dynamic>
-          ? artistRaw['permalink'] as String?
-          : null;
-      final artistName = artistRaw is Map<String, dynamic>
-          ? (artistRaw['displayName'] as String? ?? '')
-          : (t['artistName'] as String? ?? '');
-      return PlayerTrack(
-        id: (t['_id'] ?? t['id'] ?? '').toString(),
-        title: (t['title'] ?? '').toString(),
-        artist: artistName,
-        artistId: artistId,
-        artistPermalink: artistPermalink,
-        audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
-        coverUrl: t['artworkUrl'] as String? ?? t['coverUrl'] as String?,
-        waveform: (t['waveform'] as List<dynamic>?)
-            ?.map((e) => (e as num).toInt())
-            .toList(),
-      );
-    }).where((t) => t.audioUrl.isNotEmpty).toList();
-    if (queue.isEmpty) return;
-    final clampedIndex = index.clamp(0, queue.length - 1);
-    ref.read(playerProvider.notifier).playQueue(queue, startIndex: clampedIndex);
   }
 
   // ── Optimistic toggle with revert on failure ───────────────────────
@@ -404,22 +325,12 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF5500)))
-              : _hasError
-                  ? _buildError()
-                  : _buildBody(),
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: MiniPlayerWidget(),
-          ),
-        ],
-      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF5500)))
+          : _hasError
+              ? _buildError()
+              : _buildBody(),
     );
   }
 
@@ -600,138 +511,26 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             ),
           ],
 
-          // ── Tracks / Reposts tabs ──────────────────────────────────
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                _TabChip(
-                  label: 'Tracks',
-                  selected: _selectedTabIndex == 0,
-                  onTap: () => setState(() => _selectedTabIndex = 0),
-                ),
-                const SizedBox(width: 10),
-                _TabChip(
-                  label: 'Reposts',
-                  selected: _selectedTabIndex == 1,
-                  onTap: () {
-                    setState(() => _selectedTabIndex = 1);
-                    if (_repostedTracks == null) _fetchReposts();
-                  },
-                ),
-                const SizedBox(width: 10),
-                _TabChip(
-                  label: 'Likes',
-                  selected: _selectedTabIndex == 2,
-                  onTap: () {
-                    setState(() => _selectedTabIndex = 2);
-                    if (_likedTracks == null) _fetchLikes();
-                  },
-                ),
-              ],
+          // Top Tracks
+          if (_topTracks.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Top tracks',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                  Text('See All',
+                      style: TextStyle(color: Color(0xFFFF5500), fontSize: 14)),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-
-          if (_selectedTabIndex == 0) ...[
-            if (_tracks.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text('No tracks yet',
-                      style: TextStyle(color: Colors.white54, fontSize: 14)),
-                ),
-              )
-            else
-              ..._tracks.asMap().entries.map((e) => _TrackRow(
-                    track: e.value,
-                    onTap: () => _playFrom(_tracks, e.key),
-                  )),
-          ],
-          if (_selectedTabIndex == 1) ...[
-            if (_isLoadingReposts)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-                ),
-              )
-            else if (_hasRepostsError)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Failed to load reposts',
-                          style: TextStyle(color: Colors.white54)),
-                      const SizedBox(height: 10),
-                      TextButton(
-                        onPressed: _fetchReposts,
-                        child: const Text('Retry',
-                            style: TextStyle(color: Color(0xFFFF5500))),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (_repostedTracks == null || _repostedTracks!.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text('No reposts yet',
-                      style: TextStyle(color: Colors.white54, fontSize: 14)),
-                ),
-              )
-            else
-              ..._repostedTracks!.take(10).toList().asMap().entries.map((e) =>
-                  _TrackRow(
-                    track: e.value,
-                    onTap: () => _playFrom(_repostedTracks!.take(10).toList(), e.key),
-                  )),
-          ],
-          if (_selectedTabIndex == 2) ...[
-            if (_isLoadingLikes)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-                ),
-              )
-            else if (_hasLikesError)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Failed to load likes',
-                          style: TextStyle(color: Colors.white54)),
-                      const SizedBox(height: 10),
-                      TextButton(
-                        onPressed: _fetchLikes,
-                        child: const Text('Retry',
-                            style: TextStyle(color: Color(0xFFFF5500))),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (_likedTracks == null || _likedTracks!.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text('No likes yet',
-                      style: TextStyle(color: Colors.white54, fontSize: 14)),
-                ),
-              )
-            else
-              ..._likedTracks!.take(10).toList().asMap().entries.map((e) =>
-                  _TrackRow(
-                    track: e.value,
-                    onTap: () => _playFrom(_likedTracks!.take(10).toList(), e.key),
-                  )),
+            const SizedBox(height: 8),
+            ..._topTracks.take(5).map((t) => _TrackRow(track: t)),
           ],
 
           const SizedBox(height: 32),
@@ -808,43 +607,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
 //  HELPER WIDGETS
 // ─────────────────────────────────────────────
 
-class _TabChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _TabChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFFF5500) : Colors.transparent,
-          border: Border.all(
-            color: selected ? const Color(0xFFFF5500) : Colors.white38,
-          ),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : Colors.white54,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _CircleIconBtn extends StatelessWidget {
   final IconData icon;
   final double size;
@@ -861,22 +623,17 @@ class _CircleIconBtn extends StatelessWidget {
 
 class _TrackRow extends StatelessWidget {
   final Map<String, dynamic> track;
-  final VoidCallback? onTap;
-  const _TrackRow({required this.track, this.onTap});
+  const _TrackRow({required this.track});
 
   @override
   Widget build(BuildContext context) {
     final title = track['title'] as String? ?? '';
-    final artistRaw = track['artist'];
-    final artistName = (artistRaw is Map<String, dynamic>
-            ? artistRaw['displayName'] as String?
-            : null) ??
-        track['artistName'] as String? ??
+    final artistName = track['artistName'] as String? ??
+        track['artist'] as String? ??
         track['displayName'] as String? ??
         '';
-    final coverUrl = track['artworkUrl'] as String? ??
-        track['coverUrl'] as String? ??
-        track['thumbnailUrl'] as String?;
+    final coverUrl =
+        track['coverUrl'] as String? ?? track['thumbnailUrl'] as String?;
     final playCount =
         _safeInt(track['playCount'] ?? track['plays'] ?? track['playsCount']);
     final duration = _safeInt(track['duration']);
@@ -884,9 +641,7 @@ class _TrackRow extends StatelessWidget {
         ? '${duration ~/ 60}:${(duration % 60).toString().padLeft(2, '0')}'
         : '';
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: Row(children: [
         ClipRRect(
@@ -932,7 +687,6 @@ class _TrackRow extends StatelessWidget {
         ],
         const Icon(Icons.more_vert, color: Colors.grey, size: 20),
       ]),
-      ),
     );
   }
 }

@@ -7,7 +7,7 @@ final myTracksProvider = FutureProvider.autoDispose<List<UploadTrack>>((ref) asy
   final response = await dio.get('/tracks/my-tracks');
   final data = response.data['data'];
   if (data is! List) return [];
-  final raw = data as List<dynamic>;
+  final raw = data;
   return raw.map((t) {
     return UploadTrack(
       id: t['_id'] as String?,

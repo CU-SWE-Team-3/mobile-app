@@ -4,7 +4,7 @@ import 'package:soundcloud_clone/features/library/domain/entities/upload_track.d
 void main() {
   group('UploadTrack Initialization', () {
     test('creates track with only required fields', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Test Song',
         artist: 'Test Artist',
       );
@@ -14,7 +14,7 @@ void main() {
     });
 
     test('title is correct', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Awesome Track',
         artist: 'Artist Name',
       );
@@ -23,7 +23,7 @@ void main() {
     });
 
     test('artist is correct', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song Name',
         artist: 'Amazing Artist',
       );
@@ -32,7 +32,7 @@ void main() {
     });
 
     test('album is correct', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         album: 'Album Name',
@@ -42,7 +42,7 @@ void main() {
     });
 
     test('genre is correct', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         genre: 'Electronic',
@@ -52,7 +52,7 @@ void main() {
     });
 
     test('description is correct', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         description: 'A beautiful track',
@@ -62,7 +62,7 @@ void main() {
     });
 
     test('duration is correct', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         duration: 180000,
@@ -75,7 +75,7 @@ void main() {
   group('UploadTrack File Paths', () {
     test('audioFilePath is set', () {
       const filePath = '/storage/music/song.mp3';
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         audioFilePath: filePath,
@@ -86,7 +86,7 @@ void main() {
 
     test('coverImagePath is set', () {
       const imagePath = '/storage/images/cover.jpg';
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         coverImagePath: imagePath,
@@ -96,7 +96,7 @@ void main() {
     });
 
     test('audioFilePath can be null', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         audioFilePath: null,
@@ -106,7 +106,7 @@ void main() {
     });
 
     test('coverImagePath can be null', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         coverImagePath: null,
@@ -118,7 +118,7 @@ void main() {
 
   group('UploadTrack Nullable Fields', () {
     test('album can be null', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         album: null,
@@ -128,7 +128,7 @@ void main() {
     });
 
     test('genre can be null', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         genre: null,
@@ -138,7 +138,7 @@ void main() {
     });
 
     test('releaseDate can be null', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         releaseDate: null,
@@ -148,7 +148,7 @@ void main() {
     });
 
     test('description can be null', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         description: null,
@@ -158,7 +158,7 @@ void main() {
     });
 
     test('duration can be null', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         duration: null,
@@ -170,7 +170,7 @@ void main() {
 
   group('UploadTrack Default Values', () {
     test('isPublic defaults to true', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
       );
@@ -179,7 +179,7 @@ void main() {
     });
 
     test('tags defaults to empty list', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
       );
@@ -188,7 +188,7 @@ void main() {
     });
 
     test('isPublic can be false', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         isPublic: false,
@@ -200,7 +200,7 @@ void main() {
 
   group('UploadTrack Tags', () {
     test('tags has correct length', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         tags: ['electronic', 'dance', 'remix'],
@@ -211,7 +211,7 @@ void main() {
 
     test('tags contains correct items', () {
       const tagList = ['ambient', 'chill', 'lofi'];
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         tags: tagList,
@@ -226,7 +226,7 @@ void main() {
 
   group('UploadTrack Duration Calculations', () {
     test('duration in seconds is correct', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         duration: 180000, // 3 minutes
@@ -237,7 +237,7 @@ void main() {
     });
 
     test('duration in minutes is correct', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         duration: 300000, // 5 minutes
@@ -248,7 +248,7 @@ void main() {
     });
 
     test('duration is positive', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         duration: 240000,
@@ -260,7 +260,7 @@ void main() {
 
   group('UploadTrack copyWith', () {
     test('copyWith updates title', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Original Title',
         artist: 'Artist',
       );
@@ -272,7 +272,7 @@ void main() {
     });
 
     test('copyWith updates artist', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Original Artist',
       );
@@ -284,7 +284,7 @@ void main() {
     });
 
     test('copyWith updates isPublic', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         isPublic: true,
@@ -296,7 +296,7 @@ void main() {
     });
 
     test('copyWith updates genre', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         genre: 'Rock',
@@ -308,7 +308,7 @@ void main() {
     });
 
     test('copyWith updates tags', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         tags: ['old'],
@@ -320,7 +320,7 @@ void main() {
     });
 
     test('copyWith updates duration', () {
-      final track = UploadTrack(
+      const track = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         duration: 120000,
@@ -353,7 +353,7 @@ void main() {
         artist: 'Artist',
         album: 'Album',
         genre: 'Electronic',
-        tags: ['tag1', 'tag2'],
+        tags: const ['tag1', 'tag2'],
         releaseDate: releaseDate,
         isPublic: false,
         description: 'Description',
@@ -379,13 +379,13 @@ void main() {
 
   group('UploadTrack Equality', () {
     test('two identical tracks are equal (Equatable)', () {
-      final track1 = UploadTrack(
+      const track1 = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         album: 'Album',
       );
 
-      final track2 = UploadTrack(
+      const track2 = UploadTrack(
         title: 'Song',
         artist: 'Artist',
         album: 'Album',
@@ -395,12 +395,12 @@ void main() {
     });
 
     test('two different tracks are not equal', () {
-      final track1 = UploadTrack(
+      const track1 = UploadTrack(
         title: 'Song 1',
         artist: 'Artist',
       );
 
-      final track2 = UploadTrack(
+      const track2 = UploadTrack(
         title: 'Song 2',
         artist: 'Artist',
       );
@@ -418,7 +418,7 @@ void main() {
         artist: 'Artist',
         album: 'Album',
         genre: 'Electronic',
-        tags: ['tag1'],
+        tags: const ['tag1'],
         releaseDate: DateTime(2026, 3, 22),
         isPublic: true,
         description: 'Description',

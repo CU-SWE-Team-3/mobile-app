@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/network/user_session.dart';
-import '../../../../core/utils/profile_navigation.dart';
+import '../../../../core/themes/app_theme.dart';
 import '../providers/follow_provider.dart';
 import '../providers/player_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
-import '../../../../core/themes/app_theme.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
   const FullPlayerPage({super.key});
@@ -22,16 +22,12 @@ class FullPlayerPage extends ConsumerStatefulWidget {
 class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
   late final TextEditingController _commentController;
   late final FocusNode _commentFocus;
-  String? _myUserId;
 
   @override
   void initState() {
     super.initState();
     _commentController = TextEditingController();
     _commentFocus = FocusNode();
-    UserSession.getUserId().then((id) {
-      if (mounted) setState(() => _myUserId = id);
-    });
   }
 
   @override
@@ -151,99 +147,68 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 10),
                   child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _CircleButton(
+                        key: const ValueKey('player_back_button'),
+                        icon: Icons.keyboard_arrow_down,
+                        onTap: () => context.pop(),
+                      ),
+                      _CircleButton(
+                        key: const ValueKey('player_follow_button'),
+                        icon: followState.isFollowing
+                            ? Icons.person
+                            : Icons.person_add_outlined,
+                        onTap: artistId != null
+                            ? () => ref
+                                .read(followProvider(artistId).notifier)
+                                .toggle(artistId)
+                            : () {},
+                        loading: followState.isLoading,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Track title + artist ─────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Left: title/artist pill + behind-this-track pill
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      Text(
+                        playerState.currentTrackTitle ?? 'Nothing playing',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        playerState.currentTrackArtist ?? '',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 15),
+                      ),
+                      const SizedBox(height: 10),
+                      GestureDetector(
+                        key: const ValueKey('player_behind_track_button'),
+                        onTap: () {},
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.45),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    playerState.currentTrackTitle ??
-                                        'Nothing playing',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    playerState.currentTrackArtist ?? '',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        color: Colors.white70, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            GestureDetector(
-                              key: const ValueKey(
-                                  'player_behind_track_button'),
-                              onTap: () {},
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.45),
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.graphic_eq,
-                                        color: Colors.white, size: 14),
-                                    SizedBox(width: 5),
-                                    Text(
-                                      'Behind this track',
-                                      style: TextStyle(
-                                          color: Colors.white, fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                            Icon(Icons.graphic_eq,
+                                color: Colors.white, size: 16),
+                            SizedBox(width: 6),
+                            Text(
+                              'Behind this track',
+                              style: TextStyle(
+                                  color: Colors.white, fontSize: 12),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Right: collapse + follow buttons stacked
-                      Column(
-                        children: [
-                          _CircleButton(
-                            key: const ValueKey('player_back_button'),
-                            icon: Icons.keyboard_arrow_down,
-                            onTap: () => context.pop(),
-                          ),
-                          if (artistId != null &&
-                              artistId != _myUserId &&
-                              !followState.isFollowing) ...[
-                            const SizedBox(height: 8),
-                            _CircleButton(
-                              key: const ValueKey('player_follow_button'),
-                              icon: Icons.person_add_outlined,
-                              onTap: () => ref
-                                  .read(followProvider(artistId).notifier)
-                                  .toggle(artistId),
-                              loading: followState.isLoading,
-                            ),
-                          ],
-                        ],
                       ),
                     ],
                   ),
@@ -447,16 +412,13 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               if (text.trim().isEmpty || trackId == null) {
                                 return;
                               }
-                              if (trackId != null) {
-                                await ref
-                                    .read(
-                                        commentsProvider(trackId).notifier)
-                                    .postComment(
-                                      content: text.trim(),
-                                      timestamp: currentSec,
-                                    );
-                              }
-                              _commentController.clear();
+                              await ref
+                                  .read(commentsProvider(trackId).notifier)
+                                  .postComment(
+                                    content: text.trim(),
+                                    timestamp: currentSec,
+                                  );
+                                                          _commentController.clear();
                               _commentFocus.unfocus();
                             },
                           ),
@@ -568,6 +530,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         label: '',
                         onTap: () {},
                       ),
+                      _DownloadButton(trackId: trackId),
                       _ActionButton(
                         key: const ValueKey('player_queue_button'),
                         icon: Icons.queue_music,
@@ -800,6 +763,122 @@ class _EmojiButton extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: Text(emoji, style: const TextStyle(fontSize: 18)),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Download button — premium gated
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _DownloadButton extends ConsumerStatefulWidget {
+  final String? trackId;
+  const _DownloadButton({required this.trackId});
+
+  @override
+  ConsumerState<_DownloadButton> createState() => _DownloadButtonState();
+}
+
+class _DownloadButtonState extends ConsumerState<_DownloadButton> {
+  bool _isDownloading = false;
+
+  Future<void> _onTap() async {
+    final isPremium = ref.read(subscriptionProvider).isPremium;
+    if (!isPremium) {
+      _showUpgradeDialog();
+      return;
+    }
+    if (widget.trackId == null || _isDownloading) return;
+    setState(() => _isDownloading = true);
+    try {
+      await ref.read(dioClientProvider).dio.get(
+        '/tracks/${widget.trackId}/download',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Download started'),
+            backgroundColor: Color(0xFF4CAF50),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().contains('403')
+            ? 'Download limit reached. Upgrade for more.'
+            : 'Download failed. Try again.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
+
+  void _showUpgradeDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: const Text(
+          'Premium feature',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Upgrade to Artist Pro or Go+ to download tracks and listen offline.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Not now',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF5500),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.go('/upgrade');
+            },
+            child: const Text('Upgrade',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPremium = ref.watch(subscriptionProvider).isPremium;
+
+    return GestureDetector(
+      key: const ValueKey('player_download_button'),
+      onTap: _onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _isDownloading
+              ? const SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Icon(
+                  isPremium
+                      ? Icons.download_outlined
+                      : Icons.download_outlined,
+                  color: isPremium ? Colors.white : Colors.white30,
+                  size: 26,
+                ),
+        ],
       ),
     );
   }

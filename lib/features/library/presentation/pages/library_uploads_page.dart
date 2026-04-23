@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/entities/upload_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
 import '../providers/upload_provider.dart';
 import '../providers/my_tracks_provider.dart';
 
@@ -58,6 +59,13 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
     final role = prefs.getString('role') ?? '';
     if (role.toLowerCase() != 'artist') {
       if (context.mounted) _showUpgradeRoleDialog(context);
+      return;
+    }
+
+    // Enforce upload limit for free users.
+    final isPremium = ref.read(subscriptionProvider).isPremium;
+    if (!isPremium && _allTracks.length >= 3) {
+      if (context.mounted) _showUploadLimitDialog(context);
       return;
     }
 
@@ -140,6 +148,41 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
               'Upgrade to Artist',
               style: TextStyle(color: Colors.white),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUploadLimitDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: const Text(
+          'Upload limit reached',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Free accounts can upload up to 3 tracks. Upgrade to Artist Pro for unlimited uploads.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Not now',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF5500),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.go('/upgrade');
+            },
+            child: const Text('Upgrade',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -544,11 +587,11 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                                       ),
                                       if (track.processingState != null &&
                                           track.processingState != 'Finished')
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 4),
+                                        const Padding(
+                                          padding: EdgeInsets.only(top: 4),
                                           child: Row(
                                             children: [
-                                              const SizedBox(
+                                              SizedBox(
                                                 width: 10,
                                                 height: 10,
                                                 child: CircularProgressIndicator(
@@ -556,8 +599,8 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                                                   color: Color(0xFFFF5500),
                                                 ),
                                               ),
-                                              const SizedBox(width: 4),
-                                              const Text(
+                                              SizedBox(width: 4),
+                                              Text(
                                                 'Processing',
                                                 style: TextStyle(
                                                   color: Color(0xFFFF5500),
