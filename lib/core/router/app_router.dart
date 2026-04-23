@@ -68,6 +68,7 @@ import '../../features/playlist/presentation/pages/create_playlist_page.dart';
 import '../../features/playlist/presentation/pages/edit_playlist_page.dart';
 import '../../features/playlist/presentation/pages/playlist_privacy_page.dart';
 import '../../features/playlist/presentation/pages/share_playlist_page.dart';
+import '../../features/playlist/presentation/pages/add_to_playlist_page.dart';
 
 import '../../features/messaging/presentation/pages/chat_inbox_page.dart';
 import '../../features/messaging/presentation/pages/chat_room_page.dart';
@@ -390,13 +391,26 @@ final appRouter = GoRouter(
     // ── PLAYLISTS ─────────────────────────────────────────────────────
     GoRoute(
       path: '/playlist',
-      builder: (_, __) => const PlaylistDetailsPage(),
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return PlaylistDetailsPage(
+          playlistId: extra['playlistId'] as String?,
+        );
+      },
       routes: [
         GoRoute(path: 'create', builder: (_, __) => const CreatePlaylistPage()),
         GoRoute(path: 'edit', builder: (_, __) => const EditPlaylistPage()),
         GoRoute(
             path: 'privacy', builder: (_, __) => const PlaylistPrivacyPage()),
         GoRoute(path: 'share', builder: (_, __) => const SharePlaylistPage()),
+        GoRoute(
+          path: 'add-track',
+          builder: (_, state) => AddToPlaylistPage(
+            trackId: (state.extra as Map<String, dynamic>?)?['trackId']
+                    as String? ??
+                '',
+          ),
+        ),
       ],
     ),
 
