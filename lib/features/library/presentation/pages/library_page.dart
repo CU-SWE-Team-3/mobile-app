@@ -88,7 +88,7 @@ class LibraryPage extends ConsumerWidget {
                 padding: EdgeInsets.zero,
                 children: [
                   _LibraryMenuItem(key: const ValueKey('library_likes_item'), title: 'Your likes', onTap: () => context.push('/likes')),
-                  _LibraryMenuItem(key: const ValueKey('library_playlists_item'), title: 'Playlists', onTap: () {}),
+                  _LibraryMenuItem(key: const ValueKey('library_playlists_item'), title: 'Playlists', onTap: () => context.push('/library/playlists')),
                   _LibraryMenuItem(
                     key: const ValueKey('library_albums_item'),
                     title: 'Albums',
