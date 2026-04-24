@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/player/presentation/providers/follow_provider.dart';
 import '../../features/player/presentation/providers/player_provider.dart';
 import '../themes/app_theme.dart';
 import '../../features/engagement/presentation/providers/engagement_provider.dart';
@@ -116,6 +117,11 @@ class _MiniPlayerBar extends ConsumerWidget {
     final params = EngagementParams(trackId: track.id);
     final engState = ref.watch(engagementProvider(params));
 
+    final artistId = track.artistId;
+    final followState = artistId != null
+        ? ref.watch(followProvider(artistId))
+        : const FollowState();
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
       child: GestureDetector(
@@ -162,7 +168,7 @@ class _MiniPlayerBar extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '♫  ${track.title}',
+                        track.title,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
@@ -178,6 +184,26 @@ class _MiniPlayerBar extends ConsumerWidget {
                     ],
                   ),
                 ),
+
+                // Follow button wired to followProvider
+                if (artistId != null)
+                  IconButton(
+                    key: const ValueKey('shell_follow_button'),
+                    icon: Icon(
+                      followState.isFollowing
+                          ? Icons.person
+                          : Icons.person_add_outlined,
+                      color: followState.isFollowing
+                          ? AppTheme.primary
+                          : Colors.white,
+                      size: 22,
+                    ),
+                    onPressed: (followState.isLoading || followState.isChecking)
+                        ? null
+                        : () => ref
+                            .read(followProvider(artistId).notifier)
+                            .toggle(artistId),
+                  ),
 
                 // Like button wired to engagementProvider
                 IconButton(

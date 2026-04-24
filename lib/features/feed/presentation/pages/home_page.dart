@@ -11,6 +11,7 @@ import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -298,7 +299,9 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   // 1 — Your likes banner
   Widget _buildYourLikesBanner() {
-    return Container(
+    return GestureDetector(
+      onTap: () => context.push('/likes'),
+      child: Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -328,7 +331,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () => context.push('/likes'),
                   icon: const Icon(Icons.shuffle, color: Colors.white, size: 24),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -343,6 +346,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
         ],
       ),
+    ),
     );
   }
 
@@ -947,10 +951,43 @@ class _HomePageState extends ConsumerState<HomePage> {
             onPressed: () {},
             icon: const Icon(Icons.mail_outline, color: Colors.white, size: 22),
           ),
-          IconButton(
-            key: const ValueKey('home_notifications_button'),
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none, color: Colors.white, size: 22),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                key: const ValueKey('home_notifications_button'),
+                onPressed: () => context.push('/notifications'),
+                icon: const Icon(Icons.notifications_none, color: Colors.white, size: 22),
+              ),
+              Builder(builder: (ctx) {
+                final unread = ref.watch(notificationProvider).unreadCount;
+                if (unread == 0) return const SizedBox.shrink();
+                return Positioned(
+                  top: 6,
+                  right: 6,
+                  child: IgnorePointer(
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF5500),
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        unread > 9 ? '9+' : '$unread',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          height: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
           ),
           const SizedBox(width: 4),
         ],
@@ -997,6 +1034,14 @@ class _HomePageState extends ConsumerState<HomePage> {
             // 8 — Discover with Stations
             _buildSectionHeader('Discover with Stations'),
             _buildDiscoverWithStations(),
+            const SizedBox(height: 32),
+
+            // 9 — New crew, suggested for you
+            _buildSectionHeader('New crew, suggested for you'),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: SuggestedRow(title: null),
+            ),
             const SizedBox(height: 32),
           ],
         ),
