@@ -17,11 +17,16 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(child: navigationShell),
-          // Hidden on Feed tab (index 1) — Feed manages its own mini player
-          _MiniPlayerSlot(currentIndex: navigationShell.currentIndex),
+          Positioned.fill(child: navigationShell),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            // Hidden on Feed tab (index 1) — Feed manages its own mini player
+            child: _MiniPlayerSlot(currentIndex: navigationShell.currentIndex),
+          ),
         ],
       ),
       bottomNavigationBar: _BottomNavBar(
@@ -111,21 +116,22 @@ class _MiniPlayerBar extends ConsumerWidget {
     final params = EngagementParams(trackId: track.id);
     final engState = ref.watch(engagementProvider(params));
 
-    return GestureDetector(
-      key: const ValueKey('shell_mini_player_expand_button'),
-      onTap: () => context.push('/player'),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: 64,
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(32),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: GestureDetector(
+        key: const ValueKey('shell_mini_player_expand_button'),
+        onTap: () => context.push('/player'),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+            child: Container(
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0x261A1A1A),
+                borderRadius: BorderRadius.circular(32),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
                 // Play / Pause button
@@ -194,6 +200,7 @@ class _MiniPlayerBar extends ConsumerWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
