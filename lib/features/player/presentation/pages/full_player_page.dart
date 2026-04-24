@@ -232,16 +232,22 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                             onTap: () => context.pop(),
                           ),
                           if (artistId != null &&
-                              artistId != _myUserId &&
-                              !followState.isFollowing) ...[
+                              artistId != _myUserId) ...[
                             const SizedBox(height: 8),
                             _CircleButton(
                               key: const ValueKey('player_follow_button'),
-                              icon: Icons.person_add_outlined,
-                              onTap: () => ref
-                                  .read(followProvider(artistId).notifier)
-                                  .toggle(artistId),
-                              loading: followState.isLoading,
+                              icon: followState.isFollowing
+                                  ? Icons.person
+                                  : Icons.person_add_outlined,
+                              iconColor: followState.isFollowing
+                                  ? AppTheme.primary
+                                  : Colors.white,
+                              onTap: (followState.isLoading || followState.isChecking)
+                                  ? null
+                                  : () => ref
+                                      .read(followProvider(artistId).notifier)
+                                      .toggle(artistId),
+                              loading: followState.isLoading || followState.isChecking,
                             ),
                           ],
                           const SizedBox(height: 8),
@@ -738,10 +744,11 @@ String _formatSec(int seconds) {
 
 class _CircleButton extends StatelessWidget {
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool loading;
+  final Color iconColor;
   const _CircleButton(
-      {super.key, required this.icon, required this.onTap, this.loading = false});
+      {super.key, required this.icon, this.onTap, this.loading = false, this.iconColor = Colors.white});
 
   @override
   Widget build(BuildContext context) {
@@ -761,7 +768,7 @@ class _CircleButton extends StatelessWidget {
                       strokeWidth: 2, color: Colors.white),
                 ),
               )
-            : Icon(icon, color: Colors.white, size: 22),
+            : Icon(icon, color: iconColor, size: 22),
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/core/network/user_session.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/basic_settings_page.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/legal_page.dart';
+import 'package:soundcloud_clone/features/settings/presentation/pages/notifications_settings_page.dart';
 
 class SettingsMainPage extends ConsumerWidget {
   const SettingsMainPage({super.key});
@@ -68,7 +69,13 @@ class SettingsMainPage extends ConsumerWidget {
             onTap: () => context.push('/settings/privacy'),
           ),
           _SettingsMenuItem(title: 'Inbox', onTap: () {}),
-          _SettingsMenuItem(title: 'Notifications', onTap: () {}),
+          _SettingsMenuItem(
+            title: 'Notifications',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationsSettingsPage()),
+            ),
+          ),
           _SettingsMenuItem(title: 'Add widgets', onTap: () {}),
           _SettingsMenuItem(title: 'Analytics', onTap: () {}),
           _SettingsMenuItem(title: 'Communications', onTap: () {}),
