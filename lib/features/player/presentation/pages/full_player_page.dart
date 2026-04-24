@@ -10,6 +10,7 @@ import '../providers/player_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../../core/themes/app_theme.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
@@ -222,7 +223,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      // Right: collapse + follow buttons stacked
+                      // Right: collapse + follow + more buttons stacked
                       Column(
                         children: [
                           _CircleButton(
@@ -249,6 +250,24 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               loading: followState.isLoading || followState.isChecking,
                             ),
                           ],
+                          const SizedBox(height: 8),
+                          _CircleButton(
+                            key: const ValueKey('player_more_button'),
+                            icon: Icons.more_vert,
+                            onTap: () {
+                              if (trackId == null) return;
+                              showModalBottomSheet(
+                                context: context,
+                                backgroundColor: const Color(0xFF1E1E1E),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(16)),
+                                ),
+                                builder: (_) =>
+                                    TrackOptionsSheet(trackId: trackId),
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ],

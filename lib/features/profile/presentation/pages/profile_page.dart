@@ -103,7 +103,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   List<UploadTrack> _cachedTracks = [];
 
-  final _playlists = const <_Playlist>[];
+  List<_ProfilePlaylist> _playlists = [];
+  bool _playlistsLoading = false;
 
   List<TrackSummary> _reposts = [];
   List<TrackSummary> _likes = [];
@@ -134,6 +135,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     await _fetchReposts();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fetchLikes();
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _fetchPlaylists();
   }
 
   void _playFrom(int index) {
@@ -236,6 +239,39 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           () => sl<EngagementRemoteDataSource>().getUserLikes(userId));
       if (mounted) setState(() => _likes = results);
     } catch (_) {}
+  }
+
+  Future<void> _fetchPlaylists() async {
+    if (mounted) setState(() => _playlistsLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId') ?? '';
+      if (userId.isEmpty) {
+        if (mounted) setState(() => _playlistsLoading = false);
+        return;
+      }
+      final response = await _withRetry(() => dioClient.dio
+          .get('/playlists', queryParameters: {'creator': userId}));
+      final raw = response.data;
+      List<dynamic> items = [];
+      if (raw is Map) {
+        final d = raw['data'];
+        if (d is Map) {
+          final p = d['playlists'];
+          items = p is List ? p : [];
+        }
+      }
+      final playlists = items
+          .whereType<Map<String, dynamic>>()
+          .map(_ProfilePlaylist.fromJson)
+          .toList();
+      if (mounted) setState(() {
+        _playlists = playlists;
+        _playlistsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _playlistsLoading = false);
+    }
   }
 
   Future<void> _fetchReposts() async {
@@ -341,6 +377,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       await prefs.setString('bio',     bio);
       await prefs.setString('city',    city);
       await prefs.setString('country', country);
+      final avatarUrl = data['avatarUrl'] as String? ?? '';
+      if (avatarUrl.isNotEmpty) {
+        await prefs.setString('avatarUrl', avatarUrl);
+        debugPrint('[Profile] avatarUrl persisted: $avatarUrl');
+      }
 
       // Always fetch counts from the network endpoints — they are authoritative.
       int followerCount  = 0;
@@ -952,6 +993,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   // ── playlist row ─────────────────────────────────────────────────────
   Widget _playlistRow(BuildContext context) {
+    if (_playlistsLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: Color(0xFFFF5500)),
+          ),
+        ),
+      );
+    }
     if (_playlists.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -968,29 +1022,46 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           itemBuilder: (_, i) {
             final p = _playlists[i];
             return GestureDetector(
-              key: const ValueKey('profile_playlist_tile'),
-              onTap: () {},
+              key: ValueKey('profile_playlist_tile_$i'),
+              onTap: () => context.push('/playlist', extra: {'playlistId': p.id}),
               child: Padding(
                 padding: const EdgeInsets.only(right: 14),
                 child: SizedBox(
-                  width: 150,
+                  width: 160,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          width: 150,
-                          height: 150,
-                          color: Colors.grey[850],
-                          child: const Icon(Icons.queue_music,
-                              size: 52, color: Colors.white38),
+                        child: SizedBox(
+                          width: 160,
+                          height: 160,
+                          child: p.artworkUrl != null && p.artworkUrl!.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: p.artworkUrl!,
+                                  fit: BoxFit.cover,
+                                  placeholder: (_, __) => Container(
+                                    color: Colors.grey[850],
+                                    child: const Icon(Icons.queue_music,
+                                        size: 52, color: Colors.white38),
+                                  ),
+                                  errorWidget: (_, __, ___) => Container(
+                                    color: Colors.grey[850],
+                                    child: const Icon(Icons.queue_music,
+                                        size: 52, color: Colors.white38),
+                                  ),
+                                )
+                              : Container(
+                                  color: Colors.grey[850],
+                                  child: const Icon(Icons.queue_music,
+                                      size: 52, color: Colors.white38),
+                                ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        p.name,
+                        p.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -1000,7 +1071,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        p.owner,
+                        p.ownerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: _sub, fontSize: 12),
@@ -1091,10 +1162,30 @@ class _Track {
   const _Track(this.title, this.artist, this.duration);
 }
 
-class _Playlist {
-  final String name;
-  final String owner;
-  const _Playlist(this.name, this.owner);
+class _ProfilePlaylist {
+  final String id;
+  final String title;
+  final String? artworkUrl;
+  final String ownerName;
+
+  const _ProfilePlaylist({
+    required this.id,
+    required this.title,
+    this.artworkUrl,
+    required this.ownerName,
+  });
+
+  factory _ProfilePlaylist.fromJson(Map<String, dynamic> json) {
+    final creator = json['creator'] as Map<String, dynamic>?;
+    return _ProfilePlaylist(
+      id: (json['_id'] as String?) ?? (json['id'] as String?) ?? '',
+      title: json['title'] as String? ?? '',
+      artworkUrl: json['artworkUrl'] as String?,
+      ownerName: (json['ownerName'] as String?) ??
+          (creator?['displayName'] as String?) ??
+          '',
+    );
+  }
 }
 
 // ── track tile ───────────────────────────────────────────────────────────
