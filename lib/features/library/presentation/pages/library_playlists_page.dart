@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/network/dio_client.dart';
 import '../../../playlist/domain/entities/playlist.dart';
 import '../../../playlist/presentation/pages/playlist_details_page.dart';
+import '../../../playlist/presentation/pages/share_playlist_page.dart';
 
 // ── Provider ────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,8 @@ class _PlaylistNotifier extends StateNotifier<List<Playlist>> {
     await prefs.setString(
         _kPlaylistsKey, jsonEncode(state.map((p) => p.toJson()).toList()));
   }
+
+  Future<void> reload() => _load();
 }
 
 final playlistsProvider =
@@ -75,11 +79,27 @@ const _secondary = Color(0xFF999999);
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-class LibraryPlaylistsPage extends ConsumerWidget {
+class LibraryPlaylistsPage extends ConsumerStatefulWidget {
   const LibraryPlaylistsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LibraryPlaylistsPage> createState() =>
+      _LibraryPlaylistsPageState();
+}
+
+class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
+  @override
+  void initState() {
+    super.initState();
+    // Re-read SharedPreferences each time this page instance is shown so that
+    // track counts written by AddToPlaylistPage are reflected immediately.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(playlistsProvider.notifier).reload();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final playlists = ref.watch(playlistsProvider);
 
     return Scaffold(
@@ -87,13 +107,13 @@ class LibraryPlaylistsPage extends ConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
-            _TopBar(onAdd: () => _openCreateSheet(context, ref)),
+            _TopBar(onAdd: () => _openCreateSheet(context)),
             Expanded(
               child: playlists.isEmpty
-                  ? _EmptyState(onCreateTap: () => _openCreateSheet(context, ref))
+                  ? _EmptyState(onCreateTap: () => _openCreateSheet(context))
                   : _PlaylistList(
                       playlists: playlists,
-                      onCreateNew: () => _openCreateSheet(context, ref),
+                      onCreateNew: () => _openCreateSheet(context),
                       onImport: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -107,7 +127,7 @@ class LibraryPlaylistsPage extends ConsumerWidget {
     );
   }
 
-  void _openCreateSheet(BuildContext context, WidgetRef ref) {
+  void _openCreateSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -117,22 +137,57 @@ class LibraryPlaylistsPage extends ConsumerWidget {
       ),
       builder: (_) => _CreateSheet(
         onSave: (title, isPublic) {
-          _addPlaylist(ref, title, isPublic);
+          _addPlaylist(context, title, isPublic);
         },
       ),
     );
   }
 
   Future<void> _addPlaylist(
-      WidgetRef ref, String title, bool isPublic) async {
+      BuildContext context, String title, bool isPublic) async {
+    // Capture these before any await so they remain valid across async gaps.
+    final messenger = ScaffoldMessenger.of(context);
+    final notifier = ref.read(playlistsProvider.notifier);
+
     final prefs = await SharedPreferences.getInstance();
     final ownerName =
         prefs.getString('displayName') ?? prefs.getString('username') ?? 'You';
-    ref.read(playlistsProvider.notifier).add(Playlist(
-          title: title,
-          ownerName: ownerName,
-          isPublic: isPublic,
-        ));
+
+    // POST to the backend first so we get a real backend-issued _id.
+    String playlistId;
+    try {
+      final response = await dioClient.dio.post(
+        '/playlists',
+        data: {'title': title, 'isPrivate': !isPublic},
+      );
+      // Handles both { data: { playlist: { _id } } } and { data: { _id } }.
+      final dataField = response.data['data'];
+      final Map<String, dynamic> playlistMap;
+      if (dataField is Map<String, dynamic>) {
+        playlistMap =
+            (dataField['playlist'] as Map<String, dynamic>?) ?? dataField;
+      } else {
+        playlistMap = {};
+      }
+      playlistId = playlistMap['_id'] as String? ?? '';
+      if (playlistId.isEmpty) throw Exception('No _id in response');
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Could not create playlist. Please try again.'),
+        backgroundColor: _surface,
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+
+    // Save locally with the real backend ID so AddToPlaylistPage can PUT
+    // against the correct backend resource.
+    notifier.add(Playlist(
+      id: playlistId,
+      title: title,
+      ownerName: ownerName,
+      isPublic: isPublic,
+    ));
   }
 }
 
@@ -562,6 +617,7 @@ class _PlaylistTileState extends State<_PlaylistTile> {
               shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
+              useSafeArea: true,
               builder: (_) => _PlaylistOptionsSheet(playlist: playlist),
             ),
             child: const Padding(
@@ -669,12 +725,32 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
             _optionRow(
               icon: Icons.lock_outline,
               label: playlist.isPublic ? 'Make private' : 'Make public',
-              onTap: () {
-                Navigator.pop(context);
-                ref.read(playlistsProvider.notifier).updateVisibility(
-                      playlist.id,
-                      !playlist.isPublic,
-                    );
+              onTap: () async {
+                final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                final notifier = ref.read(playlistsProvider.notifier);
+                final newIsPublic = !playlist.isPublic;
+                nav.pop();
+                try {
+                  await dioClient.dio.patch(
+                    '/playlists/${playlist.id}',
+                    data: {'isPrivate': !newIsPublic},
+                  );
+                  notifier.updateVisibility(playlist.id, newIsPublic);
+                  messenger.showSnackBar(SnackBar(
+                    content: Text(newIsPublic
+                        ? 'Playlist is now public'
+                        : 'Playlist is now private'),
+                    backgroundColor: _surface,
+                    behavior: SnackBarBehavior.floating,
+                  ));
+                } catch (_) {
+                  messenger.showSnackBar(const SnackBar(
+                    content: Text('Failed to update playlist privacy'),
+                    backgroundColor: Color(0xFF3A1A1A),
+                    behavior: SnackBarBehavior.floating,
+                  ));
+                }
               },
             ),
             // Delete
@@ -693,6 +769,25 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
                 );
               },
             ),
+            // Share
+            _optionRow(
+              icon: Icons.share_rounded,
+              label: 'Share',
+              onTap: () {
+                Navigator.pop(context);
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: _surface,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  builder: (_) => SharePlaylistSheet(playlist: playlist),
+                );
+              },
+            ),
+            // Clearance for mini player (64dp height + 8dp bottom margin)
+            const SizedBox(height: 72),
           ],
         ),
       ),

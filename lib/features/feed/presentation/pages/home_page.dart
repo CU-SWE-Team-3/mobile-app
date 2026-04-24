@@ -8,11 +8,10 @@ import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
-import 'package:soundcloud_clone/features/engagement/presentation/pages/likers_list_page.dart';
-import 'package:soundcloud_clone/features/engagement/presentation/pages/reposters_list_page.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/like_button.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/repost_button.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -571,44 +570,7 @@ class _TrackRow extends ConsumerWidget {
                     borderRadius:
                         BorderRadius.vertical(top: Radius.circular(16)),
                   ),
-                  builder: (_) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.favorite_border,
-                            color: Colors.white70),
-                        title: const Text('People who liked this track',
-                            style: TextStyle(color: Colors.white)),
-                        onTap: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  LikersListPage(trackId: track.id),
-                            ),
-                          );
-                        },
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.repeat,
-                            color: Colors.white70),
-                        title: const Text('People who reposted this track',
-                            style: TextStyle(color: Colors.white)),
-                        onTap: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  RepostersListPage(trackId: track.id),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ),
+                  builder: (_) => TrackOptionsSheet(trackId: track.id),
                 );
               },
               icon: const Icon(
