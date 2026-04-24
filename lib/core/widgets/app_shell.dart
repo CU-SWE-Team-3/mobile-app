@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/player/presentation/providers/follow_provider.dart';
 import '../../features/player/presentation/providers/player_provider.dart';
 import '../themes/app_theme.dart';
 import '../../features/engagement/presentation/providers/engagement_provider.dart';
@@ -17,11 +18,16 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(child: navigationShell),
-          // Hidden on Feed tab (index 1) — Feed manages its own mini player
-          _MiniPlayerSlot(currentIndex: navigationShell.currentIndex),
+          Positioned.fill(child: navigationShell),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            // Hidden on Feed tab (index 1) — Feed manages its own mini player
+            child: _MiniPlayerSlot(currentIndex: navigationShell.currentIndex),
+          ),
         ],
       ),
       bottomNavigationBar: _BottomNavBar(
@@ -111,21 +117,27 @@ class _MiniPlayerBar extends ConsumerWidget {
     final params = EngagementParams(trackId: track.id);
     final engState = ref.watch(engagementProvider(params));
 
-    return GestureDetector(
-      key: const ValueKey('shell_mini_player_expand_button'),
-      onTap: () => context.push('/player'),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            height: 64,
-            margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(32),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+    final artistId = track.artistId;
+    final followState = artistId != null
+        ? ref.watch(followProvider(artistId))
+        : const FollowState();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: GestureDetector(
+        key: const ValueKey('shell_mini_player_expand_button'),
+        onTap: () => context.push('/player'),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+            child: Container(
+              height: 64,
+              decoration: BoxDecoration(
+                color: const Color(0x261A1A1A),
+                borderRadius: BorderRadius.circular(32),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
                 // Play / Pause button
@@ -156,7 +168,7 @@ class _MiniPlayerBar extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '♫  ${track.title}',
+                        track.title,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,
@@ -172,6 +184,26 @@ class _MiniPlayerBar extends ConsumerWidget {
                     ],
                   ),
                 ),
+
+                // Follow button wired to followProvider
+                if (artistId != null)
+                  IconButton(
+                    key: const ValueKey('shell_follow_button'),
+                    icon: Icon(
+                      followState.isFollowing
+                          ? Icons.person
+                          : Icons.person_add_outlined,
+                      color: followState.isFollowing
+                          ? AppTheme.primary
+                          : Colors.white,
+                      size: 22,
+                    ),
+                    onPressed: (followState.isLoading || followState.isChecking)
+                        ? null
+                        : () => ref
+                            .read(followProvider(artistId).notifier)
+                            .toggle(artistId),
+                  ),
 
                 // Like button wired to engagementProvider
                 IconButton(
@@ -194,6 +226,7 @@ class _MiniPlayerBar extends ConsumerWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

@@ -145,7 +145,7 @@ class _SearchPageState extends State<SearchPage> {
                                 ),
                                 const SizedBox(height: 12),
                                 ElevatedButton(
-                                  key: const ValueKey('search-retry-button'),
+                                  key: const ValueKey('search_retry_button'),
                                   onPressed: () => _search(_lastQuery),
                                   style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFFFF5500)),
@@ -323,12 +323,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildGenreCard(_Genre genre) {
-    final slug = genre.name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'-+'), '-');
     return GestureDetector(
-      key: ValueKey('genre-card-$slug'),
       onTap: () => context.push(
           '/search/genre/${Uri.encodeComponent(genre.name)}'),
       child: AspectRatio(

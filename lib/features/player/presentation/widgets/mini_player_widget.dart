@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,15 +32,20 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
     final isPlaying = playerState.isPlaying;
     final notifier = ref.read(playerProvider.notifier);
 
-    return Container(
-      height: 64,
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(32),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+          child: Container(
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0x261A1A1A),
+              borderRadius: BorderRadius.circular(32),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
         children: [
           // White circle play/pause button
           GestureDetector(
@@ -147,6 +154,9 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
             },
           ),
         ],
+      ),
+          ),
+        ),
       ),
     );
   }
