@@ -168,50 +168,104 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final bg =
         n.isRead ? const Color(0xFF111111) : const Color(0xFF1E1E1E);
 
-    return InkWell(
-      onTap: () => _handleTap(context, n),
-      child: Container(
-        color: bg,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Unread accent bar
-            Container(
-              width: 3,
-              height: 72,
-              color: n.isRead
-                  ? Colors.transparent
-                  : const Color(0xFFFF5500),
-            ),
-            const SizedBox(width: 12),
-            // Avatar + badge
-            _buildAvatar(n),
-            const SizedBox(width: 12),
-            // Notification text
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Text(
-                  _notificationText(n),
-                  style: TextStyle(
-                    color: n.isRead ? Colors.white70 : Colors.white,
-                    fontSize: 14,
-                    height: 1.4,
+    return Dismissible(
+      key: ValueKey(n.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red.shade800,
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      onDismissed: (_) =>
+          ref.read(notificationProvider.notifier).deleteNotification(n.id),
+      child: InkWell(
+        onTap: () => _handleTap(context, n),
+        onLongPress: () => _showDeleteSheet(context, n),
+        child: Container(
+          color: bg,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Unread accent bar
+              Container(
+                width: 3,
+                height: 72,
+                color: n.isRead
+                    ? Colors.transparent
+                    : const Color(0xFFFF5500),
+              ),
+              const SizedBox(width: 12),
+              // Avatar + badge
+              _buildAvatar(n),
+              const SizedBox(width: 12),
+              // Notification text
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Text(
+                    _notificationText(n),
+                    style: TextStyle(
+                      color: n.isRead ? Colors.white70 : Colors.white,
+                      fontSize: 14,
+                      height: 1.4,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            // Time
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Text(
-                n.timeAgo,
-                style: const TextStyle(color: Colors.white38, fontSize: 12),
+              const SizedBox(width: 8),
+              // Time
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Text(
+                  n.timeAgo,
+                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteSheet(BuildContext context, AppNotification n) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text(
+                'Delete notification',
+                style: TextStyle(color: Colors.red, fontSize: 15),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                ref
+                    .read(notificationProvider.notifier)
+                    .deleteNotification(n.id);
+              },
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -275,23 +329,50 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         return Icons.repeat;
       case NotificationType.comment:
         return Icons.chat_bubble;
+      case NotificationType.message:
+        return Icons.message;
+      case NotificationType.newTrack:
+        return Icons.music_note;
+      case NotificationType.newPlaylist:
+        return Icons.queue_music;
+      case NotificationType.mention:
+        return Icons.alternate_email;
+      case NotificationType.system:
+        return Icons.notifications;
     }
   }
 
+  String _actorPrefix(AppNotification n) {
+    if (n.actorCount <= 1) return n.actorName;
+    final others = n.actorCount - 1;
+    return '${n.actorName} and $others other${others == 1 ? '' : 's'}';
+  }
+
   String _notificationText(AppNotification n) {
+    final actor = _actorPrefix(n);
     switch (n.type) {
       case NotificationType.follow:
-        return '${n.actorName} started following you';
+        return '$actor started following you';
       case NotificationType.like:
-        return '${n.actorName} liked your track ${n.trackTitle ?? ''}';
+        return '$actor liked your track ${n.trackTitle ?? ''}';
       case NotificationType.repost:
-        return '${n.actorName} reposted your track ${n.trackTitle ?? ''}';
+        return '$actor reposted your track ${n.trackTitle ?? ''}';
       case NotificationType.comment:
         final quote =
             n.commentText != null ? '"${n.commentText}"' : '';
         final track =
             n.trackTitle != null ? ' on ${n.trackTitle}' : '';
-        return '${n.actorName} commented: $quote$track';
+        return '$actor commented: $quote$track';
+      case NotificationType.message:
+        return '$actor sent you a message';
+      case NotificationType.newTrack:
+        return '$actor released a new track${n.trackTitle != null ? ': ${n.trackTitle}' : ''}';
+      case NotificationType.newPlaylist:
+        return '$actor created a new playlist${n.trackTitle != null ? ': ${n.trackTitle}' : ''}';
+      case NotificationType.mention:
+        return '$actor mentioned you';
+      case NotificationType.system:
+        return n.commentText ?? 'System notification';
     }
   }
 
@@ -301,20 +382,20 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     ref.read(notificationProvider.notifier).markAsRead(n.id);
     switch (n.type) {
       case NotificationType.follow:
-        // Strip leading @ so it fits cleanly as a URL path segment.
-        final slug = n.actorPermalink.replaceFirst('@', '');
-        context.push('/user/$slug', extra: {
-          'displayName': n.actorName,
-          'userId': '',
-        });
+        {
+          final slug = n.actorPermalink.replaceFirst('@', '');
+          context.push('/user/$slug', extra: {
+            'displayName': n.actorName,
+            'userId': n.actorId,
+          });
+        }
         break;
       case NotificationType.like:
       case NotificationType.repost:
-        // Navigate to the player (current track). A real implementation
-        // would resolve the track by ID before pushing.
         context.push('/player');
         break;
       case NotificationType.comment:
+      case NotificationType.mention:
         context.push('/comments', extra: {
           'trackId': null,
           'trackTitle': n.trackTitle,
@@ -322,6 +403,21 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           'trackArtworkUrl': null,
           'currentPositionSeconds': 0,
         });
+        break;
+      case NotificationType.newTrack:
+      case NotificationType.newPlaylist:
+        {
+          final slug = n.actorPermalink.replaceFirst('@', '');
+          context.push('/user/$slug', extra: {
+            'displayName': n.actorName,
+            'userId': n.actorId,
+          });
+        }
+        break;
+      case NotificationType.message:
+        context.push('/messages');
+        break;
+      case NotificationType.system:
         break;
     }
   }
