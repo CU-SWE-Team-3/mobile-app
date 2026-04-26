@@ -43,15 +43,31 @@ class _OAuthLoginPageState extends ConsumerState<OAuthLoginPage> {
         throw Exception('Unable to get Google ID token');
       }
 
-      final response = await dioClient.dio.post(
-        '/auth/google/mobile',
-        data: {'idToken': idToken},
-      );
+    final response = await dioClient.dio.post(
+  '/auth/google/mobile',
+  data: {'idToken': idToken},
+);
+debugPrint('[Login] full response: ${response.data}');
 
-      final token = response.data['data']['token'] as String? ?? '';
-      final refreshToken = response.data['data']['refreshToken'] as String? ?? '';
+     // Tokens come as HttpOnly cookies — extract from Set-Cookie header
+String token = '';
+String refreshToken = '';
+final cookies = response.headers['set-cookie'];
+if (cookies != null) {
+  for (final cookie in cookies) {
+    if (cookie.startsWith('accessToken=')) {
+      token = cookie.split(';')[0].split('=')[1];
+    } else if (cookie.startsWith('refreshToken=')) {
+      refreshToken = cookie.split(';')[0].split('=')[1];
+    }
+  }
+}
       final user = response.data['data']['user'] as Map<String, dynamic>? ?? {};
       final prefs = await SharedPreferences.getInstance();
+      debugPrint('[Login] cookies: ${response.headers['set-cookie']}');
+debugPrint('[Login] token extracted: $token');
+debugPrint('[Login] refreshToken extracted: $refreshToken');
+
       await prefs.setString('accessToken', token);
       await prefs.setString('refreshToken', refreshToken);
       await prefs.setString('userId', user['_id'] as String? ?? '');

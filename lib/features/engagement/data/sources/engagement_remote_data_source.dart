@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../models/comment_model.dart';
 import '../models/liker_user_model.dart';
+import 'package:flutter/foundation.dart';
 
 // ── Shared track summary model (liked tracks + reposts lists) ─────────────────
 
@@ -168,16 +169,18 @@ class EngagementRemoteDataSource {
 
   // ── Current user's liked tracks ──────────────────────────────────────────
   // GET /profile/{userId}/likes
-  // Response: { data: { likedTracks: [{ likeDate, track: {...} }], pagination } }
-  Future<List<TrackSummary>> getUserLikes(String userId) async {
+  // Response: { data: { likedTracks: [{ likeDate, target: {...} }], pagination } }
+  // ('target' is the current key; falls back to 'track' for backward compat)
+ Future<List<TrackSummary>> getUserLikes(String userId) async {
     final response = await _dio.get('/profile/$userId/likes');
+    debugPrint('=== LIKES RAW: ${response.data}');
     final data = response.data['data'] as Map<String, dynamic>? ?? {};
     // Nested shape: { likedTracks: [{ likeDate, track: {...} }] }
     final rawNested = data['likedTracks'] as List<dynamic>?;
     if (rawNested != null) {
       return rawNested.map((item) {
         final map = item as Map<String, dynamic>;
-        final track = map['track'] as Map<String, dynamic>? ?? map;
+        final track = (map['target'] ?? map['track']) as Map<String, dynamic>? ?? map;
         return TrackSummary.fromJson(track);
       }).toList();
     }

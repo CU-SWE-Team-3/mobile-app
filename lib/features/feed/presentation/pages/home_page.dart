@@ -1,5 +1,5 @@
 import 'dart:math';
-
+import 'package:dio/dio.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,21 +47,26 @@ class _FeedTrack {
   });
 
   factory _FeedTrack.fromJson(Map<String, dynamic> json) {
-    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    // /feed returns FeedActivity objects where track data is nested under
+    // `target`. Flat shapes (trending, liked tracks) have fields at the
+    // top level — fall back to `json` itself when `target` is absent.
+    final target = json['target'] as Map<String, dynamic>?;
+    final track = target ?? json;
+    final artist = track['artist'] as Map<String, dynamic>? ?? {};
     return _FeedTrack(
-      id: json['_id'] as String? ?? '',
-      title: json['title'] as String? ?? '',
+      id: track['_id'] as String? ?? '',
+      title: track['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
       artistId: artist['_id'] as String?,
       artistPermalink: artist['permalink'] as String?,
-      artworkUrl: json['artworkUrl'] as String?,
-      hlsUrl: json['hlsUrl'] as String? ?? '',
-      playCount: (json['playCount'] as num?)?.toInt() ?? 0,
-      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
-      repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
-      isLiked: json['isLiked'] as bool? ?? false,
-      isReposted: json['isReposted'] as bool? ?? false,
-      waveform: (json['waveform'] as List<dynamic>?)
+      artworkUrl: track['artworkUrl'] as String?,
+      hlsUrl: track['hlsUrl'] as String? ?? '',
+      playCount: (track['playCount'] as num?)?.toInt() ?? 0,
+      likeCount: (track['likeCount'] as num?)?.toInt() ?? 0,
+      repostCount: (track['repostCount'] as num?)?.toInt() ?? 0,
+      isLiked: track['isLiked'] as bool? ?? false,
+      isReposted: track['isReposted'] as bool? ?? false,
+      waveform: (track['waveform'] as List<dynamic>?)
           ?.map((e) => (e as num).toInt())
           .toList(),
     );
@@ -121,6 +126,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   List<_FeedTrack> _likedTracks = [];
   bool _isLoading = true;
   bool _hasError = false;
+  List<_FeedTrack> _trendingTracks = [];
+  bool _isTrendingLoading = false;
+  bool _trendingError = false;
   String _displayName = 'you';
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -130,6 +138,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     super.initState();
     _loadUserName();
     _fetchFeed();
+    _fetchTrending();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _maybeShowSuggestedDialog();
     });
@@ -161,10 +170,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId') ?? '';
 
-      final response = await dioClient.dio.get('/network/feed');
-      final List<dynamic> data = response.data['data'] as List<dynamic>;
+      final response = await dioClient.dio.get('/feed');
+      final List<dynamic> data =
+          (response.data['data'] as Map<String, dynamic>)['feed'] as List<dynamic>;
       var tracks = data
           .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+          .where((t) => t.id.isNotEmpty)
           .toList();
 
       Set<String> likedIds = {};
@@ -247,8 +258,47 @@ class _HomePageState extends ConsumerState<HomePage> {
           _isLoading = false;
         });
       }
+  } catch (e) {
+  debugPrint('=== TRENDING ERROR: $e');
+  if (e is DioException) {
+    debugPrint('🛑 === REAL BACKEND ERROR === 🛑');
+    debugPrint('Status Code: ${e.response?.statusCode}');
+    debugPrint('Error Data: ${e.response?.data}');
+    debugPrint('🛑 ========================== 🛑');
+  }
+  if (mounted) setState(() { _isTrendingLoading = false; _trendingError = true; });
+}
+  }
+
+  Future<void> _fetchTrending() async {
+    setState(() {
+      _isTrendingLoading = true;
+      _trendingError = false;
+    });
+    try {
+      final genre = _genres[_selectedGenreIndex];
+      final response = await dioClient.dio.get(
+        '/discovery/trending',
+        queryParameters: {'genre': genre},
+      );
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final raw = data['trending'] as List<dynamic>? ?? [];
+      final tracks = raw
+          .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _trendingTracks = tracks;
+          _isTrendingLoading = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() { _isLoading = false; _hasError = true; });
+      if (mounted) {
+        setState(() {
+          _isTrendingLoading = false;
+          _trendingError = true;
+        });
+      }
     }
   }
 
@@ -528,7 +578,10 @@ class _HomePageState extends ConsumerState<HomePage> {
               final isSelected = _selectedGenreIndex == i;
               return GestureDetector(
                 key: const ValueKey('home_genre_chip'),
-                onTap: () => setState(() => _selectedGenreIndex = i),
+                onTap: () {
+                  setState(() => _selectedGenreIndex = i);
+                  _fetchTrending();
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
@@ -553,27 +606,27 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
         ),
         const SizedBox(height: 16),
-        if (_isLoading)
+        if (_isTrendingLoading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
             child: Center(
               child: CircularProgressIndicator(color: Color(0xFFFF5500)),
             ),
           )
-        else if (_hasError)
+        else if (_trendingError)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Center(
               child: Column(
                 children: [
                   const Text(
-                    "Couldn't load feed",
+                    "Couldn't load trending tracks",
                     style: TextStyle(color: Colors.white, fontSize: 15),
                   ),
                   const SizedBox(height: 12),
                   TextButton(
                     key: const ValueKey('home_retry_button'),
-                    onPressed: _fetchFeed,
+                    onPressed: _fetchTrending,
                     child: const Text(
                       'Retry',
                       style: TextStyle(color: Color(0xFFFF5500), fontSize: 14),
@@ -583,20 +636,20 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
             ),
           )
-        else if (_tracks.isEmpty)
+        else if (_trendingTracks.isEmpty)
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
             child: Text(
-              'Follow some artists to see their tracks here',
+              'No tracks found for this genre',
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF999999), fontSize: 14),
             ),
           )
         else
-          ...(_tracks.take(5).toList().asMap().entries.map(
+          ...(_trendingTracks.take(5).toList().asMap().entries.map(
                 (e) => _SimpleTrackRow(
                   track: e.value,
-                  allTracks: _tracks,
+                  allTracks: _trendingTracks,
                   index: e.key,
                 ),
               )),
