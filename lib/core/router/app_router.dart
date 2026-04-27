@@ -23,6 +23,7 @@ import '../../features/feed/presentation/pages/search_results_users_page.dart';
 import '../../features/feed/presentation/pages/search_results_playlists_page.dart';
 import '../../features/feed/presentation/pages/electronic_genre_page.dart';
 import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
+import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/pop_genre_page.dart';
 import '../../features/feed/presentation/pages/genre_results_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
@@ -203,6 +204,14 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'playlists',
                     builder: (_, __) => const SearchResultsPlaylistsPage()),
+                GoRoute(
+                    path: 'hiphop',
+                    builder: (_, __) => const HiphopGenrePage()),
+                GoRoute(
+                    path: 'playlist/:playlistId',
+                    builder: (_, state) => HiphopPlaylistDetailPage(
+                          playlistId: state.pathParameters['playlistId']!,
+                        )),
                 GoRoute(
                     path: 'genre/:genreName',
                     builder: (_, state) => GenreResultsPage(
