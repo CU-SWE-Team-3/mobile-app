@@ -1,18 +1,20 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 
-class LoginPage extends StatefulWidget {
+class LoginPage extends ConsumerStatefulWidget {
   final String email;
   const LoginPage({super.key, this.email = ''});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  ConsumerState<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends ConsumerState<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isPasswordValid = false;
   bool _isPasswordVisible = false;
@@ -51,7 +53,9 @@ class _LoginPageState extends State<LoginPage> {
       await prefs.setString('avatarUrl', avatarUrl);
       debugPrint('[Login] avatarUrl saved: $avatarUrl');
       dioClient.setAuthToken(token);
-      if (mounted) context.go('/home');
+      if (!mounted) return;
+      ref.read(sessionUserIdProvider.notifier).state = user['_id'] as String? ?? '';
+      context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final message = status == 401

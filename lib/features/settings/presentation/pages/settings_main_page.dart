@@ -185,8 +185,9 @@ class SettingsMainPage extends ConsumerWidget {
             onPressed: () async {
               Navigator.pop(dialogContext);
               await ref.read(authProvider.notifier).logout();
+              if (!context.mounted) return;
+              context.go('/start');
               ref.read(sessionUserIdProvider.notifier).state = '';
-              if (context.mounted) context.go('/start');
             },
             child: const Text(
               'OK',
