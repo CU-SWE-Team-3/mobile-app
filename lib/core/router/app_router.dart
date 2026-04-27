@@ -1,0 +1,499 @@
+import 'package:go_router/go_router.dart';
+
+import '../../features/auth/presentation/pages/splash_page.dart';
+import '../../features/auth/presentation/pages/start_page.dart';
+import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/onboarding_page.dart';
+import '../../features/auth/presentation/pages/email_verification_page.dart';
+import '../../features/auth/presentation/pages/forgot_password_page.dart';
+import '../../features/auth/presentation/pages/reset_password_page.dart';
+import '../../features/auth/presentation/pages/verify_email_deep_link_page.dart';
+import '../../features/auth/presentation/pages/confirm_email_update_page.dart';
+import '../../features/auth/presentation/pages/oauth_login_page.dart';
+import '../../features/auth/presentation/pages/login_screen.dart';
+import '../../features/auth/presentation/pages/register_screen.dart';
+
+import '../../features/feed/presentation/pages/home_page.dart';
+import '../../features/feed/presentation/pages/search_page.dart';
+import '../../features/feed/presentation/pages/discover_page.dart';
+import '../../features/feed/presentation/pages/feed_page.dart';
+import '../../features/feed/presentation/pages/search_results_tracks_page.dart';
+import '../../features/feed/presentation/pages/search_results_users_page.dart';
+import '../../features/feed/presentation/pages/search_results_playlists_page.dart';
+import '../../features/feed/presentation/pages/electronic_genre_page.dart';
+import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
+import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/pop_genre_page.dart';
+import '../../features/feed/presentation/pages/genre_results_page.dart';
+import '../../features/feed/presentation/pages/trending_charts_page.dart';
+import '../../features/feed/presentation/pages/cast_page.dart';
+
+import '../../features/library/presentation/pages/upload_edit_page.dart';
+import '../../features/library/presentation/pages/upload_progress_page.dart';
+import '../../features/library/presentation/pages/library_uploads_page.dart';
+
+import '../../features/library/presentation/pages/library_page.dart';
+import '../../features/library/presentation/pages/library_albums_page.dart';
+import '../../features/library/presentation/pages/library_stations_page.dart';
+import '../../features/library/presentation/pages/library_playlists_page.dart';
+import '../../features/library/presentation/pages/library_likes_page.dart';
+import '../../features/library/presentation/pages/your_insights_page.dart';
+import '../../features/library/presentation/pages/library_following_page.dart';
+
+import '../../features/profile/presentation/pages/profile_page.dart';
+import '../../features/profile/presentation/pages/edit_profile_page.dart';
+import '../../features/profile/presentation/pages/profile_tracks_page.dart';
+import '../../features/profile/presentation/pages/profile_reposts_page.dart';
+import '../../features/profile/presentation/pages/profile_insights_page.dart';
+import '../../features/profile/presentation/pages/avatar_upload_page.dart';
+import '../../features/profile/presentation/pages/cover_photo_upload_page.dart';
+import '../../features/profile/presentation/pages/avatar_viewer_page.dart';
+import '../../features/profile/presentation/pages/public_profile_page.dart';
+import '../../features/profile/presentation/pages/other_user_profile_page.dart';
+
+import '../../features/followers/presentation/pages/followers_list_page.dart';
+import '../../features/followers/presentation/pages/following_list_page.dart';
+import '../../features/followers/presentation/pages/suggested_users_page.dart';
+
+import '../../features/player/presentation/pages/full_player_page.dart';
+import '../../features/player/presentation/pages/player_queue_page.dart';
+import '../../features/player/presentation/pages/recently_played_page.dart';
+import '../../features/player/presentation/pages/listening_history_page.dart';
+
+import '../../features/engagement/presentation/pages/comments_sheet.dart';
+import '../../features/engagement/presentation/pages/likers_list_page.dart';
+import '../../features/engagement/presentation/pages/reposters_list_page.dart';
+
+import '../../features/playlist/presentation/pages/playlist_details_page.dart';
+import '../../features/playlist/presentation/pages/create_playlist_page.dart';
+import '../../features/playlist/presentation/pages/edit_playlist_page.dart';
+import '../../features/playlist/presentation/pages/playlist_privacy_page.dart';
+import '../../features/playlist/presentation/pages/share_playlist_page.dart';
+import '../../features/playlist/presentation/pages/add_to_playlist_page.dart';
+
+import '../../features/messaging/presentation/pages/chat_inbox_page.dart';
+import '../../features/messaging/presentation/pages/chat_room_page.dart';
+
+import '../../features/notifications/presentation/pages/notifications_page.dart';
+import '../../features/notifications/presentation/pages/push_notification_settings_page.dart';
+
+import '../../features/premium/presentation/pages/premium_paywall_page.dart';
+import '../../features/premium/presentation/pages/pricing_tiers_page.dart';
+import '../../features/premium/presentation/pages/subscription_status_page.dart';
+import '../../features/premium/presentation/pages/offline_download_page.dart';
+
+import '../../features/settings/presentation/pages/settings_main_page.dart';
+import '../../features/settings/presentation/pages/account_settings_page.dart';
+import '../../features/settings/presentation/pages/basic_settings_page.dart';
+import '../../features/settings/presentation/pages/social_settings_page.dart';
+import '../../features/settings/presentation/pages/notifications_settings_page.dart';
+import '../../features/settings/presentation/pages/privacy_settings_page.dart';
+import '../../features/settings/presentation/pages/communications_settings_page.dart';
+import '../../features/settings/presentation/pages/advertising_settings_page.dart';
+import '../../features/settings/presentation/pages/import_music_page.dart';
+import '../../features/settings/presentation/pages/inbox_settings_page.dart';
+import '../../features/settings/presentation/pages/legal_page.dart';
+import '../../features/settings/presentation/pages/add_widget_page.dart';
+import '../../features/settings/presentation/pages/analytics_page.dart';
+import '../../features/settings/presentation/pages/upload_settings_page.dart';
+import '../../features/settings/presentation/pages/sign_out_page.dart';
+
+import '../widgets/app_shell.dart';
+
+final appRouter = GoRouter(
+  initialLocation: '/splash',
+  routes: [
+    // ── AUTH (outside shell) ──────────────────────────────────────────
+    GoRoute(path: '/splash', builder: (_, __) => const SplashPage()),
+    GoRoute(path: '/start', builder: (_, __) => const StartPage()),
+    GoRoute(path: '/onboarding', builder: (_, __) => const OnboardingPage()),
+    GoRoute(
+        path: '/register',
+        builder: (_, state) =>
+            RegisterPage(email: state.extra as String? ?? '')),
+    GoRoute(
+        path: '/login',
+        builder: (_, state) => LoginPage(email: state.extra as String? ?? '')),
+    GoRoute(
+        path: '/forgot-password',
+        builder: (_, __) => const ForgotPasswordPage()),
+    GoRoute(
+        path: '/reset-password',
+        builder: (_, state) =>
+            ResetPasswordPage(token: state.extra as String? ?? '')),
+    GoRoute(path: '/oauth-login', builder: (_, __) => const OAuthLoginPage()),
+    GoRoute(
+        path: '/verify-email-deep-link',
+        builder: (_, state) =>
+            VerifyEmailDeepLinkPage(token: state.extra as String? ?? '')),
+    GoRoute(
+        path: '/confirm-email-update',
+        builder: (_, state) =>
+            ConfirmEmailUpdatePage(token: state.extra as String? ?? '')),
+    GoRoute(
+        path: '/email-verification',
+        builder: (_, state) =>
+            EmailVerificationPage(email: state.extra as String? ?? '')),
+    GoRoute(
+        path: '/login-screen',
+        builder: (_, state) =>
+            LoginScreen(email: state.extra as String? ?? '')),
+    GoRoute(
+        path: '/register-screen',
+        builder: (_, state) =>
+            RegisterScreen(email: state.extra as String? ?? '')),
+
+    // ── MAIN SHELL ───────────────────────────────────────────────────
+    // 5 branches — must match app_shell.dart tab order exactly:
+    // index 0=Home  1=Feed  2=Search  3=Library  4=Upgrade
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) =>
+          AppShell(navigationShell: navigationShell),
+      branches: [
+        // ── Branch 0: HOME ──────────────────────────────────────────
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/home',
+              builder: (_, __) => const HomePage(),
+              routes: [
+                GoRoute(
+                    path: 'discover', builder: (_, __) => const DiscoverPage()),
+                GoRoute(
+                    path: 'trending',
+                    builder: (_, __) => const TrendingChartsPage()),
+                GoRoute(path: 'cast', builder: (_, __) => const CastPage()),
+                GoRoute(
+                    path: 'genre/electronic',
+                    builder: (_, __) => const ElectronicGenrePage()),
+                GoRoute(
+                    path: 'genre/hiphop',
+                    builder: (_, __) => const HiphopGenrePage()),
+                GoRoute(
+                    path: 'genre/pop',
+                    builder: (_, __) => const PopGenrePage()),
+              ],
+            ),
+          ],
+        ),
+
+        // ── Branch 1: FEED ──────────────────────────────────────────
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/feed',
+              builder: (_, __) => const FeedPage(),
+            ),
+          ],
+        ),
+
+        // ── Branch 2: SEARCH ────────────────────────────────────────
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/search',
+              builder: (_, __) => const SearchPage(),
+              routes: [
+                GoRoute(
+                    path: 'tracks',
+                    builder: (_, __) => const SearchResultsTracksPage()),
+                GoRoute(
+                    path: 'users',
+                    builder: (_, __) => const SearchResultsUsersPage()),
+                GoRoute(
+                    path: 'playlists',
+                    builder: (_, __) => const SearchResultsPlaylistsPage()),
+                GoRoute(
+                    path: 'hiphop',
+                    builder: (_, __) => const HiphopGenrePage()),
+                GoRoute(
+                    path: 'hiphop/introducing',
+                    builder: (_, state) => HiphopPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
+                    path: 'playlist/:playlistId',
+                    builder: (_, state) => HiphopPlaylistDetailPage(
+                          playlistId: state.pathParameters['playlistId']!,
+                        )),
+                GoRoute(
+                    path: 'genre/:genreName',
+                    builder: (_, state) => GenreResultsPage(
+                          genreName: state.pathParameters['genreName']!,
+                        )),
+              ],
+            ),
+          ],
+        ),
+
+        // ── Branch 3: LIBRARY ───────────────────────────────────────
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/library',
+              builder: (_, __) => const LibraryPage(),
+              routes: [
+                GoRoute(
+                    path: 'albums',
+                    builder: (_, __) => const LibraryAlbumsPage()),
+                GoRoute(
+                    path: 'stations',
+                    builder: (_, __) => const LibraryStationsPage()),
+                GoRoute(
+                    path: 'uploads',
+                    builder: (_, __) => const LibraryUploadsPage(),
+                    routes: [
+                      GoRoute(
+                          path: 'edit',
+                          builder: (_, __) => const UploadEditPage()),
+                      GoRoute(
+                          path: 'progress',
+                          builder: (_, __) => const UploadProgressPage()),
+                    ]),
+                GoRoute(
+                    path: 'playlists',
+                    builder: (_, __) => const LibraryPlaylistsPage()),
+                GoRoute(
+                    path: 'likes',
+                    builder: (_, __) => const LibraryLikesPage()),
+                GoRoute(
+                    path: 'insights',
+                    builder: (_, __) => const YourInsightsPage()),
+                GoRoute(
+                    path: 'following',
+                    builder: (_, __) => const LibraryFollowingPage()),
+              ],
+            ),
+          ],
+        ),
+
+        // ── Branch 4: UPGRADE ───────────────────────────────────────
+        StatefulShellBranch(
+          routes: [
+            GoRoute(
+              path: '/upgrade',
+              builder: (_, __) => const PremiumPaywallPage(),
+              routes: [
+                GoRoute(
+                    path: 'pricing',
+                    builder: (_, __) => const PricingTiersPage()),
+                GoRoute(
+                    path: 'status',
+                    builder: (_, __) => const SubscriptionStatusPage()),
+                GoRoute(
+                    path: 'offline',
+                    builder: (_, __) => const OfflineDownloadPage()),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+
+    // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─
+    GoRoute(
+      path: '/upload',
+      builder: (_, __) => const UploadEditPage(),
+      routes: [
+        GoRoute(
+            path: 'progress', builder: (_, __) => const UploadProgressPage()),
+      ],
+    ),
+
+    // ── PROFILE (global, outside shell) ───────────────────────────────
+    GoRoute(
+      path: '/profile',
+      builder: (_, __) => const ProfilePage(),
+      routes: [
+        GoRoute(
+            path: 'edit',
+            builder: (_, state) => EditProfilePage(
+                initialData: (state.extra as Map?)?.cast<String, String>())),
+        GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
+        GoRoute(
+            path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
+        GoRoute(
+            path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
+        GoRoute(path: 'avatar', builder: (_, __) => const AvatarUploadPage()),
+        GoRoute(
+            path: 'avatar-view', builder: (_, __) => const AvatarViewerPage()),
+        GoRoute(
+            path: 'cover', builder: (_, __) => const CoverPhotoUploadPage()),
+        GoRoute(
+          path: 'followers',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            return FollowersListPage(
+              targetUserId: extra['targetUserId'] as String?,
+            );
+          },
+        ),
+        GoRoute(
+          path: 'following',
+          builder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>? ?? {};
+            return FollowingListPage(
+              targetUserId: extra['targetUserId'] as String?,
+            );
+          },
+        ),
+        GoRoute(
+            path: 'suggested', builder: (_, __) => const SuggestedUsersPage()),
+        GoRoute(
+          path: 'user/:permalink',
+          builder: (_, state) => PublicProfilePage(
+            permalink: state.pathParameters['permalink']!,
+          ),
+        ),
+      ],
+    ),
+
+    // ── OTHER USER PROFILE (global, short URL) ────────────────────────
+    GoRoute(
+      path: '/user/:permalink',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return OtherUserProfilePage(
+          permalink: state.pathParameters['permalink']!,
+          initialDisplayName: extra['displayName'] as String? ?? '',
+          initialUserId: extra['userId'] as String? ?? '',
+        );
+      },
+    ),
+
+    // ── PLAYER (global, accessible from anywhere) ─────────────────────
+    GoRoute(
+      path: '/player',
+      builder: (_, __) => const FullPlayerPage(),
+      routes: [
+        GoRoute(path: 'queue', builder: (_, __) => const PlayerQueuePage()),
+        GoRoute(path: 'recent', builder: (_, __) => const RecentlyPlayedPage()),
+        GoRoute(
+            path: 'history', builder: (_, __) => const ListeningHistoryPage()),
+      ],
+    ),
+
+    // ── LIKES (global — accessible from profile and other global routes) ─
+    GoRoute(
+      path: '/likes',
+      builder: (_, __) => const LibraryLikesPage(),
+    ),
+
+    // ── ENGAGEMENT ────────────────────────────────────────────────────
+    GoRoute(
+      path: '/comments',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return CommentsSheet(
+          trackId: extra['trackId'] as String?,
+          trackTitle: extra['trackTitle'] as String?,
+          trackArtist: extra['trackArtist'] as String?,
+          trackArtworkUrl: extra['trackArtworkUrl'] as String?,
+          currentPositionSeconds:
+              extra['currentPositionSeconds'] as int? ?? 0,
+        );
+      },
+    ),
+    GoRoute(
+      path: '/likers',
+      builder: (_, state) => LikersListPage(
+        trackId: (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
+      ),
+    ),
+    GoRoute(
+      path: '/reposters',
+      builder: (_, state) => RepostersListPage(
+        trackId: (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
+      ),
+    ),
+
+    // ── PLAYLISTS ─────────────────────────────────────────────────────
+    GoRoute(
+      path: '/playlist',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return PlaylistDetailsPage(
+          playlistId: extra['playlistId'] as String?,
+        );
+      },
+      routes: [
+        GoRoute(path: 'create', builder: (_, __) => const CreatePlaylistPage()),
+        GoRoute(path: 'edit', builder: (_, __) => const EditPlaylistPage()),
+        GoRoute(
+            path: 'privacy', builder: (_, __) => const PlaylistPrivacyPage()),
+        GoRoute(path: 'share', builder: (_, __) => const SharePlaylistPage()),
+        GoRoute(
+          path: 'add-track',
+          builder: (_, state) => AddToPlaylistPage(
+            trackId: (state.extra as Map<String, dynamic>?)?['trackId']
+                    as String? ??
+                '',
+          ),
+        ),
+      ],
+    ),
+
+    // ── MESSAGING ─────────────────────────────────────────────────────
+    GoRoute(
+      path: '/messages',
+      builder: (_, __) => const ChatInboxPage(),
+      routes: [
+        GoRoute(path: 'chat', builder: (_, __) => const ChatRoomPage()),
+      ],
+    ),
+
+    // ── NOTIFICATIONS ─────────────────────────────────────────────────
+    GoRoute(
+      path: '/notifications',
+      builder: (_, __) => const NotificationsPage(),
+      routes: [
+        GoRoute(
+            path: 'settings',
+            builder: (_, __) => const PushNotificationSettingsPage()),
+      ],
+    ),
+
+    // ── SETTINGS ──────────────────────────────────────────────────────
+    GoRoute(
+      path: '/settings',
+      builder: (_, __) => const SettingsMainPage(),
+      routes: [
+        GoRoute(
+            path: 'account', builder: (_, __) => const AccountSettingsPage()),
+        GoRoute(path: 'basic', builder: (_, __) => const BasicSettingsPage()),
+        GoRoute(path: 'social', builder: (_, __) => const SocialSettingsPage()),
+        GoRoute(
+            path: 'notifications',
+            builder: (_, __) => const NotificationsSettingsPage()),
+        GoRoute(
+            path: 'privacy', builder: (_, __) => const PrivacySettingsPage()),
+        GoRoute(
+            path: 'communications',
+            builder: (_, __) => const CommunicationsSettingsPage()),
+        GoRoute(
+            path: 'advertising',
+            builder: (_, __) => const AdvertisingSettingsPage()),
+        GoRoute(
+            path: 'import-music',
+            builder: (_, __) => const ImportMusicPage(),
+            routes: [
+              GoRoute(
+                  path: 'import',
+                  builder: (_, __) => const ImportFromAppPage()),
+              GoRoute(
+                  path: 'manage',
+                  builder: (_, __) => const ManageImportedLikesPage()),
+            ]),
+        GoRoute(path: 'inbox', builder: (_, __) => const InboxSettingsPage()),
+        GoRoute(path: 'legal', builder: (_, __) => const LegalPage()),
+        GoRoute(path: 'add-widget', builder: (_, __) => const AddWidgetPage()),
+        GoRoute(path: 'analytics', builder: (_, __) => const AnalyticsPage()),
+        GoRoute(path: 'upload', builder: (_, __) => const UploadSettingsPage()),
+        GoRoute(path: 'sign-out', builder: (_, __) => const SignOutPage()),
+      ],
+    ),
+  ],
+);
