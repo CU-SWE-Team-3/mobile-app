@@ -5,8 +5,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/dio_client.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../player/domain/entities/player_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
@@ -19,6 +21,7 @@ class _PlaylistMeta {
   final int trackCount;
   final int likeCount;
   final DateTime? createdAt;
+  final String? subtitleOverride;
   bool isLiked;
 
   _PlaylistMeta({
@@ -30,6 +33,7 @@ class _PlaylistMeta {
     this.trackCount = 0,
     this.likeCount = 0,
     this.createdAt,
+    this.subtitleOverride,
     this.isLiked = false,
   });
 
@@ -107,7 +111,13 @@ class _DetailTrack {
 
 class HiphopPlaylistDetailPage extends ConsumerStatefulWidget {
   final String playlistId;
-  const HiphopPlaylistDetailPage({super.key, required this.playlistId});
+  final bool useBuzzingPreset;
+
+  const HiphopPlaylistDetailPage({
+    super.key,
+    required this.playlistId,
+    this.useBuzzingPreset = false,
+  });
 
   @override
   ConsumerState<HiphopPlaylistDetailPage> createState() =>
@@ -122,10 +132,49 @@ class _HiphopPlaylistDetailPageState
   bool _hasError = false;
   bool _isDescriptionExpanded = false;
 
+  bool get _isBuzzingPreset => widget.useBuzzingPreset;
+  static const _hiphopQuery = 'Hiphop & rap';
+  static const _buzzingLikeKey = 'buzzing_hiphop_rap_liked';
+
+  static const _buzzingDescription =
+      'Audio omakase based on what real Hip Hop fans are connecting with. '
+      'A spot on Buzzing is determined by what listeners are replaying, '
+      'sharing, and keeping in rotation right now.';
+
   @override
   void initState() {
     super.initState();
     _fetch();
+  }
+
+  _PlaylistMeta _buildBuzzingPresetMeta(
+    List<_DetailTrack> tracks, {
+    required bool isLiked,
+  }) {
+    return _PlaylistMeta(
+      id: widget.playlistId,
+      title: 'Buzzing Hip Hop & Rap',
+      ownerName: 'New!',
+      description: _buzzingDescription,
+      trackCount: tracks.length,
+      likeCount: 59000,
+      isLiked: isLiked,
+    );
+  }
+
+  Future<void> _fetchBuzzingGenreTracks() async {
+    final resp = await dioClient.dio.get(
+      '/discovery/genre/${Uri.encodeComponent(_hiphopQuery)}',
+    );
+    final tracks = _extractTracks(resp.data);
+    final prefs = await SharedPreferences.getInstance();
+    final isLiked = prefs.getBool(_buzzingLikeKey) ?? false;
+    if (!mounted) return;
+    setState(() {
+      _meta = _buildBuzzingPresetMeta(tracks, isLiked: isLiked);
+      _tracks = tracks;
+      _isLoading = false;
+    });
   }
 
   Future<void> _fetch() async {
@@ -133,6 +182,18 @@ class _HiphopPlaylistDetailPageState
       _isLoading = true;
       _hasError = false;
     });
+    if (_isBuzzingPreset) {
+      try {
+        await _fetchBuzzingGenreTracks();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
+      }
+      return;
+    }
     try {
       final resp = await dioClient.dio.get('/playlists/${widget.playlistId}');
       final data = resp.data as Map<String, dynamic>;
@@ -168,11 +229,32 @@ class _HiphopPlaylistDetailPageState
     }
   }
 
+  List<_DetailTrack> _extractTracks(dynamic body) {
+    if (body is! Map<String, dynamic>) return [];
+    final data = body['data'];
+    final raw = data is List
+        ? data
+        : data is Map<String, dynamic>
+            ? (data['tracks'] ?? data['trending'] ?? data['items'] ?? [])
+                as List<dynamic>
+            : <dynamic>[];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(_DetailTrack.fromJson)
+        .where((track) => track.id.isNotEmpty)
+        .toList();
+  }
+
   Future<void> _toggleLike() async {
     final meta = _meta;
     if (meta == null) return;
     final wasLiked = meta.isLiked;
     setState(() => meta.isLiked = !wasLiked);
+    if (_isBuzzingPreset || meta.id.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_buzzingLikeKey, !wasLiked);
+      return;
+    }
     try {
       if (wasLiked) {
         await dioClient.dio.delete(
@@ -188,6 +270,18 @@ class _HiphopPlaylistDetailPageState
     } catch (_) {
       if (mounted) setState(() => meta.isLiked = wasLiked);
     }
+  }
+
+  void _showTrackOptionsSheet(String trackId) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(trackId: trackId),
+    );
   }
 
   void _playFrom(int tappedIndex) {
@@ -263,18 +357,26 @@ class _HiphopPlaylistDetailPageState
           'Playlist',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: FontWeight.w700,
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: Container(
+            width: 42,
+            height: 42,
+            decoration: const BoxDecoration(
+              color: Color(0xFF252525),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.arrow_back, color: Colors.white),
+          ),
           onPressed: context.pop,
         ),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 12),
-            child: Icon(Icons.cast_outlined, color: Colors.white70),
+            child: Icon(Icons.cast_outlined, color: Colors.white70, size: 28),
           ),
         ],
       ),
@@ -346,26 +448,29 @@ class _HiphopPlaylistDetailPageState
   Widget _buildHeaderItem(_PlaylistMeta meta) {
     final hasArtwork = meta.artworkUrl != null && meta.artworkUrl!.isNotEmpty;
     final totalSecs = _totalSeconds;
-    final subtitle = _buildSubtitle(meta.trackCount, totalSecs, meta.createdAt);
+    final subtitle = meta.subtitleOverride ??
+        _buildSubtitle(meta.trackCount, totalSecs, meta.createdAt);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: hasArtwork
-                ? CachedNetworkImage(
-                    imageUrl: meta.artworkUrl!,
-                    width: 118,
-                    height: 118,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _artworkFallback118(),
-                  )
-                : _artworkFallback118(),
-          ),
-          const SizedBox(width: 14),
+          _isBuzzingPreset
+              ? _buzzingPlaylistArtwork(156)
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: hasArtwork
+                      ? CachedNetworkImage(
+                          imageUrl: meta.artworkUrl!,
+                          width: 156,
+                          height: 156,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => _artworkFallback156(),
+                        )
+                      : _artworkFallback156(),
+                ),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,8 +481,9 @@ class _HiphopPlaylistDetailPageState
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 17,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
+                    height: 1.15,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -385,15 +491,15 @@ class _HiphopPlaylistDetailPageState
                   subtitle,
                   style: const TextStyle(
                     color: Colors.white54,
-                    fontSize: 11,
+                    fontSize: 14,
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
                 Row(
                   children: [
                     Container(
-                      width: 36,
-                      height: 36,
+                      width: 44,
+                      height: 44,
                       decoration: BoxDecoration(
                         color: const Color(0xFF1A1A1A),
                         border: Border.all(color: Colors.white24),
@@ -402,10 +508,10 @@ class _HiphopPlaylistDetailPageState
                       child: const Icon(
                         Icons.cloud,
                         color: Colors.white70,
-                        size: 16,
+                        size: 18,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         'By ${meta.ownerName}',
@@ -413,7 +519,7 @@ class _HiphopPlaylistDetailPageState
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white70,
-                          fontSize: 13,
+                          fontSize: 18,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -433,12 +539,12 @@ class _HiphopPlaylistDetailPageState
     if (totalSecs > 0) parts.add(_fmtTotalDuration(totalSecs));
     final age = _formatAge(createdAt);
     if (age != null) parts.add(age);
-    return parts.join(' · ');
+    return parts.join(' | ');
   }
 
   Widget _buildActionRow(_PlaylistMeta meta) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
       child: Row(
         children: [
           GestureDetector(
@@ -458,7 +564,7 @@ class _HiphopPlaylistDetailPageState
                     _fmtLikeCount(meta.likeCount),
                     style: const TextStyle(
                       color: Colors.white70,
-                      fontSize: 13,
+                      fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -466,23 +572,23 @@ class _HiphopPlaylistDetailPageState
               ],
             ),
           ),
-          const SizedBox(width: 14),
-          const Icon(Icons.more_vert, color: Colors.white54, size: 24),
+          const SizedBox(width: 18),
+          const Icon(Icons.more_vert, color: Colors.white54, size: 28),
           const Spacer(),
           GestureDetector(
             onTap: _shufflePlay,
             child: const Icon(
               Icons.shuffle_rounded,
               color: Colors.white70,
-              size: 25,
+              size: 30,
             ),
           ),
-          const SizedBox(width: 22),
+          const SizedBox(width: 26),
           GestureDetector(
             onTap: () => _playFrom(0),
             child: Container(
-              width: 72,
-              height: 72,
+              width: 78,
+              height: 78,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
@@ -490,7 +596,7 @@ class _HiphopPlaylistDetailPageState
               child: const Icon(
                 Icons.play_arrow_rounded,
                 color: Colors.black,
-                size: 40,
+                size: 44,
               ),
             ),
           ),
@@ -501,7 +607,7 @@ class _HiphopPlaylistDetailPageState
 
   Widget _buildDescriptionItem(String desc) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -511,8 +617,8 @@ class _HiphopPlaylistDetailPageState
             overflow: _isDescriptionExpanded ? null : TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white70,
-              fontSize: 14,
-              height: 1.5,
+              fontSize: 16,
+              height: 1.45,
             ),
           ),
           const SizedBox(height: 8),
@@ -544,7 +650,7 @@ class _HiphopPlaylistDetailPageState
     return GestureDetector(
       onTap: () => _playFrom(i),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+        padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -571,7 +677,7 @@ class _HiphopPlaylistDetailPageState
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -583,7 +689,7 @@ class _HiphopPlaylistDetailPageState
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white54,
-                        fontSize: 13,
+                        fontSize: 16,
                       ),
                     ),
                   const SizedBox(height: 5),
@@ -599,7 +705,7 @@ class _HiphopPlaylistDetailPageState
                         _fmtPlayCount(track.playCount),
                         style: const TextStyle(
                           color: Colors.white54,
-                          fontSize: 12,
+                          fontSize: 13,
                         ),
                       ),
                       if (track.duration > 0) ...[
@@ -611,7 +717,7 @@ class _HiphopPlaylistDetailPageState
                           _fmtTrackDuration(track.duration),
                           style: const TextStyle(
                             color: Colors.white54,
-                            fontSize: 12,
+                            fontSize: 13,
                           ),
                         ),
                       ],
@@ -620,10 +726,13 @@ class _HiphopPlaylistDetailPageState
                 ],
               ),
             ),
-            const SizedBox(width: 4),
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: Icon(Icons.more_vert, color: Colors.white38, size: 22),
+            IconButton(
+              onPressed: () => _showTrackOptionsSheet(track.id),
+              icon: const Icon(Icons.more_vert, color: Colors.white38, size: 24),
+              padding: const EdgeInsets.only(top: 8),
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
+              splashRadius: 18,
+              visualDensity: VisualDensity.compact,
             ),
           ],
         ),
@@ -631,14 +740,126 @@ class _HiphopPlaylistDetailPageState
     );
   }
 
-  Widget _artworkFallback118() => Container(
-        width: 118,
-        height: 118,
+  Widget _buzzingPlaylistArtwork(double size) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF8B4DFF),
+              Color(0xFF17111F),
+              Color(0xFF5B2FA6),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              left: -size * 0.14,
+              top: size * 0.1,
+              child: _pixelSteps(size * 0.56),
+            ),
+            Positioned(
+              right: -size * 0.08,
+              bottom: size * 0.18,
+              child: _pixelSteps(size * 0.48),
+            ),
+            Align(
+              alignment: Alignment.center,
+              child: Container(
+                width: size * 0.58,
+                height: size * 0.58,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  gradient: const RadialGradient(
+                    colors: [
+                      Color(0xFF94B9F8),
+                      Color(0xFF1B2546),
+                      Color(0xFF090B16),
+                    ],
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x99000000),
+                      blurRadius: 14,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.flight_takeoff_rounded,
+                  color: Colors.black87,
+                  size: 32,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 8,
+              top: 7,
+              child: Text(
+                'BUZZING',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: size * 0.15,
+                  fontWeight: FontWeight.w900,
+                  height: 1,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 7,
+              child: Text(
+                'Hip Hop & Rap',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: size * 0.08,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _pixelSteps(double size) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Wrap(
+        spacing: size * 0.08,
+        runSpacing: size * 0.08,
+        children: List.generate(
+          9,
+          (index) => Container(
+            width: size * 0.2,
+            height: size * 0.2,
+            color: index.isEven
+                ? const Color(0xFFE4D3FF)
+                : const Color(0xFF5D2BA8),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _artworkFallback156() => Container(
+        width: 156,
+        height: 156,
         decoration: BoxDecoration(
           color: const Color(0xFF2A2A2A),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
         ),
-        child: const Icon(Icons.queue_music, color: Colors.white38, size: 40),
+        child: const Icon(Icons.queue_music, color: Colors.white38, size: 48),
       );
 
   Widget _artworkFallback72() => Container(

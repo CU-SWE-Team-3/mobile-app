@@ -3,8 +3,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/dio_client.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../player/domain/entities/player_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
@@ -148,6 +150,7 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
   static const _pageBackground = Color(0xFF111111);
   static const _panelBackground = Color(0xFF1A1A1A);
   static const _hiphopQuery = 'Hiphop & rap';
+  static const _buzzingLikeKey = 'buzzing_hiphop_rap_liked';
 
   late final TabController _tabController;
 
@@ -172,6 +175,7 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _loadBuzzingLikeState();
     _fetchAll();
   }
 
@@ -365,17 +369,30 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _pageBackground,
-      body: NestedScrollView(
-        headerSliverBuilder: (_, __) => [
-          SliverAppBar(
+    return Theme(
+      data: Theme.of(context).copyWith(
+        scrollbarTheme: const ScrollbarThemeData(
+          thumbColor: WidgetStatePropertyAll(Colors.white54),
+          trackColor: WidgetStatePropertyAll(Color(0x33262626)),
+          trackBorderColor: WidgetStatePropertyAll(Colors.transparent),
+          thickness: WidgetStatePropertyAll(6),
+          radius: Radius.circular(8),
+          thumbVisibility: WidgetStatePropertyAll(true),
+          trackVisibility: WidgetStatePropertyAll(true),
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: _pageBackground,
+        body: NestedScrollView(
+          headerSliverBuilder: (_, __) => [
+            SliverAppBar(
             expandedHeight: 205,
             pinned: true,
-            backgroundColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
+            backgroundColor: _pageBackground,
+            surfaceTintColor: _pageBackground,
             elevation: 0,
             scrolledUnderElevation: 0,
+            shadowColor: Colors.transparent,
             automaticallyImplyLeading: false,
             leadingWidth: 68,
             leading: SafeArea(
@@ -472,15 +489,16 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
               ),
             ),
           ),
-        ],
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildAllTab(),
-            _buildTrendingTab(),
-            _buildPlaylistsTab(),
-            _buildAlbumsTab(),
           ],
+          body: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildAllTab(),
+              _buildTrendingTab(),
+              _buildPlaylistsTab(),
+              _buildAlbumsTab(),
+            ],
+          ),
         ),
       ),
     );
@@ -546,7 +564,7 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                 },
               ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 12),
           ],
           if (recentTracks.isNotEmpty) ...[
             const Padding(
@@ -560,7 +578,7 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             _buildRecentTracksCard(recentTracks),
           ],
           if (previewTracks.isEmpty && recentTracks.isEmpty)
@@ -783,8 +801,11 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
               ),
             ),
             IconButton(
-              onPressed: () {},
+              onPressed: () => _showTrackOptionsSheet(track.id),
               icon: const Icon(Icons.more_horiz, color: Colors.white54),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              splashRadius: 18,
               visualDensity: VisualDensity.compact,
             ),
           ],
@@ -793,11 +814,70 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     );
   }
 
+  void _showTrackOptionsSheet(String trackId) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(trackId: trackId),
+    );
+  }
+
+  Future<void> _loadBuzzingLikeState() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _isRecentCollectionLiked = prefs.getBool(_buzzingLikeKey) ?? false;
+    });
+  }
+
+  Future<void> _toggleBuzzingLike() async {
+    final nextValue = !_isRecentCollectionLiked;
+    setState(() {
+      _isRecentCollectionLiked = nextValue;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_buzzingLikeKey, nextValue);
+  }
+
+  void _pushIntroducingPlaylist(String location) {
+    context.push(location).then((_) {
+      if (mounted) _loadBuzzingLikeState();
+    });
+  }
+
+  void _openIntroducingPlaylist() {
+    if (_playlists.isEmpty) {
+      _pushIntroducingPlaylist('/search/hiphop/introducing');
+      return;
+    }
+
+    final selectedPlaylist = _playlists.firstWhere(
+      (playlist) {
+        final title = playlist.title.toLowerCase();
+        return title.contains('buzzing') || title.contains('introducing');
+      },
+      orElse: () => _playlists.first,
+    );
+
+    if (selectedPlaylist.id.isEmpty) {
+      _pushIntroducingPlaylist('/search/hiphop/introducing');
+      return;
+    }
+
+    final playlistId = Uri.encodeComponent(selectedPlaylist.id);
+    _pushIntroducingPlaylist('/search/hiphop/introducing?playlistId=$playlistId');
+  }
+
   Widget _buildRecentTracksCard(List<_Track> recentTracks) {
     final playableTracks =
         recentTracks.where((track) => track.hlsUrl.isNotEmpty).toList();
     final previewTracks = recentTracks.take(2).toList();
     final heroTrack = previewTracks.isNotEmpty ? previewTracks.first : recentTracks.first;
+    const heroArtworkSize = 152.0;
     final hasArtwork = heroTrack.artworkUrl != null &&
         heroTrack.artworkUrl!.isNotEmpty &&
         !heroTrack.artworkUrl!.contains('default-artwork');
@@ -807,124 +887,133 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xFF262626),
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(22),
         ),
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF2F2935), Color(0xFF40334F)],
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: hasArtwork
-                        ? CachedNetworkImage(
-                            imageUrl: heroTrack.artworkUrl!,
-                            width: 136,
-                            height: 136,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => _artworkFallback(136),
-                          )
-                        : _artworkFallback(136),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openIntroducingPlaylist,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(22),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Latest Hip Hop\n& Rap',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 23,
-                            fontWeight: FontWeight.w500,
-                            height: 1.1,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Most recent tracks uploaded in this genre.',
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            Container(
-                              width: 58,
-                              height: 58,
-                              decoration: const BoxDecoration(
-                                color: Color(0xCC111111),
-                                shape: BoxShape.circle,
-                              ),
-                              child: GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _isRecentCollectionLiked =
-                                        !_isRecentCollectionLiked;
-                                  });
-                                },
-                                child: Icon(
-                                  _isRecentCollectionLiked
-                                      ? Icons.favorite
-                                      : Icons.favorite_border,
-                                  color: Colors.white,
-                                  size: 32,
-                                ),
-                              ),
+                  gradient: RadialGradient(
+                    center: const Alignment(0, -0.1),
+                    radius: 1.22,
+                    colors: [
+                      const Color(0xFFD6B8FF).withValues(alpha: 0.96),
+                      const Color(0xFFB58CFF).withValues(alpha: 0.88),
+                      const Color(0xFF8D68D8).withValues(alpha: 0.68),
+                      const Color(0xFF5E4686).withValues(alpha: 0.46),
+                      const Color(0xFF352744).withValues(alpha: 0.24),
+                    ],
+                    stops: const [0.0, 0.22, 0.48, 0.76, 1.0],
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: hasArtwork
+                          ? CachedNetworkImage(
+                              imageUrl: heroTrack.artworkUrl!,
+                              width: heroArtworkSize,
+                              height: heroArtworkSize,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) =>
+                                  _artworkFallback(heroArtworkSize),
+                            )
+                          : _artworkFallback(heroArtworkSize),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 18),
+                          const Text(
+                            'Buzzing Hip Hop & Rap',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w500,
+                              height: 1.05,
                             ),
-                            const SizedBox(width: 16),
-                            GestureDetector(
-                              onTap: playableTracks.isEmpty
-                                  ? null
-                                  : () => _playRecentTracks(playableTracks),
-                              child: Container(
-                                width: 66,
-                                height: 66,
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'New!',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              height: 1.05,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
                                 decoration: const BoxDecoration(
-                                  color: Colors.white,
+                                  color: Color(0xCC111111),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(
-                                  Icons.play_arrow_rounded,
-                                  color: Colors.black,
-                                  size: 40,
+                                child: GestureDetector(
+                                  onTap: _toggleBuzzingLike,
+                                  child: Icon(
+                                    _isRecentCollectionLiked
+                                        ? Icons.favorite
+                                        : Icons.favorite_border,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
+                              const SizedBox(width: 12),
+                              GestureDetector(
+                                onTap: playableTracks.isEmpty
+                                    ? null
+                                    : () => _playRecentTracks(playableTracks),
+                                child: Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.play_arrow_rounded,
+                                    color: Colors.black,
+                                    size: 30,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
               decoration: const BoxDecoration(
                 color: Color(0xFF262626),
                 borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(28),
+                  bottom: Radius.circular(22),
                 ),
               ),
               child: Column(
@@ -935,7 +1024,7 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                       i,
                     ),
                     if (i < previewTracks.length - 1)
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 12),
                   ],
                 ],
               ),
@@ -960,14 +1049,14 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
             child: hasArtwork
                 ? CachedNetworkImage(
                     imageUrl: track.artworkUrl!,
-                    width: 62,
-                    height: 62,
+                    width: 52,
+                    height: 52,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _artworkFallback(62),
+                    errorWidget: (_, __, ___) => _artworkFallback(52),
                   )
-                : _artworkFallback(62),
+                : _artworkFallback(52),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -978,25 +1067,31 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   track.artistName.isEmpty ? 'Unknown artist' : track.artistName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white54,
-                    fontSize: 16,
+                    fontSize: 13,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          const Icon(Icons.more_horiz, color: Colors.white54, size: 30),
+          IconButton(
+            onPressed: () => _showTrackOptionsSheet(track.id),
+            icon: const Icon(Icons.more_horiz, color: Colors.white54, size: 24),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            splashRadius: 18,
+            visualDensity: VisualDensity.compact,
+          ),
         ],
       ),
     );
@@ -1065,7 +1160,14 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                   ),
                 ),
               ),
-            const Icon(Icons.more_horiz, color: Colors.white54),
+            IconButton(
+              onPressed: () => _showTrackOptionsSheet(track.id),
+              icon: const Icon(Icons.more_horiz, color: Colors.white54),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              splashRadius: 18,
+              visualDensity: VisualDensity.compact,
+            ),
           ],
         ),
       ),
@@ -1086,17 +1188,20 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
         ),
         child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: hasArtwork
-                  ? CachedNetworkImage(
-                      imageUrl: playlist.artworkUrl!,
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => _artworkFallback(72),
-                    )
-                  : _artworkFallback(72),
+            GestureDetector(
+              onTap: () => context.push('/search/playlist/${playlist.id}'),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: hasArtwork
+                    ? CachedNetworkImage(
+                        imageUrl: playlist.artworkUrl!,
+                        width: 72,
+                        height: 72,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _artworkFallback(72),
+                      )
+                    : _artworkFallback(72),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(

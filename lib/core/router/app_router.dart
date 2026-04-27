@@ -208,6 +208,13 @@ final appRouter = GoRouter(
                     path: 'hiphop',
                     builder: (_, __) => const HiphopGenrePage()),
                 GoRoute(
+                    path: 'hiphop/introducing',
+                    builder: (_, state) => HiphopPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
                     path: 'playlist/:playlistId',
                     builder: (_, state) => HiphopPlaylistDetailPage(
                           playlistId: state.pathParameters['playlistId']!,
