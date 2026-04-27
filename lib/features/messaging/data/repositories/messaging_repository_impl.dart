@@ -42,4 +42,12 @@ class MessagingRepositoryImpl implements MessagingRepository {
   @override
   Future<void> markAsRead(String conversationId) =>
       _dataSource.markAsRead(conversationId);
+
+  @override
+  Future<Message> editMessage(String messageId, String content) =>
+      _dataSource.editMessage(messageId, content);
+
+  @override
+  Future<void> deleteMessageForEveryone(String messageId) =>
+      _dataSource.deleteMessageForEveryone(messageId);
 }
