@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
-import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
@@ -27,6 +26,8 @@ class _FeedTrack {
   final bool isLiked;
   final bool isReposted;
   final List<int>? waveform;
+  final String? likedByName;
+  final String? likedByAvatarUrl;
 
   const _FeedTrack({
     required this.id,
@@ -42,12 +43,22 @@ class _FeedTrack {
     this.isLiked = false,
     this.isReposted = false,
     this.waveform,
+    this.likedByName,
+    this.likedByAvatarUrl,
   });
 
   factory _FeedTrack.fromJson(Map<String, dynamic> json) {
     final target = json['target'] as Map<String, dynamic>?;
     final track = target ?? json;
     final artist = track['artist'] as Map<String, dynamic>? ?? {};
+    final audio = track['audio'] as Map<String, dynamic>?;
+    final isActivity = target != null || json.containsKey('activityType');
+    final actor = isActivity
+        ? (json['actor'] ??
+            json['user'] ??
+            json['createdBy'] ??
+            json['profile']) as Map<String, dynamic>?
+        : null;
     return _FeedTrack(
       id: track['_id'] as String? ?? '',
       title: track['title'] as String? ?? '',
@@ -55,7 +66,7 @@ class _FeedTrack {
       artistId: artist['_id'] as String?,
       artistPermalink: artist['permalink'] as String?,
       artworkUrl: track['artworkUrl'] as String?,
-      hlsUrl: track['hlsUrl'] as String? ?? '',
+      hlsUrl: track['hlsUrl'] as String? ?? audio?['hlsUrl'] as String? ?? '',
       playCount: (track['playCount'] as num?)?.toInt() ?? 0,
       likeCount: (track['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (track['repostCount'] as num?)?.toInt() ?? 0,
@@ -64,6 +75,12 @@ class _FeedTrack {
       waveform: (track['waveform'] as List<dynamic>?)
           ?.map((e) => (e as num).toInt())
           .toList(),
+      likedByName: actor?['displayName'] as String? ??
+          actor?['username'] as String? ??
+          actor?['name'] as String?,
+      likedByAvatarUrl: actor?['avatarUrl'] as String? ??
+          actor?['profileImageUrl'] as String? ??
+          actor?['photoUrl'] as String?,
     );
   }
 
@@ -72,6 +89,8 @@ class _FeedTrack {
     bool? isReposted,
     int? likeCount,
     int? repostCount,
+    String? likedByName,
+    String? likedByAvatarUrl,
   }) {
     return _FeedTrack(
       id: id,
@@ -87,6 +106,8 @@ class _FeedTrack {
       isLiked: isLiked ?? this.isLiked,
       isReposted: isReposted ?? this.isReposted,
       waveform: waveform,
+      likedByName: likedByName ?? this.likedByName,
+      likedByAvatarUrl: likedByAvatarUrl ?? this.likedByAvatarUrl,
     );
   }
 }
@@ -188,8 +209,14 @@ class _HomePageState extends ConsumerState<HomePage> {
   bool _isLoading = true;
   bool _hasError = false;
   bool _isTrendingLoading = false;
-  bool _trendingError = false;
   String _displayName = 'you';
+
+  List<_FeedTrack> _recommendedTracks = [];
+  List<_FeedTrack> _mixedShelfTracks = [];
+  List<_FeedTrack> _stationCards = [];
+  List<_FeedTrack> _madeForYouCards = [];
+  List<_FeedTrack> _curatedTracks = [];
+  List<_FeedTrack> _likedByFollowingTracks = [];
 
   @override
   void initState() {
@@ -197,6 +224,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     _loadUserName();
     _fetchFeed();
     _fetchTrending();
+    _fetchRecommended();
+    _fetchMixedForYou();
+    _fetchCurated();
   }
 
   Future<void> _loadUserName() async {
@@ -228,25 +258,36 @@ class _HomePageState extends ConsumerState<HomePage> {
           .where((track) => track.id.isNotEmpty)
           .toList();
 
+      final feedLikedTracks = rawFeed
+          .where((item) {
+            final m = item as Map<String, dynamic>;
+            return (m['activityType'] as String?) == 'LIKE' &&
+                (m['targetModel'] as String?) == 'Track';
+          })
+          .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+          .where((t) => t.id.isNotEmpty)
+          .toList();
+
       final likedIds = <String>{};
       final repostedIds = <String>{};
       final likedTracks = <_FeedTrack>[];
 
       if (userId.isNotEmpty) {
         try {
-          final likesResponse = await dioClient.dio.get('/profile/$userId/likes');
-          final likesData = likesResponse.data['data'] as Map<String, dynamic>? ?? {};
+          final likesResponse =
+              await dioClient.dio.get('/profile/$userId/likes');
+          final likesData =
+              likesResponse.data['data'] as Map<String, dynamic>? ?? {};
           final likedItems = likesData['likedTracks'] as List<dynamic>? ?? [];
           for (final item in likedItems) {
-            final trackMap =
-                (item as Map<String, dynamic>)['track'] as Map<String, dynamic>?;
+            final itemMap = item as Map<String, dynamic>;
+            final trackMap = (itemMap['target'] ?? itemMap['track'])
+                as Map<String, dynamic>?;
             if (trackMap == null) continue;
             final id = trackMap['_id'] as String? ?? '';
             if (id.isEmpty) continue;
             likedIds.add(id);
-            if (likedTracks.length < 4) {
-              likedTracks.add(_FeedTrack.fromJson(trackMap));
-            }
+            likedTracks.add(_FeedTrack.fromJson(trackMap));
           }
         } catch (_) {}
 
@@ -255,10 +296,11 @@ class _HomePageState extends ConsumerState<HomePage> {
               await dioClient.dio.get('/profile/$userId/reposts');
           final repostData =
               repostsResponse.data['data'] as Map<String, dynamic>? ?? {};
-          final repostItems = repostData['repostedTracks'] as List<dynamic>? ?? [];
+          final repostItems =
+              repostData['repostedTracks'] as List<dynamic>? ?? [];
           for (final item in repostItems) {
-            final trackMap =
-                (item as Map<String, dynamic>)['track'] as Map<String, dynamic>?;
+            final trackMap = (item as Map<String, dynamic>)['track']
+                as Map<String, dynamic>?;
             final id = trackMap?['_id'] as String? ?? '';
             if (id.isNotEmpty) {
               repostedIds.add(id);
@@ -286,6 +328,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         setState(() {
           _tracks = tracks;
           _likedTracks = likedTracks;
+          _likedByFollowingTracks = feedLikedTracks;
           _isLoading = false;
         });
       }
@@ -303,7 +346,6 @@ class _HomePageState extends ConsumerState<HomePage> {
   Future<void> _fetchTrending() async {
     setState(() {
       _isTrendingLoading = true;
-      _trendingError = false;
     });
 
     try {
@@ -318,10 +360,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           .where((track) => track.id.isNotEmpty)
           .toList();
 
-      if (tracks.isEmpty) {
-        tracks = _poolTracks().take(5).toList();
-      }
-
       if (mounted) {
         setState(() {
           _trendingTracks = tracks;
@@ -329,45 +367,120 @@ class _HomePageState extends ConsumerState<HomePage> {
         });
       }
     } on DioException catch (error) {
-      debugPrint('Trending error: ${error.response?.statusCode} ${error.message}');
+      debugPrint(
+          'Trending error: ${error.response?.statusCode} ${error.message}');
       if (mounted) {
-        setState(() {
-          _trendingTracks = _poolTracks().take(5).toList();
-          _isTrendingLoading = false;
-          _trendingError = false;
-        });
+        setState(() => _isTrendingLoading = false);
       }
     } catch (error) {
       debugPrint('Trending error: $error');
       if (mounted) {
-        setState(() {
-          _trendingTracks = _poolTracks().take(5).toList();
-          _isTrendingLoading = false;
-          _trendingError = false;
-        });
+        setState(() => _isTrendingLoading = false);
       }
     }
   }
 
-  List<_FeedTrack> _poolTracks() {
-    final ordered = [..._likedTracks, ..._tracks, ..._trendingTracks];
-    final seen = <String>{};
-    final unique = <_FeedTrack>[];
-    for (final track in ordered) {
-      if (track.id.isEmpty || !seen.add(track.id)) continue;
-      unique.add(track);
+  Future<void> _fetchRecommended() async {
+    try {
+      final response = await dioClient.dio.get('/discovery/recommended');
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final rawTracks = data['tracks'] as List<dynamic>? ?? [];
+      final tracks = rawTracks
+          .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+          .where((t) => t.id.isNotEmpty)
+          .toList();
+      if (mounted) setState(() => _recommendedTracks = tracks);
+    } catch (e) {
+      debugPrint('Recommended error: $e');
     }
-    return unique;
   }
 
-  List<_FeedTrack> _sectionTracks(int start, int count) {
-    final pool = _poolTracks();
-    if (pool.isEmpty) return const [];
-    final result = <_FeedTrack>[];
-    for (int i = 0; i < count; i++) {
-      result.add(pool[(start + i) % pool.length]);
+  Future<void> _fetchMixedForYou() async {
+    try {
+      final response = await dioClient.dio.get('/discovery/mixed-for-you');
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final rawStations = data['stations'] as List<dynamic>? ?? [];
+
+      final mixedShelf = <_FeedTrack>[];
+      final stationCards = <_FeedTrack>[];
+      final madeForYou = <_FeedTrack>[];
+
+      for (final station in rawStations) {
+        final stationMap = station as Map<String, dynamic>;
+        final stationId =
+            stationMap['id'] as String? ?? stationMap['_id'] as String? ?? '';
+        final stationTitle = stationMap['title'] as String? ?? '';
+        final stationType = stationMap['type'] as String? ?? '';
+        final rawTracks = stationMap['tracks'] as List<dynamic>? ?? [];
+
+        if (rawTracks.isEmpty) continue;
+
+        final firstTrack =
+            _FeedTrack.fromJson(rawTracks[0] as Map<String, dynamic>);
+        if (firstTrack.id.isEmpty) continue;
+
+        mixedShelf.add(firstTrack);
+
+        // Find the first non-empty artworkUrl across all tracks in this station.
+        String? stationArtworkUrl = firstTrack.artworkUrl;
+        if (stationArtworkUrl == null || stationArtworkUrl.isEmpty) {
+          for (final rawT in rawTracks.skip(1)) {
+            final url = (rawT as Map<String, dynamic>)['artworkUrl'] as String?;
+            if (url != null && url.isNotEmpty) {
+              stationArtworkUrl = url;
+              break;
+            }
+          }
+        }
+
+        final stationTrack = _FeedTrack(
+          id: stationId.isNotEmpty ? stationId : firstTrack.id,
+          title: stationTitle,
+          artistName: stationTitle,
+          artworkUrl: stationArtworkUrl,
+          hlsUrl: firstTrack.hlsUrl,
+          playCount: firstTrack.playCount,
+          artistId: firstTrack.artistId,
+          artistPermalink: firstTrack.artistPermalink,
+        );
+
+        stationCards.add(stationTrack);
+
+        if (stationType == 'genre' && madeForYou.length < 2) {
+          madeForYou.add(stationTrack);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _mixedShelfTracks = mixedShelf;
+          _stationCards = stationCards;
+          _madeForYouCards = madeForYou;
+        });
+      }
+    } catch (e) {
+      debugPrint('Mixed-for-you error: $e');
     }
-    return result;
+  }
+
+  Future<void> _fetchCurated() async {
+    try {
+      final response = await dioClient.dio.get('/discovery/curated');
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final rawCurated = data['curated'] as List<dynamic>? ?? [];
+      final tracks = <_FeedTrack>[];
+      for (final bucket in rawCurated) {
+        final bucketMap = bucket as Map<String, dynamic>;
+        final bucketTracks = bucketMap['tracks'] as List<dynamic>? ?? [];
+        for (final t in bucketTracks) {
+          final track = _FeedTrack.fromJson(t as Map<String, dynamic>);
+          if (track.id.isNotEmpty) tracks.add(track);
+        }
+      }
+      if (mounted) setState(() => _curatedTracks = tracks);
+    } catch (e) {
+      debugPrint('Curated error: $e');
+    }
   }
 
   void _playTrackCollection(
@@ -402,7 +515,11 @@ class _HomePageState extends ConsumerState<HomePage> {
         );
   }
 
-  Widget _buildSectionHeader(String title, {bool showSeeAll = false}) {
+  Widget _buildSectionHeader(
+    String title, {
+    bool showSeeAll = false,
+    VoidCallback? onSeeAll,
+  }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       child: Row(
@@ -418,18 +535,22 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
           if (showSeeAll)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3A3A3A),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: const Text(
-                'See All',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+            GestureDetector(
+              onTap: onSeeAll,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3A3A3A),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Text(
+                  'See All',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -459,7 +580,7 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildLikesBanner() {
     return GestureDetector(
-      onTap: () => context.push('/likes'),
+      onTap: () => context.push('/library/likes'),
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
@@ -635,32 +756,44 @@ class _HomePageState extends ConsumerState<HomePage> {
                     child: CircularProgressIndicator(color: Color(0xFFFF5500)),
                   ),
                 )
-              : SizedBox(
-                  key: ValueKey(theme.label),
-                  height: 220,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: tracks.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (_, index) {
-                      final window = [
-                        for (int i = 0; i < 3; i++)
-                          tracks[(index + i) % tracks.length],
-                      ];
-                      return _TrendingPanel(
-                        theme: theme,
-                        tracks: window,
-                        onPlay: (track) => _playTrackCollection(
-                          ref,
-                          track: track,
-                          source: tracks,
+              : !_isTrendingLoading && tracks.isEmpty
+                  ? SizedBox(
+                      key: ValueKey('${theme.label}_empty'),
+                      height: 80,
+                      child: const Center(
+                        child: Text(
+                          'No tracks for this genre',
+                          style: TextStyle(
+                            color: Color(0xFF808080),
+                            fontSize: 14,
+                          ),
                         ),
-                        onMore: _showTrackOptions,
-                      );
-                    },
-                  ),
-                ),
+                      ),
+                    )
+                  : SizedBox(
+                      key: ValueKey(theme.label),
+                      height: 220,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: (tracks.length / 3).ceil(),
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (_, index) {
+                          final window =
+                              tracks.skip(index * 3).take(3).toList();
+                          return _TrendingPanel(
+                            theme: theme,
+                            tracks: window,
+                            onPlay: (track) => _playTrackCollection(
+                              ref,
+                              track: track,
+                              source: tracks,
+                            ),
+                            onMore: _showTrackOptions,
+                          );
+                        },
+                      ),
+                    ),
         ),
       ],
     );
@@ -668,16 +801,14 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildTrackRowsSection(List<_FeedTrack> tracks) {
     return SizedBox(
-      height: 188,
+      height: 200,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: tracks.length,
+        itemCount: (tracks.length / 3).ceil(),
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (_, index) {
-          final window = [
-            for (int i = 0; i < 3; i++) tracks[(index + i) % tracks.length],
-          ];
+          final window = tracks.skip(index * 3).take(3).toList();
           return _LikedByPanel(
             tracks: window,
             onPlay: (track) =>
@@ -689,8 +820,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildMadeForYou() {
-    final tracks = _sectionTracks(6, 2);
+  Widget _buildMadeForYou(List<_FeedTrack> tracks) {
     final colors = [
       (
         bg: const [Color(0xFF193D8F), Color(0xFF1F1F1F)],
@@ -700,7 +830,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       (
         bg: const [Color(0xFF7E3500), Color(0xFF1F1F1F)],
         label: 'WEEKLY WAVE',
-        description: 'The best of SoundCloud just for you. Updated every Monday',
+        description:
+            'The best of SoundCloud just for you. Updated every Monday',
       ),
     ];
 
@@ -731,13 +862,13 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final recommendationTracks = _sectionTracks(0, 6);
-    final mixedTracks = _sectionTracks(1, 3);
-    final followLikedTracks = _sectionTracks(4, 3);
-    final curatedTracks = _sectionTracks(7, 5);
-    final likedByTracks = _sectionTracks(10, 4);
-    final stationTracks = _sectionTracks(11, 4);
-    final artistTracks = _sectionTracks(13, 5);
+    final recommendationTracks = _recommendedTracks;
+    final mixedTracks = _mixedShelfTracks;
+    final followLikedTracks = _likedByFollowingTracks;
+    final curatedTracks = _curatedTracks;
+    final likedByTracks = followLikedTracks;
+    final stationTracks = _stationCards;
+    final artistTracks = _recommendedTracks;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -818,7 +949,13 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await Future.wait([_fetchFeed(), _fetchTrending()]);
+          await Future.wait([
+            _fetchFeed(),
+            _fetchTrending(),
+            _fetchRecommended(),
+            _fetchMixedForYou(),
+            _fetchCurated(),
+          ]);
         },
         color: const Color(0xFFFF5500),
         backgroundColor: const Color(0xFF1A1A1A),
@@ -826,7 +963,11 @@ class _HomePageState extends ConsumerState<HomePage> {
           padding: const EdgeInsets.only(top: 12, bottom: 28),
           children: [
             _buildLikesBanner(),
-            _buildSectionHeader('More of what you like', showSeeAll: true),
+            _buildSectionHeader(
+              'More of what you like',
+              showSeeAll: true,
+              onSeeAll: () => context.push('/home/recommended'),
+            ),
             _buildSquareShelf(recommendationTracks),
             const SizedBox(height: 28),
             _buildTrendingSection(),
@@ -838,7 +979,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             _buildTrackRowsSection(followLikedTracks),
             const SizedBox(height: 28),
             _buildSectionHeader('Made for you'),
-            _buildMadeForYou(),
+            _buildMadeForYou(_madeForYouCards),
             const SizedBox(height: 28),
             _buildSectionHeader('Curated by SoundCloud'),
             _buildSquareShelf(curatedTracks, compact: true),
@@ -1038,6 +1179,41 @@ class _ArtworkShelfCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  if (track.likedByName != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(6, 5, 6, 5),
+                        color: Colors.black.withValues(alpha: 0.45),
+                        child: Column(
+                          children: [
+                            const Text(
+                              'LIKED BY',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Color(0xFFCFCFCF),
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            Text(
+                              track.likedByName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1163,8 +1339,10 @@ class _TrendingPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardWidth =
+        min(MediaQuery.of(context).size.width - 32, 360).toDouble();
     return Container(
-      width: 332,
+      width: cardWidth,
       padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
@@ -1196,6 +1374,7 @@ class _TrendingPanel extends StatelessWidget {
             children: [
               Expanded(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     for (final track in tracks)
                       _TrendingListRow(
@@ -1207,189 +1386,9 @@ class _TrendingPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Column(
-                children: [
-                  for (final track in tracks.skip(1))
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          width: 38,
-                          height: 38,
-                          child: _NetworkArtwork(url: track.artworkUrl),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SimpleTrackRow extends StatelessWidget {
-  final _FeedTrack track;
-  final VoidCallback onTap;
-  final VoidCallback onMore;
-
-  const _SimpleTrackRow({
-    required this.track,
-    required this.onTap,
-    required this.onMore,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 52,
-                height: 52,
-                child: _NetworkArtwork(url: track.artworkUrl),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    track.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  GestureDetector(
-                    onTap: () {
-                      final id = track.artistId;
-                      final permalink = track.artistPermalink;
-                      if (id != null && permalink != null) {
-                        navigateToUserProfile(
-                          context,
-                          userId: id,
-                          permalink: permalink,
-                          displayName: track.artistName,
-                        );
-                      }
-                    },
-                    child: Text(
-                      track.artistName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF9F9F9F),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: onMore,
-              child: const Icon(
-                Icons.more_vert,
-                color: Color(0xFFA1A1A1),
-                size: 20,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HorizontalTrackCard extends StatelessWidget {
-  final _FeedTrack track;
-  final VoidCallback onTap;
-  final VoidCallback onMore;
-
-  const _HorizontalTrackCard({
-    required this.track,
-    required this.onTap,
-    required this.onMore,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 248,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xFF181818),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF2F2F2F)),
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 58,
-                height: 58,
-                child: _NetworkArtwork(url: track.artworkUrl),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    track.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    track.artistName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFFA9A9A9),
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: onMore,
-              child: const Icon(
-                Icons.more_vert,
-                color: Color(0xFFA1A1A1),
-                size: 20,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1408,8 +1407,10 @@ class _LikedByPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cardWidth =
+        min(MediaQuery.of(context).size.width - 32, 360).toDouble();
     return Container(
-      width: 332,
+      width: cardWidth,
       padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
@@ -1425,11 +1426,11 @@ class _LikedByPanel extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
-                gradient: RadialGradient(
-                  center: const Alignment(0.0, -0.2),
+                gradient: const RadialGradient(
+                  center: Alignment(0.0, -0.2),
                   radius: 0.92,
                   colors: [
-                    const Color(0x332F4FFF),
+                    Color(0x332F4FFF),
                     Colors.transparent,
                   ],
                 ),
@@ -1440,6 +1441,7 @@ class _LikedByPanel extends StatelessWidget {
             children: [
               Expanded(
                 child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     for (final track in tracks)
                       Padding(
@@ -1474,9 +1476,22 @@ class _LikedByPanel extends StatelessWidget {
                                     const SizedBox(height: 3),
                                     Row(
                                       children: [
+                                        if (track.likedByName != null) ...[
+                                          const Text(
+                                            'Liked by ',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: Color(0xFF9DA8FF),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
                                         Flexible(
                                           child: Text(
-                                            track.artistName,
+                                            track.likedByName ??
+                                                track.artistName,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
@@ -1486,15 +1501,8 @@ class _LikedByPanel extends StatelessWidget {
                                           ),
                                         ),
                                         const SizedBox(width: 6),
-                                        const CircleAvatar(
-                                          radius: 8,
-                                          backgroundColor: Color(0xFF515151),
-                                          child: Icon(
-                                            Icons.person,
-                                            size: 10,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
+                                        _TinyAvatar(
+                                            url: track.likedByAvatarUrl),
                                       ],
                                     ),
                                   ],
@@ -1516,27 +1524,33 @@ class _LikedByPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 10),
-              Column(
-                children: [
-                  for (final track in tracks)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          width: 42,
-                          height: 42,
-                          child: _NetworkArtwork(url: track.artworkUrl),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+class _TinyAvatar extends StatelessWidget {
+  final String? url;
+
+  const _TinyAvatar({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = url != null && url!.isNotEmpty && url!.startsWith('http');
+    return CircleAvatar(
+      radius: 8,
+      backgroundColor: const Color(0xFF515151),
+      backgroundImage: hasUrl ? CachedNetworkImageProvider(url!) : null,
+      child: hasUrl
+          ? null
+          : const Icon(
+              Icons.person,
+              size: 10,
+              color: Colors.white70,
+            ),
     );
   }
 }
@@ -1805,7 +1819,7 @@ class _NetworkArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (url == null || url!.isEmpty) {
+    if (url == null || url!.isEmpty || !url!.startsWith('http')) {
       return const _ArtworkPlaceholder();
     }
     return CachedNetworkImage(
@@ -1850,9 +1864,9 @@ class _ArtworkPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF2D2D2D),
+      color: const Color(0xFF3A3A3A),
       child: const Center(
-        child: Icon(Icons.music_note_rounded, color: Colors.white24, size: 28),
+        child: Icon(Icons.music_note_rounded, color: Colors.white38, size: 28),
       ),
     );
   }

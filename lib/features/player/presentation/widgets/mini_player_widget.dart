@@ -26,6 +26,10 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
 
     final isPlaying = playerState.isPlaying;
     final notifier = ref.read(playerProvider.notifier);
+    final durationMs = playerState.duration.inMilliseconds;
+    final progress = durationMs <= 0
+        ? 0.0
+        : (playerState.position.inMilliseconds / durationMs).clamp(0.0, 1.0);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -87,24 +91,49 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                       GestureDetector(
                         key: const ValueKey('mini_player_play_button'),
                         onTap: notifier.togglePlayPause,
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.18),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
+                        child: SizedBox(
+                          width: 50,
+                          height: 50,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              SizedBox(
+                                width: 50,
+                                height: 50,
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 3,
+                                  strokeCap: StrokeCap.round,
+                                  backgroundColor:
+                                      Colors.white.withValues(alpha: 0.18),
+                                  valueColor:
+                                      const AlwaysStoppedAnimation<Color>(
+                                    Color(0xFFFF5500),
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                width: 42,
+                                height: 42,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.18),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  isPlaying ? Icons.pause : Icons.play_arrow,
+                                  color: Colors.black,
+                                  size: 24,
+                                ),
                               ),
                             ],
-                          ),
-                          child: Icon(
-                            isPlaying ? Icons.pause : Icons.play_arrow,
-                            color: Colors.black,
-                            size: 24,
                           ),
                         ),
                       ),
@@ -133,7 +162,8 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                                 behavior: HitTestBehavior.opaque,
                                 onTap: () {
                                   final id = currentTrack.artistId;
-                                  final permalink = currentTrack.artistPermalink;
+                                  final permalink =
+                                      currentTrack.artistPermalink;
                                   if (id != null && permalink != null) {
                                     navigateToUserProfile(
                                       context,
