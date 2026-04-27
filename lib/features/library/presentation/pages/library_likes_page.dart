@@ -58,8 +58,8 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
         result = result.reversed.toList();
         break;
       case 'title':
-        result.sort((a, b) =>
-            a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+        result.sort(
+            (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
         break;
       case 'artist':
         result.sort((a, b) =>
@@ -113,8 +113,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
           children: [
             // ── top bar ──────────────────────────────────────────────
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
                   GestureDetector(
@@ -124,7 +123,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.arrow_back_ios_new_rounded,
@@ -133,7 +132,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                   ),
                   const SizedBox(width: 12),
                   const Text(
-                    'Likes',
+                    'Your likes',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
@@ -148,7 +147,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.cast_rounded,
@@ -198,8 +197,8 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                               child: Container(
                                 height: 42,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(10),
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(22),
                                 ),
                                 child: TextField(
                                   controller: _searchController,
@@ -209,12 +208,14 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                     hintText:
                                         'Search $totalCount track${totalCount == 1 ? '' : 's'}',
                                     hintStyle: TextStyle(
-                                      color: Colors.white.withOpacity(0.4),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.4),
                                       fontSize: 14,
                                     ),
                                     prefixIcon: Icon(
                                       Icons.search_rounded,
-                                      color: Colors.white.withOpacity(0.4),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.4),
                                       size: 20,
                                     ),
                                     border: InputBorder.none,
@@ -233,12 +234,12 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                 width: 42,
                                 height: 42,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(10),
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(22),
                                 ),
                                 child: Icon(
                                   Icons.tune_rounded,
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: Colors.white.withValues(alpha: 0.7),
                                   size: 20,
                                 ),
                               ),
@@ -264,7 +265,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                               },
                               child: Icon(
                                 Icons.download_rounded,
-                                color: Colors.white.withOpacity(0.7),
+                                color: Colors.white.withValues(alpha: 0.7),
                                 size: 26,
                               ),
                             ),
@@ -279,13 +280,12 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                 ref
                                     .read(playerProvider.notifier)
                                     .playQueue(shuffled);
-                                context.push('/player');
                               },
                               child: Container(
                                 width: 42,
                                 height: 42,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.08),
+                                  color: Colors.white.withValues(alpha: 0.08),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
@@ -301,21 +301,18 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                               onTap: () {
                                 final pt = _toPlayerTracks(tracks);
                                 if (pt.isEmpty) return;
-                                ref
-                                    .read(playerProvider.notifier)
-                                    .playQueue(pt);
-                                context.push('/player');
+                                ref.read(playerProvider.notifier).playQueue(pt);
                               },
                               child: Container(
                                 width: 52,
                                 height: 52,
                                 decoration: const BoxDecoration(
-                                  color: Color(0xFFFF5500),
+                                  color: Colors.white,
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.play_arrow_rounded,
-                                  color: Colors.white,
+                                  color: Colors.black,
                                   size: 32,
                                 ),
                               ),
@@ -337,6 +334,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                 ),
                               )
                             : ListView.builder(
+                                padding: const EdgeInsets.only(bottom: 96),
                                 physics: const BouncingScrollPhysics(),
                                 itemCount: tracks.length,
                                 itemBuilder: (_, i) => _LikeTile(
@@ -451,7 +449,7 @@ class _LikeTile extends ConsumerWidget {
           );
     });
 
-    final sub = Colors.white.withOpacity(0.55);
+    final sub = Colors.white.withValues(alpha: 0.55);
     final hasArtwork = track.artworkUrl != null &&
         track.artworkUrl!.isNotEmpty &&
         track.artworkUrl!.startsWith('http');
@@ -472,7 +470,6 @@ class _LikeTile extends ConsumerWidget {
                   artistPermalink: track.artistPermalink,
                 ),
               );
-          context.push('/player');
         }
       },
       child: Padding(
@@ -597,8 +594,8 @@ class _LikeTile extends ConsumerWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.add_to_queue_rounded,
-                  color: Colors.white70),
+              leading:
+                  const Icon(Icons.add_to_queue_rounded, color: Colors.white70),
               title: const Text('Play last',
                   style: TextStyle(color: Colors.white)),
               onTap: () {

@@ -156,6 +156,52 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
       state = state.copyWith(activeFilter: filter);
     }
   }
+
+  // ── Socket-driven state mutations (no API call) ────────────────────────────
+
+  void socketAddNotification(Map<String, dynamic> json) {
+    try {
+      final notification = AppNotification.fromJson(json);
+      state = state.copyWith(
+        notifications: [notification, ...state.notifications],
+        serverUnreadCount: (state.serverUnreadCount ?? 0) + 1,
+      );
+    } catch (e) {
+      debugPrint('[Notifications] socketAddNotification parse error: $e');
+    }
+  }
+
+  void socketMarkNotificationRead(String id) {
+    final wasUnread = state.notifications.any((n) => n.id == id && !n.isRead);
+    state = state.copyWith(
+      notifications: state.notifications
+          .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
+          .toList(),
+      serverUnreadCount:
+          (wasUnread && state.serverUnreadCount != null && state.serverUnreadCount! > 0)
+              ? state.serverUnreadCount! - 1
+              : state.serverUnreadCount,
+    );
+  }
+
+  void socketMarkAllRead() {
+    state = state.copyWith(
+      notifications:
+          state.notifications.map((n) => n.copyWith(isRead: true)).toList(),
+      serverUnreadCount: 0,
+    );
+  }
+
+  void socketRemoveNotification(String id) {
+    final wasUnread = state.notifications.any((n) => n.id == id && !n.isRead);
+    state = state.copyWith(
+      notifications: state.notifications.where((n) => n.id != id).toList(),
+      serverUnreadCount:
+          (wasUnread && state.serverUnreadCount != null && state.serverUnreadCount! > 0)
+              ? state.serverUnreadCount! - 1
+              : state.serverUnreadCount,
+    );
+  }
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────

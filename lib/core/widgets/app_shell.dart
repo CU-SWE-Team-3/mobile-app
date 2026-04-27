@@ -1,48 +1,52 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/player/presentation/providers/follow_provider.dart';
-import '../../features/player/presentation/providers/player_provider.dart';
-import '../themes/app_theme.dart';
-import '../../features/engagement/presentation/providers/engagement_provider.dart';
-import '../../features/messaging/presentation/providers/messaging_providers.dart';
+import '../../features/player/presentation/widgets/mini_player_widget.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
   const AppShell({super.key, required this.navigationShell});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Activates the socket lifecycle: connects on login, disconnects on logout.
-    ref.watch(socketLifecycleProvider);
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Positioned.fill(child: navigationShell),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            // Hidden on Feed tab (index 1) — Feed manages its own mini player
-            child: _MiniPlayerSlot(currentIndex: navigationShell.currentIndex),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    const navColor = Color(0xFF2C2C2C);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        systemNavigationBarColor: navColor,
+        systemNavigationBarDividerColor: navColor,
+        systemNavigationBarIconBrightness: Brightness.light,
       ),
-      bottomNavigationBar: _BottomNavBar(
-        currentIndex: navigationShell.currentIndex,
-        onTap: (index) => navigationShell.goBranch(
-          index,
-          initialLocation: index == navigationShell.currentIndex,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: navigationShell,
+            ),
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: MiniPlayerWidget(),
+            ),
+          ],
+        ),
+        bottomNavigationBar: _BottomNavBar(
+          currentIndex: navigationShell.currentIndex,
+          onTap: (index) => navigationShell.goBranch(
+            index,
+            initialLocation: index == navigationShell.currentIndex,
+          ),
         ),
       ),
     );
   }
 }
+
+// ── Bottom Nav Bar (Codex new style) ─────────────────────────────────────────
 
 class _BottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -50,186 +54,77 @@ class _BottomNavBar extends StatelessWidget {
 
   const _BottomNavBar({required this.currentIndex, required this.onTap});
 
-  @override
-  Widget build(BuildContext context) {
-    return BottomNavigationBar(
-      backgroundColor: const Color(0xFF1A1A1A),
-      selectedItemColor: AppTheme.primary,
-      unselectedItemColor: Colors.white.withAlpha(153),
-      currentIndex: currentIndex,
-      onTap: onTap,
-      type: BottomNavigationBarType.fixed,
-      selectedLabelStyle:
-          const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
-      unselectedLabelStyle: const TextStyle(fontSize: 11),
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home_outlined),
-          activeIcon: Icon(Icons.home),
-          label: 'Home',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.dynamic_feed_outlined),
-          activeIcon: Icon(Icons.dynamic_feed),
-          label: 'Feed',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.search),
-          activeIcon: Icon(Icons.search),
-          label: 'Search',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.library_music_outlined),
-          activeIcon: Icon(Icons.library_music),
-          label: 'Library',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.graphic_eq),
-          activeIcon: Icon(Icons.graphic_eq),
-          label: 'Upgrade',
-        ),
-      ],
-    );
-  }
-}
+  static const _navColor = Color(0xFF2C2C2C);
 
-class _MiniPlayerSlot extends StatelessWidget {
-  final int currentIndex;
-
-  const _MiniPlayerSlot({required this.currentIndex});
+  static const _items = <({String label, IconData active, IconData inactive})>[
+    (label: 'Home', active: Icons.home, inactive: Icons.home_outlined),
+    (
+      label: 'Feed',
+      active: Icons.web_asset,
+      inactive: Icons.web_asset_outlined
+    ),
+    (label: 'Search', active: Icons.search, inactive: Icons.search),
+    (
+      label: 'Library',
+      active: Icons.library_music,
+      inactive: Icons.library_music_outlined,
+    ),
+    (label: 'Upgrade', active: Icons.graphic_eq, inactive: Icons.graphic_eq),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    // Feed tab (index 1) manages its own mini player — hide here
-    if (currentIndex == 1) return const SizedBox.shrink();
-    return const _MiniPlayerBar();
-  }
-}
-
-class _MiniPlayerBar extends ConsumerWidget {
-  const _MiniPlayerBar();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final playerState = ref.watch(playerProvider);
-    final track = playerState.currentTrack;
-
-    // Hide when nothing is loaded yet
-    if (track == null) return const SizedBox.shrink();
-
-    final params = EngagementParams(trackId: track.id);
-    final engState = ref.watch(engagementProvider(params));
-
-    final artistId = track.artistId;
-    final followState = artistId != null
-        ? ref.watch(followProvider(artistId))
-        : const FollowState();
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      child: GestureDetector(
-        key: const ValueKey('shell_mini_player_expand_button'),
-        onTap: () => context.push('/player'),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(32),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
-            child: Container(
-              height: 64,
-              decoration: BoxDecoration(
-                color: const Color(0x261A1A1A),
-                borderRadius: BorderRadius.circular(32),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                // Play / Pause button
-                GestureDetector(
-                  key: const ValueKey('shell_play_button'),
-                  onTap: () =>
-                      ref.read(playerProvider.notifier).togglePlayPause(),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      playerState.isPlaying ? Icons.pause : Icons.play_arrow,
-                      color: Colors.black,
-                      size: 22,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Track info
+    return ColoredBox(
+      color: _navColor,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          height: 80,
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0xFF3B3B3B))),
+          ),
+          child: Row(
+            children: [
+              for (int index = 0; index < _items.length; index++)
                 Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        track.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                  child: InkWell(
+                    onTap: () => onTap(index),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 6),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            currentIndex == index
+                                ? _items[index].active
+                                : _items[index].inactive,
+                            color: currentIndex == index
+                                ? Colors.white
+                                : const Color(0xFFB4B4B4),
+                            size: 22,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _items[index].label,
+                            style: TextStyle(
+                              color: currentIndex == index
+                                  ? Colors.white
+                                  : const Color(0xFFB4B4B4),
+                              fontSize: 10,
+                              fontWeight: currentIndex == index
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        track.artist,
-                        style:
-                            const TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Follow button wired to followProvider
-                if (artistId != null)
-                  IconButton(
-                    key: const ValueKey('shell_follow_button'),
-                    icon: Icon(
-                      followState.isFollowing
-                          ? Icons.person
-                          : Icons.person_add_outlined,
-                      color: followState.isFollowing
-                          ? AppTheme.primary
-                          : Colors.white,
-                      size: 22,
                     ),
-                    onPressed: (followState.isLoading || followState.isChecking)
-                        ? null
-                        : () => ref
-                            .read(followProvider(artistId).notifier)
-                            .toggle(artistId),
                   ),
-
-                // Like button wired to engagementProvider
-                IconButton(
-                  key: const ValueKey('shell_like_button'),
-                  icon: Icon(
-                    engState.isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: engState.isLiked
-                        ? const Color(0xFFFF5500)
-                        : Colors.white,
-                    size: 22,
-                  ),
-                  onPressed: engState.isLoadingLike
-                      ? null
-                      : () => ref
-                          .read(engagementProvider(params).notifier)
-                          .toggleLike(),
                 ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 }

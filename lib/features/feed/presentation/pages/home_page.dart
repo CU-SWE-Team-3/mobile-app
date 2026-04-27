@@ -1,19 +1,16 @@
 import 'dart:math';
-import 'package:dio/dio.dart';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
-import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
-import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
-import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
-
-// ── Model ─────────────────────────────────────────────────────────────────────
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 class _FeedTrack {
   final String id;
@@ -29,8 +26,10 @@ class _FeedTrack {
   final bool isLiked;
   final bool isReposted;
   final List<int>? waveform;
+  final String? likedByName;
+  final String? likedByAvatarUrl;
 
-  _FeedTrack({
+  const _FeedTrack({
     required this.id,
     required this.title,
     required this.artistName,
@@ -44,15 +43,22 @@ class _FeedTrack {
     this.isLiked = false,
     this.isReposted = false,
     this.waveform,
+    this.likedByName,
+    this.likedByAvatarUrl,
   });
 
   factory _FeedTrack.fromJson(Map<String, dynamic> json) {
-    // /feed returns FeedActivity objects where track data is nested under
-    // `target`. Flat shapes (trending, liked tracks) have fields at the
-    // top level — fall back to `json` itself when `target` is absent.
     final target = json['target'] as Map<String, dynamic>?;
     final track = target ?? json;
     final artist = track['artist'] as Map<String, dynamic>? ?? {};
+    final audio = track['audio'] as Map<String, dynamic>?;
+    final isActivity = target != null || json.containsKey('activityType');
+    final actor = isActivity
+        ? (json['actor'] ??
+            json['user'] ??
+            json['createdBy'] ??
+            json['profile']) as Map<String, dynamic>?
+        : null;
     return _FeedTrack(
       id: track['_id'] as String? ?? '',
       title: track['title'] as String? ?? '',
@@ -60,7 +66,7 @@ class _FeedTrack {
       artistId: artist['_id'] as String?,
       artistPermalink: artist['permalink'] as String?,
       artworkUrl: track['artworkUrl'] as String?,
-      hlsUrl: track['hlsUrl'] as String? ?? '',
+      hlsUrl: track['hlsUrl'] as String? ?? audio?['hlsUrl'] as String? ?? '',
       playCount: (track['playCount'] as num?)?.toInt() ?? 0,
       likeCount: (track['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (track['repostCount'] as num?)?.toInt() ?? 0,
@@ -69,11 +75,58 @@ class _FeedTrack {
       waveform: (track['waveform'] as List<dynamic>?)
           ?.map((e) => (e as num).toInt())
           .toList(),
+      likedByName: actor?['displayName'] as String? ??
+          actor?['username'] as String? ??
+          actor?['name'] as String?,
+      likedByAvatarUrl: actor?['avatarUrl'] as String? ??
+          actor?['profileImageUrl'] as String? ??
+          actor?['photoUrl'] as String?,
+    );
+  }
+
+  _FeedTrack copyWith({
+    bool? isLiked,
+    bool? isReposted,
+    int? likeCount,
+    int? repostCount,
+    String? likedByName,
+    String? likedByAvatarUrl,
+  }) {
+    return _FeedTrack(
+      id: id,
+      title: title,
+      artistName: artistName,
+      artworkUrl: artworkUrl,
+      hlsUrl: hlsUrl,
+      playCount: playCount,
+      artistId: artistId,
+      artistPermalink: artistPermalink,
+      likeCount: likeCount ?? this.likeCount,
+      repostCount: repostCount ?? this.repostCount,
+      isLiked: isLiked ?? this.isLiked,
+      isReposted: isReposted ?? this.isReposted,
+      waveform: waveform,
+      likedByName: likedByName ?? this.likedByName,
+      likedByAvatarUrl: likedByAvatarUrl ?? this.likedByAvatarUrl,
     );
   }
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+class _GenreTheme {
+  final String label;
+  final String query;
+  final Color accent;
+  final Color glow;
+  final List<Color> surface;
+
+  const _GenreTheme({
+    required this.label,
+    required this.query,
+    required this.accent,
+    required this.glow,
+    required this.surface,
+  });
+}
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -83,55 +136,87 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  // ── Static placeholder data ────────────────────────────────────────────────
-
-  static const List<String> _genres = [
-    'Electronic', 'Folk', 'House', 'Techno', 'Pop',
-    'Hip-Hop', 'Jazz', 'Classical', 'R&B', 'Metal',
+  static const List<_GenreTheme> _genres = [
+    _GenreTheme(
+      label: 'INDIE',
+      query: 'Indie',
+      accent: Color(0xFF6A89FF),
+      glow: Color(0x333C5BFF),
+      surface: [Color(0xFF182033), Color(0xFF13161F)],
+    ),
+    _GenreTheme(
+      label: 'SOUNDCLOUD',
+      query: 'SoundCloud',
+      accent: Color(0xFFFF7A3C),
+      glow: Color(0x33FF6428),
+      surface: [Color(0xFF2A1F18), Color(0xFF141414)],
+    ),
+    _GenreTheme(
+      label: 'ELECTRONIC',
+      query: 'Electronic',
+      accent: Color(0xFFFF4AA2),
+      glow: Color(0x33FF4AA2),
+      surface: [Color(0xFF2B1B27), Color(0xFF141414)],
+    ),
+    _GenreTheme(
+      label: 'COUNTRY',
+      query: 'Country',
+      accent: Color(0xFFF1C36B),
+      glow: Color(0x33F1C36B),
+      surface: [Color(0xFF30261A), Color(0xFF141414)],
+    ),
+    _GenreTheme(
+      label: 'TECHNO',
+      query: 'Techno',
+      accent: Color(0xFFFF5AA7),
+      glow: Color(0x33FF5AA7),
+      surface: [Color(0xFF2E1B25), Color(0xFF141414)],
+    ),
+    _GenreTheme(
+      label: 'REGGAE',
+      query: 'Reggae',
+      accent: Color(0xFF53E6A4),
+      glow: Color(0x3353E6A4),
+      surface: [Color(0xFF18271E), Color(0xFF141414)],
+    ),
+    _GenreTheme(
+      label: 'JAZZ',
+      query: 'Jazz',
+      accent: Color(0xFFBBB2FF),
+      glow: Color(0x33BBB2FF),
+      surface: [Color(0xFF201D2A), Color(0xFF141414)],
+    ),
+    _GenreTheme(
+      label: 'POP',
+      query: 'Pop',
+      accent: Color(0xFFEED17A),
+      glow: Color(0x33EED17A),
+      surface: [Color(0xFF2A2418), Color(0xFF141414)],
+    ),
+    _GenreTheme(
+      label: 'FOLK',
+      query: 'Folk',
+      accent: Color(0xFF9AD0A2),
+      glow: Color(0x339AD0A2),
+      surface: [Color(0xFF1C241C), Color(0xFF141414)],
+    ),
   ];
 
-  static const List<Map<String, String>> _moreOfWhatYouLike = [
-    {'title': 'Chill Vibes Mix', 'artist': 'SoundCloud'},
-    {'title': 'Electronic Essentials', 'artist': 'Various Artists'},
-    {'title': 'Late Night Lo-Fi', 'artist': 'Lo-Fi Beats'},
-    {'title': 'Hip-Hop Hits', 'artist': 'Top Artists'},
-    {'title': 'Indie Gems', 'artist': 'Curated'},
-  ];
-
-  static const List<Map<String, String>> _mixedForYou = [
-    {'title': 'Your Morning Mix', 'artist': 'Mixed for you'},
-    {'title': 'Afternoon Grooves', 'artist': 'Mixed for you'},
-    {'title': 'Evening Unwind', 'artist': 'Mixed for you'},
-    {'title': 'Workout Boosters', 'artist': 'Mixed for you'},
-  ];
-
-  static const List<Map<String, String>> _curatedItems = [
-    {'title': 'SoundCloud Weekly', 'subtitle': 'Fresh picks every week'},
-    {'title': 'Rising Stars', 'subtitle': 'New artists to watch'},
-    {'title': 'Throwback Classics', 'subtitle': 'Timeless tracks'},
-    {'title': 'Trending Now', 'subtitle': "What everyone's listening to"},
-  ];
-
-  static const List<Map<String, String>> _stationItems = [
-    {'artist': 'The Weeknd', 'subtitle': 'Based on The Weeknd'},
-    {'artist': 'Drake', 'subtitle': 'Based on Drake'},
-    {'artist': 'Billie Eilish', 'subtitle': 'Based on Billie Eilish'},
-    {'artist': 'Kendrick Lamar', 'subtitle': 'Based on Kendrick Lamar'},
-  ];
-
-  // ── State ──────────────────────────────────────────────────────────────────
-
-  int _selectedGenreIndex = 0;
+  int _selectedGenreIndex = 2;
   List<_FeedTrack> _tracks = [];
   List<_FeedTrack> _likedTracks = [];
+  List<_FeedTrack> _trendingTracks = [];
   bool _isLoading = true;
   bool _hasError = false;
-  List<_FeedTrack> _trendingTracks = [];
   bool _isTrendingLoading = false;
-  bool _trendingError = false;
   String _displayName = 'you';
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  List<_FeedTrack> _recommendedTracks = [];
+  List<_FeedTrack> _mixedShelfTracks = [];
+  List<_FeedTrack> _stationCards = [];
+  List<_FeedTrack> _madeForYouCards = [];
+  List<_FeedTrack> _curatedTracks = [];
+  List<_FeedTrack> _likedByFollowingTracks = [];
 
   @override
   void initState() {
@@ -139,9 +224,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     _loadUserName();
     _fetchFeed();
     _fetchTrending();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _maybeShowSuggestedDialog();
-    });
+    _fetchRecommended();
+    _fetchMixedForYou();
+    _fetchCurated();
   }
 
   Future<void> _loadUserName() async {
@@ -150,15 +235,9 @@ class _HomePageState extends ConsumerState<HomePage> {
         prefs.getString('username') ??
         prefs.getString('name') ??
         'you';
-    if (mounted) setState(() => _displayName = name);
-  }
-
-  Future<void> _maybeShowSuggestedDialog() async {
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyShown = prefs.getBool('suggested_dialog_shown') ?? false;
-    if (alreadyShown || !mounted) return;
-    await prefs.setBool('suggested_dialog_shown', true);
-    if (mounted) _showSuggestedDialog(context);
+    if (mounted) {
+      setState(() => _displayName = name);
+    }
   }
 
   Future<void> _fetchFeed() async {
@@ -166,438 +245,497 @@ class _HomePageState extends ConsumerState<HomePage> {
       _isLoading = true;
       _hasError = false;
     });
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId') ?? '';
 
       final response = await dioClient.dio.get('/feed');
-      final List<dynamic> data =
-          (response.data['data'] as Map<String, dynamic>)['feed'] as List<dynamic>;
-      var tracks = data
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final rawFeed = data['feed'] as List<dynamic>? ?? [];
+      var tracks = rawFeed
+          .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+          .where((track) => track.id.isNotEmpty)
+          .toList();
+
+      final feedLikedTracks = rawFeed
+          .where((item) {
+            final m = item as Map<String, dynamic>;
+            return (m['activityType'] as String?) == 'LIKE' &&
+                (m['targetModel'] as String?) == 'Track';
+          })
           .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
           .where((t) => t.id.isNotEmpty)
           .toList();
 
-      Set<String> likedIds = {};
-      Set<String> repostedIds = {};
-      final List<_FeedTrack> tempLikedTracks = [];
+      final likedIds = <String>{};
+      final repostedIds = <String>{};
+      final likedTracks = <_FeedTrack>[];
 
       if (userId.isNotEmpty) {
-        await Future.wait([
-          dioClient.dio.get('/profile/$userId/likes').then((r) {
-            final d = r.data['data'] as Map<String, dynamic>? ?? {};
-            final raw = d['likedTracks'] as List<dynamic>? ?? [];
-            for (final item in raw) {
-              final trackMap =
-                  (item as Map<String, dynamic>)['track'] as Map<String, dynamic>?;
-              if (trackMap != null) {
-                final trackId = trackMap['_id'] as String?;
-                if (trackId != null && trackId.isNotEmpty) {
-                  likedIds.add(trackId);
-                  if (tempLikedTracks.length < 4) {
-                    try {
-                      tempLikedTracks.add(_FeedTrack.fromJson(trackMap));
-                    } catch (_) {}
-                  }
-                }
-              }
+        try {
+          final likesResponse =
+              await dioClient.dio.get('/profile/$userId/likes');
+          final likesData =
+              likesResponse.data['data'] as Map<String, dynamic>? ?? {};
+          final likedItems = likesData['likedTracks'] as List<dynamic>? ?? [];
+          for (final item in likedItems) {
+            final itemMap = item as Map<String, dynamic>;
+            final trackMap = (itemMap['target'] ?? itemMap['track'])
+                as Map<String, dynamic>?;
+            if (trackMap == null) continue;
+            final id = trackMap['_id'] as String? ?? '';
+            if (id.isEmpty) continue;
+            likedIds.add(id);
+            likedTracks.add(_FeedTrack.fromJson(trackMap));
+          }
+        } catch (_) {}
+
+        try {
+          final repostsResponse =
+              await dioClient.dio.get('/profile/$userId/reposts');
+          final repostData =
+              repostsResponse.data['data'] as Map<String, dynamic>? ?? {};
+          final repostItems =
+              repostData['repostedTracks'] as List<dynamic>? ?? [];
+          for (final item in repostItems) {
+            final trackMap = (item as Map<String, dynamic>)['track']
+                as Map<String, dynamic>?;
+            final id = trackMap?['_id'] as String? ?? '';
+            if (id.isNotEmpty) {
+              repostedIds.add(id);
             }
-          }).catchError((_) {}),
-          dioClient.dio.get('/profile/$userId/reposts').then((r) {
-            final d = r.data['data'] as Map<String, dynamic>? ?? {};
-            final raw = d['repostedTracks'] as List<dynamic>? ?? [];
-            for (final item in raw) {
-              final trackId =
-                  ((item as Map<String, dynamic>)['track']
-                          as Map<String, dynamic>?)?['_id'] as String?;
-              if (trackId != null && trackId.isNotEmpty) {
-                repostedIds.add(trackId);
-              }
-            }
-          }).catchError((_) {}),
-        ]);
+          }
+        } catch (_) {}
       }
 
       tracks = tracks
-          .map((t) => _FeedTrack(
-                id: t.id,
-                title: t.title,
-                artistName: t.artistName,
-                artworkUrl: t.artworkUrl,
-                hlsUrl: t.hlsUrl,
-                playCount: t.playCount,
-                artistId: t.artistId,
-                artistPermalink: t.artistPermalink,
-                isLiked: likedIds.contains(t.id),
-                isReposted: repostedIds.contains(t.id),
-                likeCount:
-                    likedIds.contains(t.id) ? max(t.likeCount, 1) : t.likeCount,
-                repostCount: repostedIds.contains(t.id)
-                    ? max(t.repostCount, 1)
-                    : t.repostCount,
-                waveform: t.waveform,
-              ))
+          .map(
+            (track) => track.copyWith(
+              isLiked: likedIds.contains(track.id),
+              isReposted: repostedIds.contains(track.id),
+              likeCount: likedIds.contains(track.id)
+                  ? max(track.likeCount, 1)
+                  : track.likeCount,
+              repostCount: repostedIds.contains(track.id)
+                  ? max(track.repostCount, 1)
+                  : track.repostCount,
+            ),
+          )
           .toList();
 
       if (mounted) {
-        for (final track in tracks) {
-          if (track.id.isEmpty) continue;
-          ref
-              .read(engagementProvider(EngagementParams(trackId: track.id))
-                  .notifier)
-              .seed(
-                isLiked: track.isLiked,
-                isReposted: track.isReposted,
-                likeCount: track.likeCount,
-                repostCount: track.repostCount,
-              );
-        }
         setState(() {
           _tracks = tracks;
-          _likedTracks = tempLikedTracks;
+          _likedTracks = likedTracks;
+          _likedByFollowingTracks = feedLikedTracks;
           _isLoading = false;
         });
       }
-  } catch (e) {
-  debugPrint('=== TRENDING ERROR: $e');
-  if (e is DioException) {
-    debugPrint('🛑 === REAL BACKEND ERROR === 🛑');
-    debugPrint('Status Code: ${e.response?.statusCode}');
-    debugPrint('Error Data: ${e.response?.data}');
-    debugPrint('🛑 ========================== 🛑');
-  }
-  if (mounted) setState(() { _isTrendingLoading = false; _trendingError = true; });
-}
+    } catch (error) {
+      debugPrint('Home feed error: $error');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
+      }
+    }
   }
 
   Future<void> _fetchTrending() async {
     setState(() {
       _isTrendingLoading = true;
-      _trendingError = false;
     });
+
     try {
-      final genre = _genres[_selectedGenreIndex];
       final response = await dioClient.dio.get(
         '/discovery/trending',
-        queryParameters: {'genre': genre},
+        queryParameters: {'genre': _genres[_selectedGenreIndex].query},
       );
       final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final raw = data['trending'] as List<dynamic>? ?? [];
-      final tracks = raw
+      final rawTrending = data['trending'] as List<dynamic>? ?? [];
+      var tracks = rawTrending
           .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+          .where((track) => track.id.isNotEmpty)
           .toList();
+
       if (mounted) {
         setState(() {
           _trendingTracks = tracks;
           _isTrendingLoading = false;
         });
       }
-    } catch (_) {
+    } on DioException catch (error) {
+      debugPrint(
+          'Trending error: ${error.response?.statusCode} ${error.message}');
       if (mounted) {
-        setState(() {
-          _isTrendingLoading = false;
-          _trendingError = true;
-        });
+        setState(() => _isTrendingLoading = false);
+      }
+    } catch (error) {
+      debugPrint('Trending error: $error');
+      if (mounted) {
+        setState(() => _isTrendingLoading = false);
       }
     }
   }
 
-  void _showSuggestedDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
-        clipBehavior: Clip.hardEdge,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'People you might like',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    key: const ValueKey('home_suggested_close_button'),
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    icon: const Icon(Icons.close, color: Color(0xFF999999)),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const SuggestedRow(title: null),
-            ],
+  Future<void> _fetchRecommended() async {
+    try {
+      final response = await dioClient.dio.get('/discovery/recommended');
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final rawTracks = data['tracks'] as List<dynamic>? ?? [];
+      final tracks = rawTracks
+          .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+          .where((t) => t.id.isNotEmpty)
+          .toList();
+      if (mounted) setState(() => _recommendedTracks = tracks);
+    } catch (e) {
+      debugPrint('Recommended error: $e');
+    }
+  }
+
+  Future<void> _fetchMixedForYou() async {
+    try {
+      final response = await dioClient.dio.get('/discovery/mixed-for-you');
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final rawStations = data['stations'] as List<dynamic>? ?? [];
+
+      final mixedShelf = <_FeedTrack>[];
+      final stationCards = <_FeedTrack>[];
+      final madeForYou = <_FeedTrack>[];
+
+      for (final station in rawStations) {
+        final stationMap = station as Map<String, dynamic>;
+        final stationId =
+            stationMap['id'] as String? ?? stationMap['_id'] as String? ?? '';
+        final stationTitle = stationMap['title'] as String? ?? '';
+        final stationType = stationMap['type'] as String? ?? '';
+        final rawTracks = stationMap['tracks'] as List<dynamic>? ?? [];
+
+        if (rawTracks.isEmpty) continue;
+
+        final firstTrack =
+            _FeedTrack.fromJson(rawTracks[0] as Map<String, dynamic>);
+        if (firstTrack.id.isEmpty) continue;
+
+        mixedShelf.add(firstTrack);
+
+        // Find the first non-empty artworkUrl across all tracks in this station.
+        String? stationArtworkUrl = firstTrack.artworkUrl;
+        if (stationArtworkUrl == null || stationArtworkUrl.isEmpty) {
+          for (final rawT in rawTracks.skip(1)) {
+            final url = (rawT as Map<String, dynamic>)['artworkUrl'] as String?;
+            if (url != null && url.isNotEmpty) {
+              stationArtworkUrl = url;
+              break;
+            }
+          }
+        }
+
+        final stationTrack = _FeedTrack(
+          id: stationId.isNotEmpty ? stationId : firstTrack.id,
+          title: stationTitle,
+          artistName: stationTitle,
+          artworkUrl: stationArtworkUrl,
+          hlsUrl: firstTrack.hlsUrl,
+          playCount: firstTrack.playCount,
+          artistId: firstTrack.artistId,
+          artistPermalink: firstTrack.artistPermalink,
+        );
+
+        stationCards.add(stationTrack);
+
+        if (stationType == 'genre' && madeForYou.length < 2) {
+          madeForYou.add(stationTrack);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _mixedShelfTracks = mixedShelf;
+          _stationCards = stationCards;
+          _madeForYouCards = madeForYou;
+        });
+      }
+    } catch (e) {
+      debugPrint('Mixed-for-you error: $e');
+    }
+  }
+
+  Future<void> _fetchCurated() async {
+    try {
+      final response = await dioClient.dio.get('/discovery/curated');
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final rawCurated = data['curated'] as List<dynamic>? ?? [];
+      final tracks = <_FeedTrack>[];
+      for (final bucket in rawCurated) {
+        final bucketMap = bucket as Map<String, dynamic>;
+        final bucketTracks = bucketMap['tracks'] as List<dynamic>? ?? [];
+        for (final t in bucketTracks) {
+          final track = _FeedTrack.fromJson(t as Map<String, dynamic>);
+          if (track.id.isNotEmpty) tracks.add(track);
+        }
+      }
+      if (mounted) setState(() => _curatedTracks = tracks);
+    } catch (e) {
+      debugPrint('Curated error: $e');
+    }
+  }
+
+  void _playTrackCollection(
+    WidgetRef ref, {
+    required _FeedTrack track,
+    required List<_FeedTrack> source,
+  }) {
+    if (track.hlsUrl.isEmpty) return;
+
+    final queue = source
+        .where((item) => item.hlsUrl.isNotEmpty)
+        .map(
+          (item) => PlayerTrack(
+            id: item.id,
+            title: item.title,
+            artist: item.artistName,
+            artistId: item.artistId,
+            artistPermalink: item.artistPermalink,
+            audioUrl: item.hlsUrl,
+            coverUrl: item.artworkUrl,
+            waveform: item.waveform,
           ),
-        ),
+        )
+        .toList();
+    if (queue.isEmpty) return;
+
+    final playable = source.where((item) => item.hlsUrl.isNotEmpty).toList();
+    final startIndex = playable.indexWhere((item) => item.id == track.id);
+    ref.read(playerProvider.notifier).playQueue(
+          queue,
+          startIndex: startIndex < 0 ? 0 : startIndex,
+        );
+  }
+
+  Widget _buildSectionHeader(
+    String title, {
+    bool showSeeAll = false,
+    VoidCallback? onSeeAll,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          if (showSeeAll)
+            GestureDetector(
+              onTap: onSeeAll,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3A3A3A),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Text(
+                  'See All',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  // ── Section builders ───────────────────────────────────────────────────────
-
-  // 1 — Your likes banner
-  Widget _buildYourLikesBanner() {
-    return GestureDetector(
-      onTap: () => context.push('/likes'),
-      child: Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF5C0A0A), Color(0xFFB31A00)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(12),
+  void _showTrackOptions(_FeedTrack track) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
-            child: Row(
+      builder: (_) => TrackOptionsSheet(
+        trackId: track.id,
+        title: track.title,
+        artistName: track.artistName,
+        artworkUrl: track.artworkUrl,
+        artistId: track.artistId,
+        artistPermalink: track.artistPermalink,
+      ),
+    );
+  }
+
+  Widget _buildLikesBanner() {
+    return GestureDetector(
+      onTap: () => context.push('/library/likes'),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF5A281B), Color(0xFF2A1E1B)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Column(
+          children: [
+            Row(
               children: [
-                const Icon(Icons.favorite, color: Colors.white, size: 26),
-                const SizedBox(width: 10),
+                const _LikesGlyph(),
+                const SizedBox(width: 14),
                 const Expanded(
                   child: Text(
                     'Your likes',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                IconButton(
-                  onPressed: () => context.push('/likes'),
-                  icon: const Icon(Icons.shuffle, color: Colors.white, size: 24),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-          ),
-          if (_likedTracks.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
-              child: _buildLikedTracksGrid(),
-            ),
-        ],
-      ),
-    ),
-    );
-  }
-
-  Widget _buildLikedTracksGrid() {
-    final items = _likedTracks.take(4).toList();
-    final rows = <Widget>[];
-    for (int i = 0; i < items.length; i += 2) {
-      if (i > 0) rows.add(const SizedBox(height: 10));
-      rows.add(Row(
-        children: [
-          Expanded(child: _buildLikedTrackTile(items[i])),
-          const SizedBox(width: 10),
-          Expanded(
-            child: i + 1 < items.length
-                ? _buildLikedTrackTile(items[i + 1])
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ));
-    }
-    return Column(children: rows);
-  }
-
-  Widget _buildLikedTrackTile(_FeedTrack track) {
-    return Row(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: track.artworkUrl != null && track.artworkUrl!.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: track.artworkUrl!,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
-                  )
-                : const _ArtworkPlaceholder(),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                track.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                track.artistName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Section header widget
-  Widget _buildSectionHeader(String title, {bool showSeeAll = false}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          if (showSeeAll)
-            const Text(
-              'See all',
-              style: TextStyle(color: Color(0xFF999999), fontSize: 13),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // 2+3 — Horizontal album card rows (shared for "More of what you like" and "Mixed for")
-  Widget _buildHorizontalAlbumCards(List<Map<String, String>> items) {
-    const gradients = <List<Color>>[
-      [Color(0xFF1A3A5C), Color(0xFF1E90FF)],
-      [Color(0xFF2D0F4F), Color(0xFF9333EA)],
-      [Color(0xFF0A3826), Color(0xFF10B981)],
-      [Color(0xFF5C1A00), Color(0xFFEA580C)],
-      [Color(0xFF1E1B4B), Color(0xFF6366F1)],
-    ];
-    return SizedBox(
-      height: 210,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: items.length,
-        itemBuilder: (_, i) {
-          final item = items[i];
-          final colors = gradients[i % gradients.length];
-          return Container(
-            width: 160,
-            margin: const EdgeInsets.only(right: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
                 Container(
-                  height: 160,
+                  width: 46,
+                  height: 46,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: colors,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.black.withValues(alpha: 0.32),
+                    shape: BoxShape.circle,
                   ),
-                  child: const Center(
-                    child: Icon(Icons.music_note, color: Colors.white24, size: 48),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  item['title']!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  child: const Icon(
+                    Icons.shuffle_rounded,
                     color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    size: 22,
                   ),
-                ),
-                Text(
-                  item['artist']!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF999999), fontSize: 12),
                 ),
               ],
             ),
-          );
-        },
+            const SizedBox(height: 14),
+            if (_likedTracks.isEmpty)
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Tracks you like will show up here.',
+                  style: TextStyle(color: Color(0xFFD0D0D0), fontSize: 12),
+                ),
+              )
+            else
+              Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: _SmallTrackTile(track: _likedTracks[0])),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _SmallTrackTile(
+                          track: _likedTracks[_likedTracks.length > 1 ? 1 : 0],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SmallTrackTile(
+                          track: _likedTracks[_likedTracks.length > 2 ? 2 : 0],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _SmallTrackTile(
+                          track: _likedTracks[_likedTracks.length > 3 ? 3 : 0],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  // 4 — Trending by genre (real feed data, first 5 tracks)
-  Widget _buildTrendingByGenre() {
+  Widget _buildSquareShelf(
+    List<_FeedTrack> tracks, {
+    bool showMixRibbon = false,
+    bool compact = false,
+  }) {
+    return SizedBox(
+      height: compact ? 216 : 232,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: tracks.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 16),
+        itemBuilder: (_, index) => _ArtworkShelfCard(
+          track: tracks[index],
+          width: compact ? 136 : 138,
+          ribbonLabel: showMixRibbon ? 'MIX ${index + 1}' : null,
+          onTap: () => _playTrackCollection(
+            ref,
+            track: tracks[index],
+            source: tracks,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrendingSection() {
+    final theme = _genres[_selectedGenreIndex];
+    final tracks = _trendingTracks;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionHeader('Trending by genre'),
         SizedBox(
-          height: 40,
+          height: 42,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: _genres.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) {
-              final isSelected = _selectedGenreIndex == i;
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, index) {
+              final genre = _genres[index];
+              final selected = index == _selectedGenreIndex;
               return GestureDetector(
                 key: const ValueKey('home_genre_chip'),
                 onTap: () {
-                  setState(() => _selectedGenreIndex = i);
+                  setState(() => _selectedGenreIndex = index);
                   _fetchTrending();
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 17, vertical: 10),
                   decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFFFF5500)
-                          : Colors.white,
+                      color: selected ? genre.accent : Colors.white70,
                     ),
-                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    _genres[i],
+                    genre.label,
                     style: TextStyle(
-                      color: isSelected ? const Color(0xFFFF5500) : Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                      color: selected ? genre.accent : Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.0,
                     ),
                   ),
                 ),
@@ -605,358 +743,133 @@ class _HomePageState extends ConsumerState<HomePage> {
             },
           ),
         ),
-        const SizedBox(height: 16),
-        if (_isTrendingLoading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(
-              child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-            ),
-          )
-        else if (_trendingError)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Center(
-              child: Column(
-                children: [
-                  const Text(
-                    "Couldn't load trending tracks",
-                    style: TextStyle(color: Colors.white, fontSize: 15),
+        const SizedBox(height: 14),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 260),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: _isTrendingLoading && tracks.isEmpty
+              ? const Padding(
+                  key: ValueKey('trending_loading'),
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Color(0xFFFF5500)),
                   ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    key: const ValueKey('home_retry_button'),
-                    onPressed: _fetchTrending,
-                    child: const Text(
-                      'Retry',
-                      style: TextStyle(color: Color(0xFFFF5500), fontSize: 14),
+                )
+              : !_isTrendingLoading && tracks.isEmpty
+                  ? SizedBox(
+                      key: ValueKey('${theme.label}_empty'),
+                      height: 80,
+                      child: const Center(
+                        child: Text(
+                          'No tracks for this genre',
+                          style: TextStyle(
+                            color: Color(0xFF808080),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    )
+                  : SizedBox(
+                      key: ValueKey(theme.label),
+                      height: 220,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: (tracks.length / 3).ceil(),
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (_, index) {
+                          final window =
+                              tracks.skip(index * 3).take(3).toList();
+                          return _TrendingPanel(
+                            theme: theme,
+                            tracks: window,
+                            onPlay: (track) => _playTrackCollection(
+                              ref,
+                              track: track,
+                              source: tracks,
+                            ),
+                            onMore: _showTrackOptions,
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else if (_trendingTracks.isEmpty)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
-            child: Text(
-              'No tracks found for this genre',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF999999), fontSize: 14),
-            ),
-          )
-        else
-          ...(_trendingTracks.take(5).toList().asMap().entries.map(
-                (e) => _SimpleTrackRow(
-                  track: e.value,
-                  allTracks: _trendingTracks,
-                  index: e.key,
-                ),
-              )),
+        ),
       ],
     );
   }
 
-  // 5 — Made for you (two tall cards)
-  Widget _buildMadeForYou() {
+  Widget _buildTrackRowsSection(List<_FeedTrack> tracks) {
+    return SizedBox(
+      height: 200,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: (tracks.length / 3).ceil(),
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, index) {
+          final window = tracks.skip(index * 3).take(3).toList();
+          return _LikedByPanel(
+            tracks: window,
+            onPlay: (track) =>
+                _playTrackCollection(ref, track: track, source: tracks),
+            onMore: _showTrackOptions,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMadeForYou(List<_FeedTrack> tracks) {
+    final colors = [
+      (
+        bg: const [Color(0xFF193D8F), Color(0xFF1F1F1F)],
+        label: 'DAILY DROPS',
+        description: 'New releases based on your taste. Updated every day',
+      ),
+      (
+        bg: const [Color(0xFF7E3500), Color(0xFF1F1F1F)],
+        label: 'WEEKLY WAVE',
+        description:
+            'The best of SoundCloud just for you. Updated every Monday',
+      ),
+    ];
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: _buildMadeForYouCard(
-              'DAILY\nDROPS',
-              'Fresh picks, every day',
-              const [Color(0xFF0F2A5C), Color(0xFF1565C0), Color(0xFF1E90FF)],
+          for (int i = 0; i < min(2, tracks.length); i++) ...[
+            Expanded(
+              child: _MadeForYouCard(
+                track: tracks[i],
+                colors: colors[i].bg,
+                label: colors[i].label,
+                description: colors[i].description,
+                onTap: () => _playTrackCollection(
+                  ref,
+                  track: tracks[i],
+                  source: tracks,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _buildMadeForYouCard(
-              'WEEKLY\nWAVE',
-              'New music, every week',
-              const [Color(0xFF3B0764), Color(0xFF7E22CE), Color(0xFFA855F7)],
-            ),
-          ),
+            if (i == 0) const SizedBox(width: 12),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildMadeForYouCard(
-    String label,
-    String description,
-    List<Color> colors,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          height: 200,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: colors,
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Stack(
-            children: [
-              Align(
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.equalizer_rounded,
-                  color: Colors.white.withValues(alpha: 0.12),
-                  size: 80,
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 24, 10, 10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.black.withValues(alpha: 0.65),
-                        Colors.transparent,
-                      ],
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                    ),
-                    borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(8),
-                    ),
-                  ),
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.5,
-                      height: 1.15,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          description,
-          style: const TextStyle(color: Color(0xFF999999), fontSize: 12),
-          maxLines: 2,
-        ),
-      ],
-    );
-  }
-
-  // 6 — Liked by people you follow (real feed data, tracks 5+)
-  Widget _buildLikedByFollowSection() {
-    if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(child: CircularProgressIndicator(color: Color(0xFFFF5500))),
-      );
-    }
-    if (_hasError || _tracks.length <= 5) return const SizedBox.shrink();
-    final tracks = _tracks.skip(5).toList();
-    return Column(
-      children: tracks.asMap().entries.map(
-        (e) => _SimpleTrackRow(
-          track: e.value,
-          allTracks: _tracks,
-          index: e.key + 5,
-        ),
-      ).toList(),
-    );
-  }
-
-  // 7 — Curated by SoundCloud (placeholder)
-  Widget _buildCuratedBySoundCloud() {
-    const colors = <List<Color>>[
-      [Color(0xFF0F4C81), Color(0xFF1E90FF)],
-      [Color(0xFF2D1B69), Color(0xFF7B2FBE)],
-      [Color(0xFF1A5F3F), Color(0xFF34D399)],
-      [Color(0xFF7F1D1D), Color(0xFFEF4444)],
-    ];
-    return SizedBox(
-      height: 210,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _curatedItems.length,
-        itemBuilder: (_, i) {
-          final item = _curatedItems[i];
-          final colorPair = colors[i % colors.length];
-          return Container(
-            width: 160,
-            margin: const EdgeInsets.only(right: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  height: 160,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: colorPair,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.headphones_rounded,
-                      color: Colors.white24,
-                      size: 52,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  item['title']!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  item['subtitle']!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF999999), fontSize: 11),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // 8 — Discover with Stations (placeholder)
-  Widget _buildDiscoverWithStations() {
-    const bgColors = <Color>[
-      Color(0xFF1B4332),
-      Color(0xFF1E3A5F),
-      Color(0xFF3B1A4A),
-      Color(0xFF4A1614),
-    ];
-    return SizedBox(
-      height: 220,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _stationItems.length,
-        itemBuilder: (_, i) {
-          final station = _stationItems[i];
-          final bgColor = bgColors[i % bgColors.length];
-          return Container(
-            width: 160,
-            margin: const EdgeInsets.only(right: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  height: 160,
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Stack(
-                    children: [
-                      // Vinyl ring
-                      Center(
-                        child: Container(
-                          width: 128,
-                          height: 128,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border:
-                                Border.all(color: Colors.white10, width: 18),
-                            color: Colors.black38,
-                          ),
-                        ),
-                      ),
-                      // Artist circle
-                      Center(
-                        child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white12,
-                          ),
-                          child: const Icon(
-                            Icons.person,
-                            color: Colors.white38,
-                            size: 34,
-                          ),
-                        ),
-                      ),
-                      // Label overlay
-                      Positioned(
-                        bottom: 8,
-                        left: 10,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'STATION',
-                              style: TextStyle(
-                                color: Colors.white60,
-                                fontSize: 9,
-                                letterSpacing: 1.2,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              station['artist']!,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  station['subtitle']!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF999999),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // ── Build ──────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
+    final recommendationTracks = _recommendedTracks;
+    final mixedTracks = _mixedShelfTracks;
+    final followLikedTracks = _likedByFollowingTracks;
+    final curatedTracks = _curatedTracks;
+    final likedByTracks = followLikedTracks;
+    final stationTracks = _stationCards;
+    final artistTracks = _recommendedTracks;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -967,42 +880,41 @@ class _HomePageState extends ConsumerState<HomePage> {
           'Home',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.bold,
+            fontSize: 21,
+            fontWeight: FontWeight.w800,
           ),
         ),
+        toolbarHeight: 58,
         actions: [
           TextButton(
             key: const ValueKey('home_get_pro_button'),
             onPressed: () {},
             style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
             child: const Text(
               'GET PRO',
               style: TextStyle(
-                color: Color(0xFFFF5500),
+                color: Color(0xFFFF6B1A),
                 fontSize: 13,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
           IconButton(
             key: const ValueKey('home_cast_button'),
             onPressed: () {},
-            icon: const Icon(Icons.cast, color: Colors.white, size: 22),
+            icon: const Icon(Icons.cast_connected_outlined, size: 23),
           ),
           IconButton(
             key: const ValueKey('home_upload_button'),
             onPressed: () {},
-            icon: const Icon(Icons.upload_rounded, color: Colors.white, size: 22),
+            icon: const Icon(Icons.arrow_circle_up_outlined, size: 23),
           ),
           IconButton(
             key: const ValueKey('home_messages_button'),
             onPressed: () => context.push('/messages'),
-            icon: const Icon(Icons.mail_outline, color: Colors.white, size: 22),
+            icon: const Icon(Icons.mail_outline, size: 23),
           ),
           Stack(
             clipBehavior: Clip.none,
@@ -1010,92 +922,328 @@ class _HomePageState extends ConsumerState<HomePage> {
               IconButton(
                 key: const ValueKey('home_notifications_button'),
                 onPressed: () => context.push('/notifications'),
-                icon: const Icon(Icons.notifications_none, color: Colors.white, size: 22),
+                icon: const Icon(Icons.notifications_none, size: 23),
               ),
-              Builder(builder: (ctx) {
-                final unread = ref.watch(notificationProvider).unreadCount;
-                if (unread == 0) return const SizedBox.shrink();
-                return Positioned(
-                  top: 6,
-                  right: 6,
-                  child: IgnorePointer(
+              Builder(
+                builder: (context) {
+                  final unread = ref.watch(notificationProvider).unreadCount;
+                  if (unread == 0) return const SizedBox.shrink();
+                  return Positioned(
+                    right: 6,
+                    top: 6,
                     child: Container(
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      width: 16,
+                      height: 16,
                       decoration: const BoxDecoration(
                         color: Color(0xFFFF5500),
                         shape: BoxShape.circle,
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        unread > 9 ? '9+' : '$unread',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          height: 1,
-                        ),
-                      ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                },
+              ),
             ],
           ),
           const SizedBox(width: 4),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchFeed,
+        onRefresh: () async {
+          await Future.wait([
+            _fetchFeed(),
+            _fetchTrending(),
+            _fetchRecommended(),
+            _fetchMixedForYou(),
+            _fetchCurated(),
+          ]);
+        },
         color: const Color(0xFFFF5500),
         backgroundColor: const Color(0xFF1A1A1A),
         child: ListView(
-          padding: const EdgeInsets.only(top: 24, bottom: 100),
+          padding: const EdgeInsets.only(top: 12, bottom: 28),
           children: [
-            // 1 — Your likes
-            _buildYourLikesBanner(),
-
-            // 2 — More of what you like
-            _buildSectionHeader('More of what you like', showSeeAll: true),
-            _buildHorizontalAlbumCards(_moreOfWhatYouLike),
-            const SizedBox(height: 32),
-
-            // 3 — Mixed for [username]
+            _buildLikesBanner(),
+            _buildSectionHeader(
+              'More of what you like',
+              showSeeAll: true,
+              onSeeAll: () => context.push('/home/recommended'),
+            ),
+            _buildSquareShelf(recommendationTracks),
+            const SizedBox(height: 28),
+            _buildTrendingSection(),
+            const SizedBox(height: 28),
             _buildSectionHeader('Mixed for $_displayName'),
-            _buildHorizontalAlbumCards(_mixedForYou),
-            const SizedBox(height: 32),
-
-            // 4 — Trending by genre
-            _buildTrendingByGenre(),
-            const SizedBox(height: 32),
-
-            // 5 — Made for you
-            _buildSectionHeader('Made for you'),
-            _buildMadeForYou(),
-            const SizedBox(height: 32),
-
-            // 6 — Liked by people you follow
+            _buildSquareShelf(mixedTracks, showMixRibbon: true, compact: true),
+            const SizedBox(height: 28),
             _buildSectionHeader('Liked by people you follow'),
-            _buildLikedByFollowSection(),
-            const SizedBox(height: 32),
-
-            // 7 — Curated by SoundCloud
+            _buildTrackRowsSection(followLikedTracks),
+            const SizedBox(height: 28),
+            _buildSectionHeader('Made for you'),
+            _buildMadeForYou(_madeForYouCards),
+            const SizedBox(height: 28),
             _buildSectionHeader('Curated by SoundCloud'),
-            _buildCuratedBySoundCloud(),
-            const SizedBox(height: 32),
-
-            // 8 — Discover with Stations
+            _buildSquareShelf(curatedTracks, compact: true),
+            const SizedBox(height: 28),
+            _buildSectionHeader('Liked By'),
+            _buildSquareShelf(likedByTracks, compact: true),
+            const SizedBox(height: 28),
             _buildSectionHeader('Discover with Stations'),
-            _buildDiscoverWithStations(),
-            const SizedBox(height: 32),
-
-            // 9 — New crew, suggested for you
+            _buildStationShelf(stationTracks),
+            const SizedBox(height: 28),
             _buildSectionHeader('New crew, suggested for you'),
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
-              child: SuggestedRow(title: null),
+              child: SuggestedRow(title: null, compact: true),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
+            _buildSectionHeader('Artists to watch out for'),
+            _buildBuzzingShelf(artistTracks),
+            if (_isLoading && _tracks.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+                ),
+              )
+            else if (_hasError)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Text(
+                  'Some home content could not be loaded.',
+                  style: TextStyle(color: Color(0xFF999999), fontSize: 13),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStationShelf(List<_FeedTrack> tracks) {
+    return SizedBox(
+      height: 192,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: tracks.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, index) => _StationCard(
+          track: tracks[index],
+          onTap: () => _playTrackCollection(
+            ref,
+            track: tracks[index],
+            source: tracks,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBuzzingShelf(List<_FeedTrack> tracks) {
+    return SizedBox(
+      height: 176,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: tracks.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, index) => _BuzzingCard(
+          track: tracks[index],
+          accent: [
+            const Color(0xFFE7D36E),
+            const Color(0xFFA273F3),
+            const Color(0xFFEA5B67),
+          ][index % 3],
+          onTap: () => _playTrackCollection(
+            ref,
+            track: tracks[index],
+            source: tracks,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallTrackTile extends StatelessWidget {
+  final _FeedTrack track;
+
+  const _SmallTrackTile({required this.track});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF363636),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              width: 42,
+              height: 42,
+              child: _NetworkArtwork(url: track.artworkUrl),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  track.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  track.artistName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFD3D3D3),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ArtworkShelfCard extends StatelessWidget {
+  final _FeedTrack track;
+  final double width;
+  final String? ribbonLabel;
+  final VoidCallback onTap;
+
+  const _ArtworkShelfCard({
+    required this.track,
+    required this.width,
+    required this.onTap,
+    this.ribbonLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: width,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: width,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: _NetworkArtwork(url: track.artworkUrl),
+                    ),
+                  ),
+                  if (ribbonLabel != null)
+                    Positioned(
+                      left: 8,
+                      bottom: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6C9EFA),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          ribbonLabel!,
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (track.likedByName != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(6, 5, 6, 5),
+                        color: Colors.black.withValues(alpha: 0.45),
+                        child: Column(
+                          children: [
+                            const Text(
+                              'LIKED BY',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Color(0xFFCFCFCF),
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            Text(
+                              track.likedByName!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 34,
+              child: Text(
+                track.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            SizedBox(
+              height: 30,
+              child: Text(
+                track.artistName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFFBEBEBE),
+                  fontSize: 12,
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1103,67 +1251,34 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 }
 
-// ── Simple track row (artwork + title + artist + 3-dot) ───────────────────────
-
-class _SimpleTrackRow extends ConsumerWidget {
+class _TrendingListRow extends StatelessWidget {
   final _FeedTrack track;
-  final List<_FeedTrack> allTracks;
-  final int index;
+  final Color accent;
+  final VoidCallback onTap;
+  final VoidCallback onMore;
 
-  const _SimpleTrackRow({
+  const _TrendingListRow({
     required this.track,
-    required this.allTracks,
-    required this.index,
+    required this.accent,
+    required this.onTap,
+    required this.onMore,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      key: const ValueKey('home_track_row'),
-      onTap: () {
-        if (track.hlsUrl.isEmpty) return;
-        final queue = allTracks
-            .where((t) => t.hlsUrl.isNotEmpty)
-            .map((t) => PlayerTrack(
-                  id: t.id,
-                  title: t.title,
-                  artist: t.artistName,
-                  artistId: t.artistId,
-                  artistPermalink: t.artistPermalink,
-                  audioUrl: t.hlsUrl,
-                  coverUrl: t.artworkUrl,
-                  waveform: t.waveform,
-                ))
-            .toList();
-        final startIndex = allTracks
-            .where((t) => t.hlsUrl.isNotEmpty)
-            .toList()
-            .indexWhere((t) => t.id == track.id);
-        ref.read(playerProvider.notifier).playQueue(
-              queue,
-              startIndex: startIndex < 0 ? 0 : startIndex,
-            );
-      },
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 0, 16),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: track.artworkUrl != null && track.artworkUrl!.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: track.artworkUrl!,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
-                      )
-                    : const _ArtworkPlaceholder(),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 42,
+                height: 42,
+                child: _NetworkArtwork(url: track.artworkUrl),
               ),
             ),
             const SizedBox(width: 12),
@@ -1178,51 +1293,28 @@ class _SimpleTrackRow extends ConsumerWidget {
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 2),
-                  GestureDetector(
-                    onTap: () {
-                      final id = track.artistId;
-                      final permalink = track.artistPermalink;
-                      if (id != null && permalink != null) {
-                        navigateToUserProfile(
-                          context,
-                          userId: id,
-                          permalink: permalink,
-                          displayName: track.artistName,
-                        );
-                      }
-                    },
-                    child: Text(
-                      track.artistName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF999999),
-                        fontSize: 12,
-                      ),
+                  Text(
+                    track.artistName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFD6D6D6),
+                      fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ),
-            IconButton(
-              key: const ValueKey('home_track_more_button'),
-              onPressed: () => showModalBottomSheet(
-                context: context,
-                backgroundColor: const Color(0xFF1A1A1A),
-                isScrollControlled: true,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                builder: (_) => _TrackMenuSheet(track: track),
-              ),
-              icon: const Icon(
+            GestureDetector(
+              onTap: onMore,
+              child: Icon(
                 Icons.more_vert,
-                color: Color(0xFF999999),
-                size: 20,
+                color: accent.withValues(alpha: 0.9),
+                size: 18,
               ),
             ),
           ],
@@ -1232,327 +1324,249 @@ class _SimpleTrackRow extends ConsumerWidget {
   }
 }
 
-// ── Track menu sheet ──────────────────────────────────────────────────────────
+class _TrendingPanel extends StatelessWidget {
+  final _GenreTheme theme;
+  final List<_FeedTrack> tracks;
+  final void Function(_FeedTrack track) onPlay;
+  final void Function(_FeedTrack track) onMore;
 
-class _TrackMenuSheet extends ConsumerWidget {
-  final _FeedTrack track;
-
-  const _TrackMenuSheet({required this.track});
+  const _TrendingPanel({
+    required this.theme,
+    required this.tracks,
+    required this.onPlay,
+    required this.onMore,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final engagement = ref.watch(
-      engagementProvider(EngagementParams(trackId: track.id)),
-    );
-    final isLiked = engagement.isLiked;
-    final isReposted = engagement.isReposted;
-
-    final playerTrack = PlayerTrack(
-      id: track.id,
-      title: track.title,
-      artist: track.artistName,
-      artistId: track.artistId,
-      artistPermalink: track.artistPermalink,
-      audioUrl: track.hlsUrl,
-      coverUrl: track.artworkUrl,
-      waveform: track.waveform,
-    );
-
-    void comingSoon() {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Coming soon'),
-          backgroundColor: Color(0xFF333333),
-          duration: Duration(seconds: 2),
+  Widget build(BuildContext context) {
+    final cardWidth =
+        min(MediaQuery.of(context).size.width - 32, 360).toDouble();
+    return Container(
+      width: cardWidth,
+      padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: theme.surface,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-      );
-    }
-
-    void copyLink() {
-      final url = track.artistPermalink != null
-          ? 'https://soundcloud.com/${track.artistPermalink}/${track.id}'
-          : 'https://soundcloud.com/tracks/${track.id}';
-      Clipboard.setData(ClipboardData(text: url));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Link copied'),
-          backgroundColor: Color(0xFF333333),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-
-    void playNext() {
-      final state = ref.read(playerProvider);
-      ref.read(playerProvider.notifier).addToQueue(playerTrack);
-      if (state.queue.isNotEmpty) {
-        final oldIndex = state.queue.length;
-        final insertAt = (state.currentQueueIndex + 1).clamp(0, oldIndex);
-        if (insertAt < oldIndex) {
-          ref.read(playerProvider.notifier).reorderQueue(oldIndex, insertAt);
-        }
-      }
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Added to play next'),
-          backgroundColor: Color(0xFF333333),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-
-    void playLast() {
-      ref.read(playerProvider.notifier).addToQueue(playerTrack);
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Added to end of queue'),
-          backgroundColor: Color(0xFF333333),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-
-    void goToArtist() {
-      if (track.artistId == null || track.artistPermalink == null) {
-        comingSoon();
-        return;
-      }
-      final router = GoRouter.of(context);
-      Navigator.pop(context);
-      router.push(
-        '/user/${track.artistPermalink}',
-        extra: {
-          'displayName': track.artistName,
-          'userId': track.artistId,
-        },
-      );
-    }
-
-    void viewComments() {
-      final router = GoRouter.of(context);
-      Navigator.pop(context);
-      router.push(
-        '/comments',
-        extra: {
-          'trackId': track.id,
-          'trackTitle': track.title,
-          'trackArtist': track.artistName,
-          'trackArtworkUrl': track.artworkUrl,
-          'currentPositionSeconds': 0,
-        },
-      );
-    }
-
-    void viewLikers() {
-      final router = GoRouter.of(context);
-      Navigator.pop(context);
-      router.push('/likers', extra: {'trackId': track.id});
-    }
-
-    void viewReposters() {
-      final router = GoRouter.of(context);
-      Navigator.pop(context);
-      router.push('/reposters', extra: {'trackId': track.id});
-    }
-
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      ),
+      child: Stack(
         children: [
-          const SizedBox(height: 8),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: RadialGradient(
+                  center: const Alignment(0.1, -0.05),
+                  radius: 0.95,
+                  colors: [
+                    theme.glow,
+                    Colors.transparent,
+                  ],
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2A2A2A),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: track.artworkUrl != null &&
-                            track.artworkUrl!.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: track.artworkUrl!,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) =>
-                                const _ArtworkPlaceholder(),
-                          )
-                        : const _ArtworkPlaceholder(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        track.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final track in tracks)
+                      _TrendingListRow(
+                        track: track,
+                        accent: theme.accent,
+                        onTap: () => onPlay(track),
+                        onMore: () => onMore(track),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        track.artistName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF999999),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          const Divider(color: Colors.white12, height: 1),
-          SizedBox(
-            height: 88,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              children: [
-                _ShareIconButton(
-                  icon: Icons.message,
-                  label: 'Message',
-                  onTap: comingSoon,
-                ),
-                _ShareIconButton(
-                  icon: Icons.link,
-                  label: 'Copy Link',
-                  onTap: copyLink,
-                ),
-                _ShareIconButton(
-                  icon: Icons.chat_bubble_outline,
-                  label: 'WhatsApp',
-                  onTap: comingSoon,
-                ),
-                _ShareIconButton(
-                  icon: Icons.radio_button_unchecked,
-                  label: 'Status',
-                  onTap: comingSoon,
-                ),
-                _ShareIconButton(
-                  icon: Icons.sms,
-                  label: 'SMS',
-                  onTap: comingSoon,
-                ),
-                _ShareIconButton(
-                  icon: Icons.auto_stories,
-                  label: 'Stories',
-                  onTap: comingSoon,
-                ),
-              ],
-            ),
-          ),
-          const Divider(color: Colors.white12, height: 1),
-          _MenuTile(
-            icon: isLiked ? Icons.favorite : Icons.favorite_border,
-            iconColor: isLiked ? const Color(0xFFFF5500) : Colors.white,
-            label: isLiked ? 'Unlike' : 'Like',
-            onTap: () => ref
-                .read(
-                    engagementProvider(EngagementParams(trackId: track.id))
-                        .notifier)
-                .toggleLike(),
-          ),
-          _MenuTile(
-            icon: Icons.skip_next,
-            label: 'Play Next',
-            onTap: playNext,
-          ),
-          _MenuTile(
-            icon: Icons.queue_music,
-            label: 'Play Last',
-            onTap: playLast,
-          ),
-          _MenuTile(
-            icon: Icons.playlist_add,
-            label: 'Add to playlist',
-            onTap: comingSoon,
-          ),
-          _MenuTile(
-            icon: Icons.radio,
-            label: 'Start station',
-            onTap: comingSoon,
-          ),
-          _MenuTile(
-            icon: Icons.person_outline,
-            label: 'Go to artist profile',
-            onTap: goToArtist,
-          ),
-          _MenuTile(
-            icon: Icons.chat_bubble_outline,
-            label: 'View comments',
-            onTap: viewComments,
-          ),
-          _MenuTile(
-            icon: Icons.repeat,
-            iconColor: isReposted ? const Color(0xFFFF5500) : Colors.white,
-            label: 'Repost on SoundCloud',
-            onTap: () => ref
-                .read(
-                    engagementProvider(EngagementParams(trackId: track.id))
-                        .notifier)
-                .toggleRepost(),
-          ),
-          _MenuTile(
-            icon: Icons.favorite_border,
-            label: 'Who liked this',
-            onTap: viewLikers,
-          ),
-          _MenuTile(
-            icon: Icons.repeat,
-            label: 'Who reposted this',
-            onTap: viewReposters,
-          ),
-          _MenuTile(
-            icon: Icons.info_outline,
-            label: 'Behind this track',
-            onTap: comingSoon,
-          ),
-          _MenuTile(
-            icon: Icons.flag,
-            label: 'Report',
-            onTap: comingSoon,
-          ),
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 78),
         ],
       ),
     );
   }
 }
 
-class _ShareIconButton extends StatelessWidget {
-  final IconData icon;
+class _LikedByPanel extends StatelessWidget {
+  final List<_FeedTrack> tracks;
+  final void Function(_FeedTrack track) onPlay;
+  final void Function(_FeedTrack track) onMore;
+
+  const _LikedByPanel({
+    required this.tracks,
+    required this.onPlay,
+    required this.onMore,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cardWidth =
+        min(MediaQuery.of(context).size.width - 32, 360).toDouble();
+    return Container(
+      width: cardWidth,
+      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF181C29), Color(0xFF0F121A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: const RadialGradient(
+                  center: Alignment(0.0, -0.2),
+                  radius: 0.92,
+                  colors: [
+                    Color(0x332F4FFF),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final track in tracks)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          onTap: () => onPlay(track),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: SizedBox(
+                                  width: 50,
+                                  height: 50,
+                                  child: _NetworkArtwork(url: track.artworkUrl),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      track.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      children: [
+                                        if (track.likedByName != null) ...[
+                                          const Text(
+                                            'Liked by ',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: Color(0xFF9DA8FF),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                        Flexible(
+                                          child: Text(
+                                            track.likedByName ??
+                                                track.artistName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Color(0xFFD0D0D0),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        _TinyAvatar(
+                                            url: track.likedByAvatarUrl),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              GestureDetector(
+                                onTap: () => onMore(track),
+                                child: const Icon(
+                                  Icons.more_vert,
+                                  color: Color(0xFF9DA8FF),
+                                  size: 20,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TinyAvatar extends StatelessWidget {
+  final String? url;
+
+  const _TinyAvatar({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = url != null && url!.isNotEmpty && url!.startsWith('http');
+    return CircleAvatar(
+      radius: 8,
+      backgroundColor: const Color(0xFF515151),
+      backgroundImage: hasUrl ? CachedNetworkImageProvider(url!) : null,
+      child: hasUrl
+          ? null
+          : const Icon(
+              Icons.person,
+              size: 10,
+              color: Colors.white70,
+            ),
+    );
+  }
+}
+
+class _MadeForYouCard extends StatelessWidget {
+  final _FeedTrack track;
+  final List<Color> colors;
   final String label;
+  final String description;
   final VoidCallback onTap;
 
-  const _ShareIconButton({
-    required this.icon,
+  const _MadeForYouCard({
+    required this.track,
+    required this.colors,
     required this.label,
+    required this.description,
     required this.onTap,
   });
 
@@ -1560,24 +1574,68 @@ class _ShareIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        height: 246,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          gradient: LinearGradient(
+            colors: colors,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: const BoxDecoration(
-                color: Color(0xFF2A2A2A),
-                shape: BoxShape.circle,
+            Align(
+              alignment: Alignment.topRight,
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white54),
+                ),
+                child: const Icon(
+                  Icons.cloud_outlined,
+                  size: 12,
+                  color: Colors.white70,
+                ),
               ),
-              child: Icon(icon, color: Colors.white, size: 20),
             ),
-            const SizedBox(height: 4),
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: SizedBox(
+                  width: 96,
+                  height: 96,
+                  child: _NetworkArtwork(url: track.artworkUrl),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              color: Colors.black.withValues(alpha: 0.42),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             Text(
-              label,
-              style: const TextStyle(color: Color(0xFF999999), fontSize: 11),
+              description,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                height: 1.25,
+              ),
             ),
           ],
         ),
@@ -1586,32 +1644,166 @@ class _ShareIconButton extends StatelessWidget {
   }
 }
 
-class _MenuTile extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String label;
+class _StationCard extends StatelessWidget {
+  final _FeedTrack track;
   final VoidCallback onTap;
 
-  const _MenuTile({
-    required this.icon,
-    required this.label,
+  const _StationCard({required this.track, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 136,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 136,
+              height: 136,
+              decoration: BoxDecoration(
+                color: const Color(0xFF202020),
+                border: Border.all(color: const Color(0xFF414141)),
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(painter: _StationPainter()),
+                  ),
+                  Positioned(
+                    left: 10,
+                    right: 10,
+                    bottom: 10,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'STATION',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        Text(
+                          track.artistName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    left: 12,
+                    top: 18,
+                    child: ClipOval(
+                      child: SizedBox(
+                        width: 72,
+                        height: 72,
+                        child: _NetworkArtwork(url: track.artworkUrl),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 34,
+              child: Text(
+                'Based on ${track.artistName}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFFD0D0D0),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BuzzingCard extends StatelessWidget {
+  final _FeedTrack track;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _BuzzingCard({
+    required this.track,
+    required this.accent,
     required this.onTap,
-    this.iconColor = Colors.white,
   });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
+      child: SizedBox(
+        width: 118,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: iconColor, size: 22),
-            const SizedBox(width: 16),
+            Container(
+              width: 118,
+              height: 118,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1D1D1D),
+                border: Border.all(color: const Color(0xFF3A3A3A)),
+              ),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _BuzzingPainter(accent: accent),
+                    ),
+                  ),
+                  Positioned(
+                    left: 8,
+                    top: 8,
+                    child: Text(
+                      'BUZZING',
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 18,
+                    right: 18,
+                    bottom: 16,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: SizedBox(
+                        height: 58,
+                        child: _NetworkArtwork(url: track.artworkUrl),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
+              'Buzzing ${track.artistName}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -1620,18 +1812,114 @@ class _MenuTile extends StatelessWidget {
   }
 }
 
-// ── Artwork placeholder ───────────────────────────────────────────────────────
+class _NetworkArtwork extends StatelessWidget {
+  final String? url;
+
+  const _NetworkArtwork({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    if (url == null || url!.isEmpty || !url!.startsWith('http')) {
+      return const _ArtworkPlaceholder();
+    }
+    return CachedNetworkImage(
+      imageUrl: url!,
+      fit: BoxFit.cover,
+      errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
+    );
+  }
+}
+
+class _LikesGlyph extends StatelessWidget {
+  const _LikesGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 42,
+      height: 42,
+      child: Stack(
+        children: [
+          for (int i = 3; i >= 0; i--)
+            Positioned(
+              left: i * 3,
+              top: i * 2,
+              child: Icon(
+                Icons.favorite_outline,
+                color: const Color(0xFFFF6A2A).withValues(
+                  alpha: 0.34 + ((3 - i) * 0.16),
+                ),
+                size: 30,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
 
 class _ArtworkPlaceholder extends StatelessWidget {
   const _ArtworkPlaceholder();
 
   @override
   Widget build(BuildContext context) {
-    return const ColoredBox(
-      color: Color(0xFF2A2A2A),
-      child: Center(
-        child: Icon(Icons.music_note, color: Color(0xFF666666), size: 28),
+    return Container(
+      color: const Color(0xFF3A3A3A),
+      child: const Center(
+        child: Icon(Icons.music_note_rounded, color: Colors.white38, size: 28),
       ),
     );
+  }
+}
+
+class _StationPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFFF6A1C)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    for (int i = 0; i < 5; i++) {
+      canvas.drawArc(
+        Rect.fromCircle(
+          center: Offset(size.width * 0.4, size.height * 0.42),
+          radius: 38 + (i * 8),
+        ),
+        1.1,
+        2.7,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _BuzzingPainter extends CustomPainter {
+  final Color accent;
+
+  const _BuzzingPainter({required this.accent});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = accent;
+    for (int i = 0; i < 8; i++) {
+      final top = i * 14.0;
+      canvas.drawRect(
+        Rect.fromLTWH((i.isEven ? 0 : 10), top, 12, 6),
+        paint,
+      );
+      canvas.drawRect(
+        Rect.fromLTWH(size.width - (i.isEven ? 22 : 12), top + 4, 12, 6),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BuzzingPainter oldDelegate) {
+    return oldDelegate.accent != accent;
   }
 }
