@@ -8,14 +8,17 @@ import '../../features/player/presentation/providers/follow_provider.dart';
 import '../../features/player/presentation/providers/player_provider.dart';
 import '../themes/app_theme.dart';
 import '../../features/engagement/presentation/providers/engagement_provider.dart';
+import '../../features/messaging/presentation/providers/messaging_providers.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 
   const AppShell({super.key, required this.navigationShell});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Activates the socket lifecycle: connects on login, disconnects on logout.
+    ref.watch(socketLifecycleProvider);
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(

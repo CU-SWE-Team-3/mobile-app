@@ -1001,7 +1001,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
           IconButton(
             key: const ValueKey('home_messages_button'),
-            onPressed: () {},
+            onPressed: () => context.push('/messages'),
             icon: const Icon(Icons.mail_outline, color: Colors.white, size: 22),
           ),
           Stack(

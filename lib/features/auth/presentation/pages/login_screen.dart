@@ -1,19 +1,21 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   final String email;
   const LoginScreen({super.key, this.email = ''});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   late final TextEditingController _emailController;
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
@@ -87,7 +89,9 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         } catch (_) {}
       }
-      if (mounted) context.go('/home');
+      if (!mounted) return;
+      ref.read(sessionUserIdProvider.notifier).state = user['_id'] as String? ?? '';
+      context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final message = status == 401

@@ -72,6 +72,7 @@ import '../../features/playlist/presentation/pages/add_to_playlist_page.dart';
 
 import '../../features/messaging/presentation/pages/chat_inbox_page.dart';
 import '../../features/messaging/presentation/pages/chat_room_page.dart';
+import '../../features/messaging/presentation/pages/new_message_page.dart';
 
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/notifications/presentation/pages/push_notification_settings_page.dart';
@@ -419,7 +420,16 @@ final appRouter = GoRouter(
       path: '/messages',
       builder: (_, __) => const ChatInboxPage(),
       routes: [
-        GoRoute(path: 'chat', builder: (_, __) => const ChatRoomPage()),
+        GoRoute(
+          path: 'new',
+          builder: (_, __) => const NewMessagePage(),
+        ),
+        GoRoute(
+          path: 'chat/:conversationId',
+          builder: (_, state) => ChatRoomPage(
+            conversationId: state.pathParameters['conversationId']!,
+          ),
+        ),
       ],
     ),
 
