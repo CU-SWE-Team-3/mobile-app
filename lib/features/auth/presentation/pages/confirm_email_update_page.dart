@@ -105,6 +105,7 @@ class _ConfirmEmailUpdatePageState extends State<ConfirmEmailUpdatePage> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_email_update_success_profile_button'),
                 onPressed: () => context.go('/profile'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
@@ -155,6 +156,7 @@ class _ConfirmEmailUpdatePageState extends State<ConfirmEmailUpdatePage> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_email_update_error_profile_button'),
                 onPressed: () => context.go('/profile'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,

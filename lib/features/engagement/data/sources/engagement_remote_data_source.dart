@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../models/comment_model.dart';
 import '../models/liker_user_model.dart';
+import 'package:flutter/foundation.dart';
 
 // ── Shared track summary model (liked tracks + reposts lists) ─────────────────
 
@@ -9,21 +10,27 @@ class TrackSummary {
   final String id;
   final String title;
   final String artistName;
+  final String? artistId;
+  final String? artistPermalink;
   final String? artworkUrl;
   final String? audioUrl;
   final int playCount;
   final int likeCount;
   final int repostCount;
+  final List<int>? waveform;
 
   const TrackSummary({
     required this.id,
     required this.title,
     required this.artistName,
+    this.artistId,
+    this.artistPermalink,
     this.artworkUrl,
     this.audioUrl,
     this.playCount = 0,
     this.likeCount = 0,
     this.repostCount = 0,
+    this.waveform,
   });
 
   factory TrackSummary.fromJson(Map<String, dynamic> json) {
@@ -33,6 +40,8 @@ class TrackSummary {
       id: id,
       title: json['title'] as String? ?? '',
       artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
+      artistPermalink: artist['permalink'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       audioUrl: json['audioUrl'] as String? ??
           json['streamUrl'] as String? ??
@@ -42,6 +51,9 @@ class TrackSummary {
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
     );
   }
 }
@@ -157,16 +169,18 @@ class EngagementRemoteDataSource {
 
   // ── Current user's liked tracks ──────────────────────────────────────────
   // GET /profile/{userId}/likes
-  // Response: { data: { likedTracks: [{ likeDate, track: {...} }], pagination } }
-  Future<List<TrackSummary>> getUserLikes(String userId) async {
+  // Response: { data: { likedTracks: [{ likeDate, target: {...} }], pagination } }
+  // ('target' is the current key; falls back to 'track' for backward compat)
+ Future<List<TrackSummary>> getUserLikes(String userId) async {
     final response = await _dio.get('/profile/$userId/likes');
+    debugPrint('=== LIKES RAW: ${response.data}');
     final data = response.data['data'] as Map<String, dynamic>? ?? {};
     // Nested shape: { likedTracks: [{ likeDate, track: {...} }] }
     final rawNested = data['likedTracks'] as List<dynamic>?;
     if (rawNested != null) {
       return rawNested.map((item) {
         final map = item as Map<String, dynamic>;
-        final track = map['track'] as Map<String, dynamic>? ?? map;
+        final track = (map['target'] ?? map['track']) as Map<String, dynamic>? ?? map;
         return TrackSummary.fromJson(track);
       }).toList();
     }

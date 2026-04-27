@@ -28,6 +28,7 @@ class LikeButton extends ConsumerWidget {
     final state = ref.watch(engagementProvider(params));
 
     return GestureDetector(
+      key: const ValueKey('engagement_like_button'),
       onTap: state.isLoadingLike
           ? null
           : () => ref.read(engagementProvider(params).notifier).toggleLike(),

@@ -78,6 +78,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: GestureDetector(
+          key: const ValueKey('auth_reset_back_button'),
           onTap: () => context.go('/start'),
           child: Container(
             margin: const EdgeInsets.all(8),
@@ -112,6 +113,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
             // ── New password ────────────────────────────────────────
             TextField(
+              key: const ValueKey('auth_new_password_field'),
               controller: _newPasswordController,
               obscureText: _obscureNew,
               style: const TextStyle(color: Colors.white),
@@ -131,6 +133,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       const BorderSide(color: Color(0xFFFF5500), width: 1.5),
                 ),
                 suffixIcon: IconButton(
+                  key: const ValueKey('auth_new_password_toggle_button'),
                   icon: Icon(
                     _obscureNew ? Icons.visibility_off : Icons.visibility,
                     color: Colors.white54,
@@ -145,6 +148,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
             // ── Confirm password ────────────────────────────────────
             TextField(
+              key: const ValueKey('auth_reset_confirm_password_field'),
               controller: _confirmPasswordController,
               obscureText: _obscureConfirm,
               style: const TextStyle(color: Colors.white),
@@ -164,6 +168,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                       const BorderSide(color: Color(0xFFFF5500), width: 1.5),
                 ),
                 suffixIcon: IconButton(
+                  key: const ValueKey('auth_reset_confirm_password_toggle_button'),
                   icon: Icon(
                     _obscureConfirm ? Icons.visibility_off : Icons.visibility,
                     color: Colors.white54,
@@ -182,6 +187,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_reset_password_submit_button'),
                 onPressed: _isLoading ? null : _onSubmit,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,

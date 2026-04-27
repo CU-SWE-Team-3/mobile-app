@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/network/dio_client.dart';
-import '../../../../core/network/user_session.dart';
 import '../../../../core/providers/session_provider.dart';
-import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
 class SignOutPage extends ConsumerStatefulWidget {
@@ -61,14 +59,10 @@ class _SignOutPageState extends ConsumerState<SignOutPage> {
             onPressed: () async {
               Navigator.pop(context);
               ref.read(playerProvider.notifier).stop();
-              ref.invalidate(engagementProvider);
-              try {
-                await dioClient.dio.post('/auth/logout');
-              } catch (_) {}
-              await UserSession.clear();
-              dioClient.dio.options.headers.remove('Authorization');
+              await ref.read(authProvider.notifier).logout();
+              if (!context.mounted) return;
+              context.go('/start');
               ref.read(sessionUserIdProvider.notifier).state = '';
-              if (context.mounted) context.go('/start');
             },
             child: const Text(
               'OK',

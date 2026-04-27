@@ -11,7 +11,8 @@ class UploadPage extends ConsumerWidget {
   Future<void> _pickAudioFile(BuildContext context, WidgetRef ref) async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav'],
         allowMultiple: false,
       );
 
@@ -108,6 +109,7 @@ class UploadPage extends ConsumerWidget {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
+                  key: const ValueKey('upload_track_pick_file_button'),
                   onPressed: () => _pickAudioFile(context, ref),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF5500),
@@ -131,6 +133,7 @@ class UploadPage extends ConsumerWidget {
                 width: double.infinity,
                 height: 56,
                 child: OutlinedButton(
+                  key: const ValueKey('upload_track_cancel_button'),
                   onPressed: () => context.pop(),
                   style: OutlinedButton.styleFrom(
                     side: const BorderSide(

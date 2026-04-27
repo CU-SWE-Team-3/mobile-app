@@ -7,8 +7,79 @@ import 'package:dio/dio.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
+import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 import 'package:soundcloud_clone/injection_container.dart';
+
+// ── API track model ───────────────────────────────────────────────────────────
+
+class _ApiTrack {
+  final String id;
+  final String title;
+  final String artistName;
+  final String? artistId;
+  final String? artistPermalink;
+  final String? artworkUrl;
+  final String hlsUrl;
+  final List<int>? waveform;
+  final int? durationSeconds;
+
+  const _ApiTrack({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    required this.artworkUrl,
+    required this.hlsUrl,
+    this.artistId,
+    this.artistPermalink,
+    this.waveform,
+    this.durationSeconds,
+  });
+
+  factory _ApiTrack.fromJson(Map<String, dynamic> json) {
+    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final dur = json['duration'];
+    return _ApiTrack(
+      id: json['_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      artistName: artist['displayName'] as String? ?? '',
+      artistId: artist['_id'] as String?,
+      artistPermalink: artist['permalink'] as String?,
+      artworkUrl: json['artworkUrl'] as String?,
+      hlsUrl: json['hlsUrl'] as String? ?? '',
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      durationSeconds: dur != null ? (dur as num).toInt() : null,
+    );
+  }
+
+  String get durationLabel {
+    if (durationSeconds == null) return '';
+    final m = durationSeconds! ~/ 60;
+    final s = (durationSeconds! % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  PlayerTrack toPlayerTrack() => PlayerTrack(
+        id: id,
+        title: title,
+        artist: artistName,
+        audioUrl: hlsUrl,
+        coverUrl: artworkUrl,
+        waveform: waveform,
+        duration: durationSeconds != null
+            ? Duration(seconds: durationSeconds!)
+            : null,
+        artistId: artistId,
+        artistPermalink: artistPermalink,
+      );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -24,18 +95,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   String _city = '';
   String _country = '';
   String _avatarUrl = '';
-  int _followerCount = 5;
+  int _followerCount = 0;
   int _followingCount = 0;
   bool _bioExpanded = false;
   bool _isLoading = true;
   bool _hasError = false;
 
-  final _tracks = const [
-    _Track('It_is_realme.mp3', 'SUNDER', '1:20'),
-    _Track('I am in tiny room', 'SUNDER', '2:44'),
-  ];
+  List<UploadTrack> _cachedTracks = [];
 
-  final _playlists = const [_Playlist('my songs', 'SUNDER')];
+  List<_ProfilePlaylist> _playlists = [];
+  bool _playlistsLoading = false;
 
   List<TrackSummary> _reposts = [];
   List<TrackSummary> _likes = [];
@@ -66,6 +135,82 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     await _fetchReposts();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fetchLikes();
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _fetchPlaylists();
+  }
+
+  void _playFrom(int index) {
+    final playable = _cachedTracks
+        .where((t) => t.hlsUrl != null && t.hlsUrl!.isNotEmpty)
+        .toList();
+    if (playable.isEmpty) return;
+    final queue = playable
+        .map((t) => PlayerTrack(
+              id: t.id ?? t.hlsUrl!,
+              title: t.title,
+              artist: t.artist,
+              audioUrl: t.hlsUrl!,
+              coverUrl: t.artworkUrl,
+              waveform: t.waveform,
+            ))
+        .toList();
+    ref.read(playerProvider.notifier).playQueue(
+          queue,
+          startIndex: index.clamp(0, queue.length - 1),
+        );
+  }
+
+  void _playFromReposts(int index) {
+    final playable = _reposts
+        .where((t) => t.audioUrl != null && t.audioUrl!.isNotEmpty)
+        .toList();
+    if (playable.isEmpty) return;
+    final queue = playable
+        .map((t) => PlayerTrack(
+              id: t.id,
+              title: t.title,
+              artist: t.artistName,
+              artistId: t.artistId,
+              artistPermalink: t.artistPermalink,
+              audioUrl: t.audioUrl!,
+              coverUrl: t.artworkUrl,
+              waveform: t.waveform,
+            ))
+        .toList();
+    ref.read(playerProvider.notifier).playQueue(
+          queue,
+          startIndex: index.clamp(0, queue.length - 1),
+        );
+  }
+
+  void _playFromLikes(int index) {
+    final playable = _likes
+        .where((t) => t.audioUrl != null && t.audioUrl!.isNotEmpty)
+        .toList();
+    if (playable.isEmpty) return;
+    final queue = playable
+        .map((t) => PlayerTrack(
+              id: t.id,
+              title: t.title,
+              artist: t.artistName,
+              artistId: t.artistId,
+              artistPermalink: t.artistPermalink,
+              audioUrl: t.audioUrl!,
+              coverUrl: t.artworkUrl,
+              waveform: t.waveform,
+            ))
+        .toList();
+    ref.read(playerProvider.notifier).playQueue(
+          queue,
+          startIndex: index.clamp(0, queue.length - 1),
+        );
+  }
+
+  static String _fmtDuration(int? seconds) {
+    if (seconds == null) return '';
+    final m = seconds ~/ 60;
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   // Retries up to 3 times with exponential backoff on 429
@@ -96,6 +241,39 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } catch (_) {}
   }
 
+  Future<void> _fetchPlaylists() async {
+    if (mounted) setState(() => _playlistsLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId') ?? '';
+      if (userId.isEmpty) {
+        if (mounted) setState(() => _playlistsLoading = false);
+        return;
+      }
+      final response = await _withRetry(() => dioClient.dio
+          .get('/playlists', queryParameters: {'creator': userId}));
+      final raw = response.data;
+      List<dynamic> items = [];
+      if (raw is Map) {
+        final d = raw['data'];
+        if (d is Map) {
+          final p = d['playlists'];
+          items = p is List ? p : [];
+        }
+      }
+      final playlists = items
+          .whereType<Map<String, dynamic>>()
+          .map(_ProfilePlaylist.fromJson)
+          .toList();
+      if (mounted) setState(() {
+        _playlists = playlists;
+        _playlistsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _playlistsLoading = false);
+    }
+  }
+
   Future<void> _fetchReposts() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -112,54 +290,125 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String userId = prefs.getString('userId') ?? '';
-      final String permalink = prefs.getString('permalink') ?? '';
 
       if (userId.isEmpty) {
         if (mounted) setState(() { _username = prefs.getString('displayName') ?? ''; _isLoading = false; });
         return;
       }
 
-      // If we have a permalink, fetch full profile (includes followerCount + followingCount)
-      if (permalink.isNotEmpty) {
-        try {
-          final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/$permalink'));
-          final data = profileResponse.data['data']['user'] as Map<String, dynamic>;
+      // ── attempt 1: GET /profile/me (auth-required, always full data) ──
+      // Owner-only endpoint — isPrivate never hides bio/city/country here.
+      bool fetchedFromNetwork = false;
+      Map<String, dynamic>? profileData;
+
+      try {
+        final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/me'));
+
+        // Null-safe extraction — avoids hard-cast TypeErrors on unexpected shapes.
+        final respBody = profileResponse.data;
+        final dataNode = (respBody is Map) ? respBody['data'] : null;
+        final userNode = (dataNode is Map) ? dataNode['user'] : null;
+        profileData    = (userNode is Map) ? Map<String, dynamic>.from(userNode) : null;
+
+        if (profileData == null) {
+          throw Exception('Unexpected /profile/me response: $respBody');
+        }
+        fetchedFromNetwork = true;
+      } on DioException catch (e) {
+        // Log status code + body so the exact failure layer is identifiable.
+        final statusCode = e.response?.statusCode;
+        final responseBody = e.response?.data;
+        // ignore: avoid_print
+        print('=== /profile/me FAILED: status=$statusCode body=$responseBody\n$e');
+
+        // ── attempt 2: fallback to GET /profile/:permalink (no auth needed) ──
+        final permalink = prefs.getString('permalink') ?? '';
+        if (permalink.isNotEmpty) {
+          try {
+            final fallbackResponse = await _withRetry(
+                () => dioClient.dio.get('/profile/$permalink'));
+            final fb = fallbackResponse.data;
+            final fbData = (fb is Map) ? fb['data'] : null;
+            final fbUser = (fbData is Map) ? fbData['user'] : null;
+            if (fbUser is Map) {
+              profileData = Map<String, dynamic>.from(fbUser);
+              fetchedFromNetwork = true;
+            }
+          } catch (fallbackErr) {
+            // ignore: avoid_print
+            print('=== /profile/$permalink ALSO FAILED: $fallbackErr');
+          }
+        }
+      } catch (e, st) {
+        // ignore: avoid_print
+        print('=== PROFILE ME FETCH ERROR (non-Dio): $e\n$st');
+      }
+
+      // ── attempt 3: use SharedPreferences cached data ──
+      if (!fetchedFromNetwork) {
+        final cachedName = prefs.getString('displayName') ?? '';
+        if (cachedName.isNotEmpty) {
           if (mounted) {
             setState(() {
-              _username       = data['displayName']   as String? ?? prefs.getString('displayName') ?? '';
-              _bio            = data['bio']           as String? ?? '';
-              _city           = data['city']          as String? ?? '';
-              _country        = data['country']       as String? ?? '';
-              _avatarUrl      = data['avatarUrl']     as String? ?? '';
-              _followerCount  = _parseInt(data['followerCount']);
-              _followingCount = _parseInt(data['followingCount']);
+              _username  = cachedName;
+              _bio       = prefs.getString('bio')     ?? '';
+              _city      = prefs.getString('city')    ?? '';
+              _country   = prefs.getString('country') ?? '';
               _isLoading = false;
+              // Show stale data rather than an error screen — retry is still
+              // available via pull-to-refresh.
             });
           }
           return;
-        } catch (e) {
-          // ignore: avoid_print
-          print('=== PROFILE PERMALINK FETCH ERROR: $e');
         }
+        // No cached data at all — surface the error so the retry button appears.
+        if (mounted) setState(() { _isLoading = false; _hasError = true; });
+        return;
       }
 
-      // No permalink yet — fetch counts sequentially to avoid rate limits
-      final followersResp = await _withRetry(
-          () => dioClient.dio.get('/network/$userId/followers'));
-      await Future.delayed(const Duration(milliseconds: 200));
-      final followingResp = await _withRetry(
-          () => dioClient.dio.get('/network/$userId/following'));
+      // ── parse whichever network response succeeded ────────────────────
+      final data = profileData!;
+
+      // Cache to prefs so edit-page re-fetches and network-error fallbacks
+      // have fresh values.
+      final bio     = data['bio']     as String? ?? '';
+      final city    = data['city']    as String? ?? '';
+      final country = data['country'] as String? ?? '';
+      await prefs.setString('bio',     bio);
+      await prefs.setString('city',    city);
+      await prefs.setString('country', country);
+      final avatarUrl = data['avatarUrl'] as String? ?? '';
+      if (avatarUrl.isNotEmpty) {
+        await prefs.setString('avatarUrl', avatarUrl);
+        debugPrint('[Profile] avatarUrl persisted: $avatarUrl');
+      }
+
+      // Always fetch counts from the network endpoints — they are authoritative.
+      int followerCount  = 0;
+      int followingCount = 0;
+      try {
+        final followersResp = await _withRetry(
+            () => dioClient.dio.get('/network/$userId/followers'));
+        await Future.delayed(const Duration(milliseconds: 200));
+        final followingResp = await _withRetry(
+            () => dioClient.dio.get('/network/$userId/following'));
+        followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
+        followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
+      } catch (_) {}
+
       if (mounted) {
         setState(() {
-          _username       = prefs.getString('displayName') ?? '';
-          _bio            = prefs.getString('bio') ?? '';
-          _country        = prefs.getString('country') ?? '';
-          _city           = prefs.getString('city') ?? '';
-          _followerCount  = _parseInt(followersResp.data['count']);
-          _followingCount = _parseInt(followingResp.data['count']);
+          _username       = data['displayName'] as String? ?? prefs.getString('displayName') ?? '';
+          _bio            = bio;
+          _city           = city;
+          _country        = country;
+          _avatarUrl      = data['avatarUrl']   as String? ?? '';
+          _followerCount  = followerCount;
+          _followingCount = followingCount;
           _isLoading = false;
         });
       }
+      return;
     } catch (e, st) {
       // ignore: avoid_print
       print('=== PROFILE FETCH ERROR: $e\n$st');
@@ -194,9 +443,17 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   // ─────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final myTracksAsync = ref.watch(myTracksProvider);
+    // Keep _cachedTracks in sync so hero-section shuffle/play buttons work.
+    ref.listen<AsyncValue<List<UploadTrack>>>(myTracksProvider, (_, next) {
+      next.whenData((tracks) => _cachedTracks = tracks);
+    });
+
     return Scaffold(
       backgroundColor: _bg,
-      body: SafeArea(
+      body: Stack(
+        children: [
+          SafeArea(
         child: Column(
           children: [
             _topBar(context),
@@ -216,6 +473,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           style: TextStyle(color: Colors.white, fontSize: 15)),
                       const SizedBox(height: 12),
                       TextButton(
+                        key: const ValueKey('profile_retry_button'),
                         onPressed: _fetchProfile,
                         child: const Text('Retry',
                             style: TextStyle(color: Color(0xFFFF5500))),
@@ -240,18 +498,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         _spotlight(),
                         _sectionHeader('Tracks',
                             onSeeAll: () => context.push('/profile/tracks')),
-                        ..._tracks.map((t) => _TrackTile(
-                              track: t,
-                              onTap: () {},
-                              onMore: () {},
-                            )),
+                        _tracksSection(myTracksAsync),
                         _sectionHeader('Reposts',
-                            onSeeAll: () => context.push('/profile/reposts')),
+                            onSeeAll: () { _playFromReposts(0); context.push('/profile/reposts'); }),
                         _repostsList(),
                         _sectionHeader('Playlists'),
                         _playlistRow(context),
                         _sectionHeader('Likes',
-                            onSeeAll: () => context.push('/likes')),
+                            onSeeAll: () { _playFromLikes(0); context.push('/likes'); }),
                         _likesList(),
                         const SizedBox(height: 120),
                       ],
@@ -261,6 +515,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
           ],
         ),
+          ),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: MiniPlayerWidget(),
+          ),
+        ],
       ),
     );
   }
@@ -288,6 +550,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           children: [
             // Avatar — tap to view fullscreen
             GestureDetector(
+              key: const ValueKey('profile_avatar_view_button'),
               onTap: () => context.push('/profile/avatar-view'),
               child: Container(
                 width: 88,
@@ -335,6 +598,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             Row(
               children: [
                 GestureDetector(
+                  key: const ValueKey('profile_followers_button'),
                   onTap: () => context.push('/profile/followers'),
                   child: Text(
                       '$_followerCount ${_followerCount == 1 ? 'Follower' : 'Followers'}',
@@ -342,6 +606,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 ),
                 Text('  ·  ', style: TextStyle(color: _sub, fontSize: 13)),
                 GestureDetector(
+                  key: const ValueKey('profile_following_button'),
                   onTap: () => context.push('/profile/following'),
                   child: Text('$_followingCount Following',
                       style: TextStyle(color: _sub, fontSize: 13)),
@@ -354,6 +619,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               children: [
                 // Edit button → pushes EditProfilePage, awaits result
                 GestureDetector(
+                  key: const ValueKey('profile_edit_button'),
                   onTap: _openEdit,
                   child: Container(
                     padding:
@@ -376,7 +642,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   ),
                 ),
                 const Spacer(),
-                _iconCircle(Icons.shuffle_rounded, () {}),
+                _iconCircle(Icons.shuffle_rounded, () {
+                  if (_cachedTracks.isEmpty) return;
+                  _playFrom(_cachedTracks.length == 1
+                      ? 0
+                      : (DateTime.now().millisecondsSinceEpoch %
+                              _cachedTracks.length)
+                          .toInt());
+                }),
                 const SizedBox(width: 12),
                 _playCircle(context),
               ],
@@ -411,6 +684,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ),
           if (_bio.length > 60)
             GestureDetector(
+              key: const ValueKey('profile_bio_toggle_button'),
               onTap: () => setState(() => _bioExpanded = !_bioExpanded),
               child: Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -428,6 +702,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   // ── insights → navigates to YourInsightsPage ────────────────────────
   Widget _insightsRow(BuildContext context) => GestureDetector(
+        key: const ValueKey('profile_insights_button'),
         onTap: () => Navigator.of(context)
             .push(MaterialPageRoute(builder: (_) => const YourInsightsPage())),
         child: Container(
@@ -464,6 +739,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         fontWeight: FontWeight.w700)),
                 const Spacer(),
                 GestureDetector(
+                  key: const ValueKey('profile_spotlight_edit_button'),
                   onTap: () {},
                   child: Container(
                     padding:
@@ -483,6 +759,47 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ],
         ),
       );
+
+  // ── tracks section (inline preview, up to 3) ─────────────────────────
+  Widget _tracksSection(AsyncValue<List<UploadTrack>> myTracksAsync) {
+    return myTracksAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+        ),
+      ),
+      error: (_, __) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Text('No tracks yet', style: TextStyle(color: _sub, fontSize: 14)),
+      ),
+      data: (tracks) {
+        if (tracks.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Text('No tracks yet',
+                style: TextStyle(color: _sub, fontSize: 14)),
+          );
+        }
+        final preview = tracks.take(3).toList();
+        return Column(
+          children: preview.asMap().entries.map((e) {
+            final t = e.value;
+            // Find this track's index in the full cached list so playback
+            // starts from the right position in the complete queue.
+            final fullIdx =
+                _cachedTracks.indexWhere((c) => c.id == t.id);
+            return _TrackTile(
+              track: _Track(t.title, t.artist, _fmtDuration(t.duration)),
+              artworkUrl: t.artworkUrl,
+              onTap: () => _playFrom(fullIdx < 0 ? e.key : fullIdx),
+              onMore: () {},
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
 
   // ── section header ───────────────────────────────────────────────────
   Widget _sectionHeader(String title, {VoidCallback? onSeeAll}) => Padding(
@@ -534,12 +851,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }).toList();
 
     return Column(
-      children: visible.map((r) {
+      children: visible.asMap().entries.map((e) {
+        final r = e.value;
         final sub = Colors.white.withOpacity(0.55);
         final hasArtwork = r.artworkUrl != null &&
             r.artworkUrl!.isNotEmpty &&
             r.artworkUrl!.startsWith('http');
-        return Padding(
+        return GestureDetector(
+          onTap: () => _playFromReposts(e.key),
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           child: Row(
             children: [
@@ -584,6 +904,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ],
           ),
+          ),
         );
       }).toList(),
     );
@@ -599,12 +920,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       );
     }
     return Column(
-      children: _likes.take(3).map((r) {
+      children: _likes.take(3).toList().asMap().entries.map((e) {
+        final r = e.value;
         final sub = Colors.white.withOpacity(0.55);
         final hasArtwork = r.artworkUrl != null &&
             r.artworkUrl!.isNotEmpty &&
             r.artworkUrl!.startsWith('http');
-        return Padding(
+        return GestureDetector(
+          onTap: () => _playFromLikes(e.key),
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           child: Row(
             children: [
@@ -648,6 +972,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
               Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ],
+          ),
           ),
         );
       }).toList(),
@@ -667,7 +992,28 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   // ── playlist row ─────────────────────────────────────────────────────
-  Widget _playlistRow(BuildContext context) => SizedBox(
+  Widget _playlistRow(BuildContext context) {
+    if (_playlistsLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+                strokeWidth: 2, color: Color(0xFFFF5500)),
+          ),
+        ),
+      );
+    }
+    if (_playlists.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        child: Text('No playlists yet',
+            style: TextStyle(color: _sub, fontSize: 14)),
+      );
+    }
+    return SizedBox(
         height: 215,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
@@ -676,28 +1022,46 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           itemBuilder: (_, i) {
             final p = _playlists[i];
             return GestureDetector(
-              onTap: () {},
+              key: ValueKey('profile_playlist_tile_$i'),
+              onTap: () => context.push('/playlist', extra: {'playlistId': p.id}),
               child: Padding(
                 padding: const EdgeInsets.only(right: 14),
                 child: SizedBox(
-                  width: 150,
+                  width: 160,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          width: 150,
-                          height: 150,
-                          color: Colors.grey[850],
-                          child: const Icon(Icons.queue_music,
-                              size: 52, color: Colors.white38),
+                        child: SizedBox(
+                          width: 160,
+                          height: 160,
+                          child: p.artworkUrl != null && p.artworkUrl!.isNotEmpty
+                              ? CachedNetworkImage(
+                                  imageUrl: p.artworkUrl!,
+                                  fit: BoxFit.cover,
+                                  placeholder: (_, __) => Container(
+                                    color: Colors.grey[850],
+                                    child: const Icon(Icons.queue_music,
+                                        size: 52, color: Colors.white38),
+                                  ),
+                                  errorWidget: (_, __, ___) => Container(
+                                    color: Colors.grey[850],
+                                    child: const Icon(Icons.queue_music,
+                                        size: 52, color: Colors.white38),
+                                  ),
+                                )
+                              : Container(
+                                  color: Colors.grey[850],
+                                  child: const Icon(Icons.queue_music,
+                                      size: 52, color: Colors.white38),
+                                ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        p.name,
+                        p.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -707,7 +1071,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        p.owner,
+                        p.ownerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: _sub, fontSize: 12),
@@ -720,6 +1084,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           },
         ),
       );
+  }
 
   // ── helpers ──────────────────────────────────────────────────────────
   Widget _iconBtn(IconData icon, VoidCallback? onTap) => GestureDetector(
@@ -744,17 +1109,34 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       );
 
-  Widget _playCircle(BuildContext context) => GestureDetector(
-        onTap: () {},
-        child: Container(
-          width: 52,
-          height: 52,
-          decoration:
-              const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-          child: const Icon(Icons.play_arrow_rounded,
-              color: Colors.black, size: 28),
+  Widget _playCircle(BuildContext context) {
+    final playerState = ref.watch(playerProvider);
+    final currentId = playerState.currentTrack?.id;
+    final isFromHere =
+        currentId != null && _cachedTracks.any((t) => t.id == currentId);
+    final showPause = isFromHere && playerState.isPlaying;
+
+    return GestureDetector(
+      onTap: () {
+        if (isFromHere) {
+          ref.read(playerProvider.notifier).togglePlayPause();
+        } else if (_cachedTracks.isNotEmpty) {
+          _playFrom(0);
+        }
+      },
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration:
+            const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+        child: Icon(
+          showPause ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          color: Colors.black,
+          size: 28,
         ),
-      );
+      ),
+    );
+  }
 }
 
 // ── avatar fallback ───────────────────────────────────────────────────────
@@ -780,10 +1162,30 @@ class _Track {
   const _Track(this.title, this.artist, this.duration);
 }
 
-class _Playlist {
-  final String name;
-  final String owner;
-  const _Playlist(this.name, this.owner);
+class _ProfilePlaylist {
+  final String id;
+  final String title;
+  final String? artworkUrl;
+  final String ownerName;
+
+  const _ProfilePlaylist({
+    required this.id,
+    required this.title,
+    this.artworkUrl,
+    required this.ownerName,
+  });
+
+  factory _ProfilePlaylist.fromJson(Map<String, dynamic> json) {
+    final creator = json['creator'] as Map<String, dynamic>?;
+    return _ProfilePlaylist(
+      id: (json['_id'] as String?) ?? (json['id'] as String?) ?? '',
+      title: json['title'] as String? ?? '',
+      artworkUrl: json['artworkUrl'] as String?,
+      ownerName: (json['ownerName'] as String?) ??
+          (creator?['displayName'] as String?) ??
+          '',
+    );
+  }
 }
 
 // ── track tile ───────────────────────────────────────────────────────────
@@ -791,17 +1193,20 @@ class _TrackTile extends StatelessWidget {
   final _Track track;
   final VoidCallback onTap;
   final VoidCallback onMore;
+  final String? artworkUrl;
 
   const _TrackTile({
     required this.track,
     required this.onTap,
     required this.onMore,
+    this.artworkUrl,
   });
 
   @override
   Widget build(BuildContext context) {
     final sub = Colors.white.withOpacity(0.55);
     return GestureDetector(
+      key: const ValueKey('profile_track_tile'),
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
@@ -809,13 +1214,27 @@ class _TrackTile extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Container(
-                width: 56,
-                height: 56,
-                color: const Color(0xFF2A2A2A),
-                child: const Icon(Icons.music_note,
-                    color: Colors.white38, size: 24),
-              ),
+              child: (artworkUrl != null && artworkUrl!.isNotEmpty)
+                  ? CachedNetworkImage(
+                      imageUrl: artworkUrl!,
+                      width: 56,
+                      height: 56,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        width: 56,
+                        height: 56,
+                        color: const Color(0xFF2A2A2A),
+                        child: const Icon(Icons.music_note,
+                            color: Colors.white38, size: 24),
+                      ),
+                    )
+                  : Container(
+                      width: 56,
+                      height: 56,
+                      color: const Color(0xFF2A2A2A),
+                      child: const Icon(Icons.music_note,
+                          color: Colors.white38, size: 24),
+                    ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -844,6 +1263,7 @@ class _TrackTile extends StatelessWidget {
               ),
             ),
             GestureDetector(
+              key: const ValueKey('profile_track_more_button'),
               onTap: onMore,
               child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ),

@@ -66,6 +66,7 @@ class _SearchPageState extends State<SearchPage> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: TextField(
+                key: const ValueKey('search_field'),
                 controller: _controller,
                 autofocus: false,
                 textInputAction: TextInputAction.search,
@@ -78,6 +79,7 @@ class _SearchPageState extends State<SearchPage> {
                   prefixIcon: const Icon(Icons.search, color: Colors.white38),
                   suffixIcon: _controller.text.isNotEmpty
                       ? GestureDetector(
+                          key: const ValueKey('search_clear_button'),
                           onTap: () {
                             _controller.clear();
                             setState(() {
@@ -125,6 +127,7 @@ class _SearchPageState extends State<SearchPage> {
                               ),
                               const SizedBox(height: 12),
                               ElevatedButton(
+                                key: const ValueKey('search_retry_button'),
                                 onPressed: () => _search(_lastQuery),
                                 style: ElevatedButton.styleFrom(
                                     backgroundColor:

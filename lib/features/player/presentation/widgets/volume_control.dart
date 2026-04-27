@@ -31,6 +31,7 @@ class VolumeControl extends StatelessWidget {
                     const RoundSliderOverlayShape(overlayRadius: 14.0),
               ),
               child: Slider(
+                key: const ValueKey('player_volume_slider'),
                 value: volume.clamp(0.0, 1.0),
                 min: 0.0,
                 max: 1.0,

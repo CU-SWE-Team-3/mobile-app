@@ -27,6 +27,7 @@ class PlayerQueuePage extends ConsumerWidget {
         actions: [
           if (queue.isNotEmpty)
             TextButton(
+              key: const ValueKey('player_queue_clear_button'),
               onPressed: notifier.clearQueue,
               child: const Text(
                 'Clear',

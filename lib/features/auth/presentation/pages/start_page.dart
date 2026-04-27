@@ -58,6 +58,7 @@ class StartPage extends StatelessWidget {
                       width: double.infinity,
                       height: 54,
                       child: ElevatedButton(
+                        key: const ValueKey('auth_create_account_button'),
                         onPressed: () => context.push('/register-screen'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
@@ -83,6 +84,7 @@ class StartPage extends StatelessWidget {
                       width: double.infinity,
                       height: 54,
                       child: ElevatedButton(
+                        key: const ValueKey('auth_login_button'),
                         onPressed: () => context.push('/login-screen'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFDDDDFF),

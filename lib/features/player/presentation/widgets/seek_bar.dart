@@ -40,6 +40,7 @@ class SeekBar extends StatelessWidget {
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 14.0),
             ),
             child: Slider(
+              key: const ValueKey('player_seek_slider'),
               value: sliderValue,
               min: 0.0,
               max: 1.0,

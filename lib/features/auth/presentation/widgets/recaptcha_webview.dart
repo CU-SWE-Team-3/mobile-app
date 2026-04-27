@@ -46,17 +46,18 @@ const _recaptchaHtml = '''
 </html>
 ''';
 
-/// Shows a bottom sheet with a real reCAPTCHA widget.
+/// Shows a centered dialog with a real reCAPTCHA widget.
 /// Returns the token string, or null if dismissed without solving.
 Future<String?> showRecaptchaBottomSheet(BuildContext context) {
-  return showModalBottomSheet<String>(
+  return showDialog<String>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: const Color(0xFF1A1A1A),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    barrierDismissible: true,
+    builder: (_) => Dialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
+      child: const _RecaptchaSheet(),
     ),
-    builder: (_) => const _RecaptchaSheet(),
   );
 }
 
@@ -100,34 +101,20 @@ class _RecaptchaSheetState extends State<_RecaptchaSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final height = MediaQuery.of(context).size.height * 0.45;
     return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.55,
-      child: Column(
-        children: [
-          // Drag handle
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF555555),
-                borderRadius: BorderRadius.circular(2),
+      height: height,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            WebViewWidget(controller: _controller),
+            if (_loading)
+              const Center(
+                child: CircularProgressIndicator(color: Color(0xFFFF5500)),
               ),
-            ),
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                WebViewWidget(controller: _controller),
-                if (_loading)
-                  const Center(
-                    child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-                  ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

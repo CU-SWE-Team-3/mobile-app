@@ -1,6 +1,9 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/follow_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
@@ -29,18 +32,24 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
     final isPlaying = playerState.isPlaying;
     final notifier = ref.read(playerProvider.notifier);
 
-    return Container(
-      height: 64,
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(32),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+          child: Container(
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0x261A1A1A),
+              borderRadius: BorderRadius.circular(32),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
         children: [
           // White circle play/pause button
           GestureDetector(
+            key: const ValueKey('mini_player_play_button'),
             onTap: notifier.togglePlayPause,
             child: Container(
               width: 40,
@@ -58,16 +67,17 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
           ),
           const SizedBox(width: 10),
 
-          // Center: track title + artist — tapping navigates to /player
+          // Center: title taps to expand player; artist taps to profile
           Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => context.push('/player'),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  key: const ValueKey('mini_player_expand_button'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => context.push('/player'),
+                  child: Text(
                     currentTrack.title,
                     style: const TextStyle(
                       color: Colors.white,
@@ -76,13 +86,30 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text(
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    final id = currentTrack.artistId;
+                    final permalink = currentTrack.artistPermalink;
+                    if (id != null && permalink != null) {
+                      navigateToUserProfile(
+                        context,
+                        userId: id,
+                        permalink: permalink,
+                        displayName: currentTrack.artist,
+                      );
+                    } else {
+                      context.push('/player');
+                    }
+                  },
+                  child: Text(
                     currentTrack.artist,
                     style: const TextStyle(color: Colors.grey, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
 
@@ -91,6 +118,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
             const Icon(Icons.person_add_outlined, color: Colors.white, size: 22)
           else
             IconButton(
+              key: const ValueKey('mini_player_follow_button'),
               icon: followState.isLoading
                   ? const SizedBox(
                       width: 16,
@@ -113,6 +141,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
 
           // Heart icon — local UI toggle only
           IconButton(
+            key: const ValueKey('mini_player_like_button'),
             icon: Icon(
               _isLiked ? Icons.favorite : Icons.favorite_border,
               color: Colors.white,
@@ -125,6 +154,9 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
             },
           ),
         ],
+      ),
+          ),
+        ),
       ),
     );
   }

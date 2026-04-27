@@ -1,19 +1,21 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   final String email;
   const LoginScreen({super.key, this.email = ''});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   late final TextEditingController _emailController;
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
@@ -87,7 +89,9 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         } catch (_) {}
       }
-      if (mounted) context.go('/home');
+      if (!mounted) return;
+      ref.read(sessionUserIdProvider.notifier).state = user['_id'] as String? ?? '';
+      context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final message = status == 401
@@ -113,6 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: GestureDetector(
+          key: const ValueKey('auth_back_button'),
           onTap: () => context.pop(),
           child: Container(
             margin: const EdgeInsets.all(10),
@@ -144,27 +149,8 @@ class _LoginScreenState extends State<LoginScreen> {
             SizedBox(
               width: double.infinity,
               height: 52,
-              child: ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.facebook, color: Colors.white),
-                label: const Text('Continue with Facebook',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1877F2),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            SizedBox(
-              width: double.infinity,
-              height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_google_button'),
                 onPressed: () => context.push('/oauth-login'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2A2A2A),
@@ -191,28 +177,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.apple, color: Colors.white),
-                label: const Text('Continue with Apple',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(4),
-                    side: const BorderSide(color: Color(0xFF444444)),
-                  ),
-                ),
-              ),
-            ),
             const SizedBox(height: 24),
 
             // ── Or with email ─────────────────────────────────────────
@@ -225,6 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             // Email field
             TextField(
+              key: const ValueKey('auth_email_field'),
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               style: const TextStyle(color: Colors.white),
@@ -245,6 +210,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             // Password field
             TextField(
+              key: const ValueKey('auth_password_field'),
               controller: _passwordController,
               obscureText: !_isPasswordVisible,
               cursorColor: Colors.orange,
@@ -262,6 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                 suffixIcon: IconButton(
+                  key: const ValueKey('auth_password_toggle_button'),
                   icon: Icon(
                     _isPasswordVisible
                         ? Icons.visibility_off
@@ -280,6 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('auth_continue_button'),
                 onPressed: _canContinue ? _onContinue : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
@@ -305,6 +273,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
             // Forgot password
             GestureDetector(
+              key: const ValueKey('auth_forgot_password_button'),
               onTap: () => context.push('/forgot-password'),
               child: const Text(
                 'Forgot your password?',
@@ -316,6 +285,7 @@ class _LoginScreenState extends State<LoginScreen> {
             // Don't have an account?
             Center(
               child: GestureDetector(
+                key: const ValueKey('auth_signup_button'),
                 onTap: () => context.push('/register-screen'),
                 child: RichText(
                   text: const TextSpan(
@@ -339,6 +309,7 @@ class _LoginScreenState extends State<LoginScreen> {
             // Need help
             Center(
               child: GestureDetector(
+                key: const ValueKey('auth_help_button'),
                 onTap: () => launchUrl(
                   Uri.parse(
                       'https://help.soundcloud.com/hc/en-us/sections/46266771825691'),

@@ -19,6 +19,7 @@ class AvatarViewerPage extends StatelessWidget {
             // ── circle photo centered ──────────────────────────────────
             Center(
               child: GestureDetector(
+                key: const ValueKey('profile_avatar_viewer_edit_button'),
                 onTap: () => context.go('/profile/avatar'),
                 child: Container(
                   width: circleSize,
@@ -46,6 +47,7 @@ class AvatarViewerPage extends StatelessWidget {
               top: 12,
               left: 12,
               child: GestureDetector(
+                key: const ValueKey('profile_avatar_viewer_close_button'),
                 onTap: () =>
                     context.canPop() ? context.pop() : context.go('/profile'),
                 child: Container(
@@ -69,6 +71,7 @@ class AvatarViewerPage extends StatelessWidget {
               bottom: 32,
               right: 28,
               child: GestureDetector(
+                key: const ValueKey('profile_avatar_viewer_camera_button'),
                 onTap: () => context.go('/profile/avatar'),
                 child: Container(
                   width: 52,

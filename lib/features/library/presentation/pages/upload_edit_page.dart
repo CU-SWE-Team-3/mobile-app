@@ -219,6 +219,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: GestureDetector(
+          key: const ValueKey('upload_back_button'),
           onTap: () => context.pop(),
           child: Container(
             margin: const EdgeInsets.all(8),
@@ -407,6 +408,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
+          key: const ValueKey('upload_cover_image_button'),
           onTap: _pickCoverImage,
           child: Container(
             width: 100,
@@ -466,6 +468,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
               ),
               const SizedBox(height: 12),
               OutlinedButton(
+                key: const ValueKey('upload_replace_file_button'),
                 onPressed: () => context.pop(),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.white, width: 1.2),
@@ -499,6 +502,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
         children: [
           _buildFormField(
             label: 'Title',
+            fieldKey: const ValueKey('upload_track_title_field'),
             isRequired: true,
             controller: _titleController,
             maxLines: 3,
@@ -522,6 +526,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
 
   Widget _buildFormField({
     required String label,
+    Key? fieldKey,
     bool isRequired = false,
     TextEditingController? controller,
     String? initialValue,
@@ -551,6 +556,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
           ),
           const SizedBox(height: 8),
           TextField(
+            key: fieldKey,
             controller: controller,
             readOnly: isReadOnly,
             maxLines: maxLines,
@@ -586,6 +592,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
             scrollDirection: Axis.horizontal,
             children: [
               _buildGenreChip(
+                key: const ValueKey('upload_genre_picker'),
                 label: 'PICK GENRE',
                 icon: Icons.search,
                 isSelected: false,
@@ -594,6 +601,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
               const SizedBox(width: 8),
               if (_selectedGenre == null)
                 _buildGenreChip(
+                  key: const ValueKey('upload_genre_chip'),
                   label: 'ALL MUSIC GENRES',
                   isSelected: true,
                   onTap: () {
@@ -602,6 +610,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
                 )
               else
                 _buildGenreChip(
+                  key: const ValueKey('upload_genre_chip'),
                   label: _selectedGenre!.toUpperCase(),
                   isSelected: true,
                   onTap: () {
@@ -619,12 +628,14 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
   }
 
   Widget _buildGenreChip({
+    Key? key,
     required String label,
     IconData? icon,
     bool isSelected = false,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      key: key,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -690,6 +701,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
                     ),
                     const SizedBox(width: 6),
                     GestureDetector(
+                      key: const ValueKey('upload_tag_remove_button'),
                       onTap: () => _removeTag(tag),
                       child: const Icon(
                         Icons.close,
@@ -708,6 +720,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
           children: [
             Expanded(
               child: TextField(
+                key: const ValueKey('upload_tags_field'),
                 controller: _tagInputController,
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
@@ -723,6 +736,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
             ),
             const SizedBox(width: 8),
             GestureDetector(
+              key: const ValueKey('upload_add_tag_button'),
               onTap: _addTag,
               child: Container(
                 width: 38,
@@ -775,6 +789,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
             ),
           ),
           child: TextField(
+            key: const ValueKey('upload_description_field'),
             controller: _descriptionController,
             maxLines: 5,
             maxLength: 4000,
@@ -827,12 +842,14 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
   }
 
   Widget _buildPrivacyOption({
+    Key? key,
     required String title,
     required String subtitle,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      key: key,
       onTap: onTap,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1000,6 +1017,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
           children: [
             Expanded(
               child: GestureDetector(
+                key: const ValueKey('upload_track_release_date_field'),
                 onTap: _pickDate,
                 child: Container(
                   padding:
@@ -1071,6 +1089,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: ElevatedButton(
+          key: const ValueKey('upload_track_submit_button'),
           onPressed: _uploadTrack,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,

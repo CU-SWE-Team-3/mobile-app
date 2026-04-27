@@ -57,6 +57,7 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
           elevation: 0,
           leading: !(uploadState.isUploading || isProcessing)
               ? GestureDetector(
+                  key: const ValueKey('upload_progress_back_button'),
                   onTap: () => context.pop(),
                   child: Container(
                     margin: const EdgeInsets.all(8),
@@ -261,6 +262,7 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
+                              key: const ValueKey('upload_progress_upgrade_button'),
                               onPressed: uploadState.isLoading
                                   ? null
                                   : () async {
@@ -386,6 +388,7 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
+                            key: const ValueKey('upload_progress_view_uploads_button'),
                             onPressed: () => context.go('/library/uploads'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.primary,
@@ -407,6 +410,7 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
+                            key: const ValueKey('upload_progress_upload_another_button'),
                             onPressed: () => context.go('/upload'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.surface,
@@ -432,6 +436,7 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
+                            key: const ValueKey('upload_progress_retry_button'),
                             onPressed: () {
                               _uploadStarted = true;
                               ref.read(uploadProvider.notifier).clearUploadStatus();

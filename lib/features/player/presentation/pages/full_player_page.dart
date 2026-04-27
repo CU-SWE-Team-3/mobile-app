@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/network/user_session.dart';
+import '../../../../core/utils/profile_navigation.dart';
 import '../providers/follow_provider.dart';
 import '../providers/player_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
+import '../../../../core/themes/app_theme.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
   const FullPlayerPage({super.key});
@@ -19,13 +23,16 @@ class FullPlayerPage extends ConsumerStatefulWidget {
 class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
   late final TextEditingController _commentController;
   late final FocusNode _commentFocus;
+  String? _myUserId;
 
   @override
   void initState() {
     super.initState();
     _commentController = TextEditingController();
     _commentFocus = FocusNode();
-
+    UserSession.getUserId().then((id) {
+      if (mounted) setState(() => _myUserId = id);
+    });
   }
 
   @override
@@ -111,105 +118,267 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                 )
               : const ColoredBox(color: Color(0xFF1A1A1A)),
 
-          // ── Layer 2: Gradient overlay ───────────────────────────────
+          // ── Layer 2: Gradient scrim (top + bottom only) ─────────────
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xCC000000),
+                  Color(0xAA000000),
                   Color(0x00000000),
                   Color(0x00000000),
-                  Color(0xBB000000),
+                  Color(0xF0000000),
                 ],
-                stops: [0.0, 0.30, 0.58, 1.0],
+                stops: [0.0, 0.22, 0.52, 1.0],
               ),
             ),
           ),
 
-          // ── Layer 3: UI content ─────────────────────────────────────
+          // ── Layer 3: Paused-state dim overlay ───────────────────────
+          AnimatedOpacity(
+            opacity: playerState.isPlaying ? 0.0 : 0.55,
+            duration: const Duration(milliseconds: 300),
+            child: const ColoredBox(color: Colors.black),
+          ),
+
+          // ── Layer 4: UI content ─────────────────────────────────────
           SafeArea(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // ── Top bar ─────────────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
+                      horizontal: 16, vertical: 10),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _CircleButton(
-                        icon: Icons.keyboard_arrow_down,
-                        onTap: () => context.pop(),
-                      ),
-                      _CircleButton(
-                        icon: followState.isFollowing
-                            ? Icons.person
-                            : Icons.person_add_outlined,
-                        onTap: artistId != null
-                            ? () => ref
-                                .read(followProvider(artistId).notifier)
-                                .toggle(artistId)
-                            : () {},
-                        loading: followState.isLoading,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ── Track title + artist ─────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        playerState.currentTrackTitle ?? 'Nothing playing',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        playerState.currentTrackArtist ?? '',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 15),
-                      ),
-                      const SizedBox(height: 10),
-                      GestureDetector(
-                        onTap: () {},
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
+                      // Left: title/artist pill + behind-this-track pill
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.graphic_eq,
-                                color: Colors.white, size: 16),
-                            SizedBox(width: 6),
-                            Text(
-                              'Behind this track',
-                              style: TextStyle(
-                                  color: Colors.white, fontSize: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.45),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    playerState.currentTrackTitle ??
+                                        'Nothing playing',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    playerState.currentTrackArtist ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: Colors.white70, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            GestureDetector(
+                              key: const ValueKey(
+                                  'player_behind_track_button'),
+                              onTap: () {},
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.45),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.graphic_eq,
+                                        color: Colors.white, size: 14),
+                                    SizedBox(width: 5),
+                                    Text(
+                                      'Behind this track',
+                                      style: TextStyle(
+                                          color: Colors.white, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      // Right: collapse + follow + more buttons stacked
+                      Column(
+                        children: [
+                          _CircleButton(
+                            key: const ValueKey('player_back_button'),
+                            icon: Icons.keyboard_arrow_down,
+                            onTap: () => context.pop(),
+                          ),
+                          if (artistId != null &&
+                              artistId != _myUserId) ...[
+                            const SizedBox(height: 8),
+                            _CircleButton(
+                              key: const ValueKey('player_follow_button'),
+                              icon: followState.isFollowing
+                                  ? Icons.person
+                                  : Icons.person_add_outlined,
+                              iconColor: followState.isFollowing
+                                  ? AppTheme.primary
+                                  : Colors.white,
+                              onTap: (followState.isLoading || followState.isChecking)
+                                  ? null
+                                  : () => ref
+                                      .read(followProvider(artistId).notifier)
+                                      .toggle(artistId),
+                              loading: followState.isLoading || followState.isChecking,
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          _CircleButton(
+                            key: const ValueKey('player_more_button'),
+                            icon: Icons.more_vert,
+                            onTap: () {
+                              if (trackId == null) return;
+                              showModalBottomSheet(
+                                context: context,
+                                backgroundColor: const Color(0xFF1E1E1E),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(16)),
+                                ),
+                                builder: (_) =>
+                                    TrackOptionsSheet(trackId: trackId),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
 
-                const Spacer(),
+                // ── Middle: artwork fills here; paused controls centred ──
+                Expanded(
+                  child: GestureDetector(
+                    onTap: notifier.togglePlayPause,
+                    behavior: HitTestBehavior.translucent,
+                    child: Center(
+                      child: AnimatedOpacity(
+                        opacity: playerState.isPlaying ? 0.0 : 1.0,
+                        duration: const Duration(milliseconds: 250),
+                        child: IgnorePointer(
+                          ignoring: playerState.isPlaying,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              GestureDetector(
+                                key: const ValueKey(
+                                    'player_skip_previous_button'),
+                                onTap: () => ref
+                                    .read(playerProvider.notifier)
+                                    .skipPrevious(),
+                                child: Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.55),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                      Icons.skip_previous_rounded,
+                                      color: Colors.white,
+                                      size: 30),
+                                ),
+                              ),
+                              const SizedBox(width: 28),
+                              GestureDetector(
+                                key: const ValueKey('player_play_button'),
+                                onTap: notifier.togglePlayPause,
+                                child: Container(
+                                  width: 72,
+                                  height: 72,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.60),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    playerState.isPlaying
+                                        ? Icons.pause
+                                        : Icons.play_arrow_rounded,
+                                    color: Colors.white,
+                                    size: 42,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 28),
+                              GestureDetector(
+                                key: const ValueKey(
+                                    'player_skip_next_button'),
+                                onTap: () => ref
+                                    .read(playerProvider.notifier)
+                                    .skipNext(),
+                                child: Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.55),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.skip_next_rounded,
+                                      color: Colors.white, size: 30),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ── Time pill (above waveform) ───────────────────────
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_formatDuration(playerState.position)}  |  ${_formatDuration(playerState.duration)}',
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
 
                 // ── Waveform + floating comment avatars ──────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       return GestureDetector(
+                        key: const ValueKey('player_waveform_seek'),
                         onTapDown: (details) {
                           final pct = (details.localPosition.dx /
                                   constraints.maxWidth)
@@ -231,7 +400,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                           ));
                         },
                         child: SizedBox(
-                          height: 80,
+                          height: 120,
                           width: constraints.maxWidth,
                           child: Stack(
                             clipBehavior: Clip.none,
@@ -239,8 +408,11 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               Positioned.fill(
                                 top: 40,
                                 child: CustomPaint(
-                                  painter:
-                                      _WaveformPainter(progress: progress, waveform: playerState.currentTrack?.waveform),
+                                  painter: _WaveformPainter(
+                                      progress: progress,
+                                      waveform: playerState
+                                          .currentTrack?.waveform,
+                                      isPlaying: playerState.isPlaying),
                                 ),
                               ),
                               if (playerState.duration.inSeconds > 0)
@@ -259,99 +431,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                   ),
                 ),
 
-                const SizedBox(height: 8),
-
-                // ── Time pill ────────────────────────────────────────
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${_formatDuration(playerState.position)}  |  ${_formatDuration(playerState.duration)}',
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 12),
-                    ),
-                  ),
-                ),
 
                 const SizedBox(height: 12),
-
-                // ── Volume slider ─────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.volume_down, color: Colors.white),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            activeTrackColor: Colors.white,
-                            inactiveTrackColor: Colors.white24,
-                            thumbColor: Colors.white,
-                            overlayColor: Colors.white24,
-                            trackHeight: 3,
-                            thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6),
-                          ),
-                          child: Slider(
-                            value: playerState.volume,
-                            min: 0.0,
-                            max: 1.0,
-                            onChanged: (value) => ref
-                                .read(playerProvider.notifier)
-                                .setVolume(value),
-                          ),
-                        ),
-                      ),
-                      const Icon(Icons.volume_up, color: Colors.white),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // ── Playback controls ────────────────────────────────
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.skip_previous_rounded,
-                          color: Colors.white, size: 40),
-                      onPressed: () => ref.read(playerProvider.notifier).skipPrevious(),
-                    ),
-                    const SizedBox(width: 24),
-                    GestureDetector(
-                      onTap: notifier.togglePlayPause,
-                      child: Container(
-                        width: 64,
-                        height: 64,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          playerState.isPlaying
-                              ? Icons.pause
-                              : Icons.play_arrow_rounded,
-                          color: Colors.black,
-                          size: 36,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 24),
-                    IconButton(
-                      icon: const Icon(Icons.skip_next_rounded,
-                          color: Colors.white, size: 40),
-                      onPressed: () => ref.read(playerProvider.notifier).skipNext(),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 16),
 
                 // ── Comment input bar ────────────────────────────────
                 Padding(
@@ -367,6 +448,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       children: [
                         Expanded(
                           child: TextField(
+                            key: const ValueKey(
+                                'player_comment_input_field'),
                             controller: _commentController,
                             focusNode: _commentFocus,
                             style: const TextStyle(
@@ -391,7 +474,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               }
                               if (trackId != null) {
                                 await ref
-                                    .read(commentsProvider(trackId).notifier)
+                                    .read(
+                                        commentsProvider(trackId).notifier)
                                     .postComment(
                                       content: text.trim(),
                                       timestamp: currentSec,
@@ -455,31 +539,40 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _ActionButton(
+                        key: const ValueKey('player_like_button'),
                         icon: engState.isLiked
                             ? Icons.favorite
                             : Icons.favorite_border,
                         iconColor:
                             engState.isLiked ? Colors.orange : Colors.white,
-                        label: '',
+                        label: engState.likeCount > 0
+                            ? '${engState.likeCount}'
+                            : '',
                         onTap: engState.isLoadingLike || trackId == null
                             ? () {}
                             : () => ref
-                                .read(engagementProvider(engParams).notifier)
+                                .read(
+                                    engagementProvider(engParams).notifier)
                                 .toggleLike(),
                       ),
                       _ActionButton(
+                        key: const ValueKey('player_repost_button'),
                         icon: Icons.repeat,
                         iconColor: engState.isReposted
                             ? Colors.orange
                             : Colors.white,
-                        label: '',
+                        label: engState.repostCount > 0
+                            ? '${engState.repostCount}'
+                            : '',
                         onTap: engState.isLoadingRepost || trackId == null
                             ? () {}
                             : () => ref
-                                .read(engagementProvider(engParams).notifier)
+                                .read(
+                                    engagementProvider(engParams).notifier)
                                 .toggleRepost(),
                       ),
                       _ActionButton(
+                        key: const ValueKey('player_comment_button'),
                         icon: Icons.comment_outlined,
                         label: commentsState.comments.isNotEmpty
                             ? '${commentsState.comments.length}'
@@ -490,15 +583,18 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                           trackId: trackId,
                           trackTitle: playerState.currentTrackTitle,
                           trackArtist: playerState.currentTrackArtist,
-                          trackArtworkUrl: playerState.currentTrackArtworkUrl,
+                          trackArtworkUrl:
+                              playerState.currentTrackArtworkUrl,
                         ),
                       ),
                       _ActionButton(
+                        key: const ValueKey('player_share_button'),
                         icon: Icons.share_outlined,
                         label: '',
                         onTap: () {},
                       ),
                       _ActionButton(
+                        key: const ValueKey('player_queue_button'),
                         icon: Icons.queue_music,
                         label: '',
                         onTap: () => context.push('/player/queue'),
@@ -648,10 +744,11 @@ String _formatSec(int seconds) {
 
 class _CircleButton extends StatelessWidget {
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool loading;
+  final Color iconColor;
   const _CircleButton(
-      {required this.icon, required this.onTap, this.loading = false});
+      {super.key, required this.icon, this.onTap, this.loading = false, this.iconColor = Colors.white});
 
   @override
   Widget build(BuildContext context) {
@@ -671,7 +768,7 @@ class _CircleButton extends StatelessWidget {
                       strokeWidth: 2, color: Colors.white),
                 ),
               )
-            : Icon(icon, color: Colors.white, size: 22),
+            : Icon(icon, color: iconColor, size: 22),
       ),
     );
   }
@@ -684,6 +781,7 @@ class _ActionButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ActionButton({
+    super.key,
     required this.icon,
     this.iconColor = Colors.white,
     required this.label,
@@ -740,6 +838,7 @@ class _EmojiButton extends StatelessWidget {
 class _WaveformPainter extends CustomPainter {
   final double progress;
   final List<int>? waveform;
+  final bool isPlaying;
 
   static const _fallbackHeights = [
     0.30, 0.50, 0.70, 0.40, 0.90, 0.60, 0.80, 0.50, 0.30, 0.70,
@@ -751,10 +850,28 @@ class _WaveformPainter extends CustomPainter {
     0.40, 0.80, 0.60, 0.30, 0.90, 0.50, 0.70, 0.40, 0.60, 0.30,
   ];
 
-  _WaveformPainter({required this.progress, this.waveform});
+  _WaveformPainter(
+      {required this.progress, this.waveform, required this.isPlaying});
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (!isPlaying) {
+      const strokeWidth = 2.0;
+      final playedPaint = Paint()
+        ..color = AppTheme.primary
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke;
+      final unplayedPaint = Paint()
+        ..color = Colors.white.withOpacity(0.25)
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke;
+      final y = size.height / 2;
+      final splitX = size.width * progress;
+      canvas.drawLine(Offset(0, y), Offset(splitX, y), playedPaint);
+      canvas.drawLine(Offset(splitX, y), Offset(size.width, y), unplayedPaint);
+      return;
+    }
+
     final List<double> heights;
     if (waveform != null && waveform!.isNotEmpty) {
       heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
@@ -767,7 +884,7 @@ class _WaveformPainter extends CustomPainter {
     final barWidth = (size.width - (barCount - 1) * spacing) / barCount;
 
     final playedPaint = Paint()
-      ..color = Colors.white
+      ..color = AppTheme.primary
       ..style = PaintingStyle.fill;
     final unplayedPaint = Paint()
       ..color = Colors.white.withOpacity(0.25)
@@ -787,5 +904,6 @@ class _WaveformPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_WaveformPainter old) => old.progress != progress;
+  bool shouldRepaint(_WaveformPainter old) =>
+      old.progress != progress || old.isPlaying != isPlaying;
 }

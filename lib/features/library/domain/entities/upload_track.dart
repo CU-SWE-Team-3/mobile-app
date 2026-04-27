@@ -1,6 +1,12 @@
 import 'package:equatable/equatable.dart';
 
 class UploadTrack extends Equatable {
+  // Server-assigned fields (null for locally-staged, pre-upload tracks)
+  final String? id;
+  final String? hlsUrl;
+  final String? artworkUrl;
+  final List<int>? waveform;
+
   final String? audioFilePath;
   final String? coverImagePath;
   final String title;
@@ -15,6 +21,10 @@ class UploadTrack extends Equatable {
   final String? processingState; // "Processing", "Finished", or null
 
   const UploadTrack({
+    this.id,
+    this.hlsUrl,
+    this.artworkUrl,
+    this.waveform,
     this.audioFilePath,
     this.coverImagePath,
     required this.title,
@@ -30,6 +40,10 @@ class UploadTrack extends Equatable {
   });
 
   UploadTrack copyWith({
+    String? id,
+    String? hlsUrl,
+    String? artworkUrl,
+    List<int>? waveform,
     String? audioFilePath,
     String? coverImagePath,
     String? title,
@@ -44,6 +58,10 @@ class UploadTrack extends Equatable {
     String? processingState,
   }) {
     return UploadTrack(
+      id: id ?? this.id,
+      hlsUrl: hlsUrl ?? this.hlsUrl,
+      artworkUrl: artworkUrl ?? this.artworkUrl,
+      waveform: waveform ?? this.waveform,
       audioFilePath: audioFilePath ?? this.audioFilePath,
       coverImagePath: coverImagePath ?? this.coverImagePath,
       title: title ?? this.title,
@@ -61,6 +79,10 @@ class UploadTrack extends Equatable {
 
   @override
   List<Object?> get props => [
+        id,
+        hlsUrl,
+        artworkUrl,
+        waveform,
         audioFilePath,
         coverImagePath,
         title,

@@ -10,6 +10,12 @@ final myTracksProvider = FutureProvider.autoDispose<List<UploadTrack>>((ref) asy
   final raw = data as List<dynamic>;
   return raw.map((t) {
     return UploadTrack(
+      id: t['_id'] as String?,
+      hlsUrl: t['hlsUrl'] as String?,
+      artworkUrl: t['artworkUrl'] as String?,
+      waveform: (t['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
       title: t['title'] as String? ?? '',
       artist: (t['artist'] is Map) ? (t['artist']['displayName'] as String? ?? '') : '',
       genre: t['genre'] as String?,

@@ -104,6 +104,7 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
     );
   }
 
+
   Future<void> toggleLike() async {
     if (state.isLoadingLike) return;
     _userToggled = true;

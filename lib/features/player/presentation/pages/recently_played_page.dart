@@ -56,6 +56,7 @@ class RecentlyPlayedPage extends ConsumerWidget {
                   itemBuilder: (context, index) {
                     final track = tracks[index];
                     return ListTile(
+                      key: const ValueKey('player_recently_played_track_tile'),
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 4),
                       leading: ClipRRect(

@@ -27,6 +27,7 @@ class ListeningHistoryPage extends ConsumerWidget {
         actions: [
           if (historyState.history.isNotEmpty)
             TextButton(
+              key: const ValueKey('player_history_clear_button'),
               onPressed: () => _confirmClear(context, historyNotifier),
               child: const Text(
                 'Clear',
@@ -89,11 +90,13 @@ class ListeningHistoryPage extends ConsumerWidget {
         ),
         actions: [
           TextButton(
+            key: const ValueKey('player_history_clear_cancel_button'),
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('Cancel',
                 style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
+            key: const ValueKey('player_history_clear_confirm_button'),
             onPressed: () {
               Navigator.of(ctx).pop();
               historyNotifier.clearHistory();
@@ -225,6 +228,7 @@ class _HistoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final track = entry.track;
     return ListTile(
+      key: const ValueKey('player_history_track_tile'),
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: ClipRRect(

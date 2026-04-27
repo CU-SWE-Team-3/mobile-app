@@ -6,7 +6,8 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 
 class FollowersListPage extends StatefulWidget {
-  const FollowersListPage({super.key});
+  final String? targetUserId;
+  const FollowersListPage({super.key, this.targetUserId});
 
   @override
   State<FollowersListPage> createState() => _FollowersListPageState();
@@ -31,17 +32,18 @@ class _FollowersListPageState extends State<FollowersListPage> {
       _hasError = false;
     });
     try {
-      final userId = await UserSession.getUserId();
-      if (userId == null) throw Exception('Not logged in');
+      final myId = await UserSession.getUserId();
+      if (myId == null) throw Exception('Not logged in');
+      final fetchId = widget.targetUserId ?? myId;
 
       // Fetch followers list
       final followersResponse =
-          await dioClient.dio.get('/network/$userId/followers?page=1&limit=20');
+          await dioClient.dio.get('/network/$fetchId/followers?page=1&limit=20');
       final followersData = followersResponse.data['data'] as List;
 
       // Fetch current user's following list to determine which followers are already followed back
       final followingResponse = await dioClient.dio
-          .get('/network/$userId/following?page=1&limit=999');
+          .get('/network/$myId/following?page=1&limit=100');
       final followingData = followingResponse.data['data'] as List;
 
       // make a set of following user IDs to easily check if a follower is already followed back
@@ -56,11 +58,34 @@ class _FollowersListPageState extends State<FollowersListPage> {
         _followingIds.addAll(followingIds);
         _isLoading = false;
       });
-    } on DioException {
+    } on DioException catch (_) {
       setState(() {
         _isLoading = false;
         _hasError = true;
       });
+    } catch (_) {
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
+    }
+  }
+
+  Future<void> _navigateToProfile(
+    BuildContext context, {
+    required String userId,
+    required String permalink,
+    required String displayName,
+  }) async {
+    final myId = await UserSession.getUserId() ?? '';
+    if (!context.mounted) return;
+    if (myId.isNotEmpty && myId == userId) {
+      context.push('/profile');
+    } else {
+      context.push(
+        '/user/$permalink',
+        extra: {'displayName': displayName, 'userId': userId},
+      );
     }
   }
 
@@ -163,6 +188,12 @@ class _FollowersListPageState extends State<FollowersListPage> {
                           isFollowing: _followingIds.contains(id),
                           isLoading: _loadingIds.contains(id),
                           onToggle: () => _toggleFollow(id),
+                          onTap: () => _navigateToProfile(
+                            context,
+                            userId: id,
+                            permalink: user['permalink'] as String? ?? id,
+                            displayName: user['displayName'] as String? ?? '',
+                          ),
                         );
                       },
                     ),
@@ -175,12 +206,14 @@ class _FollowerTile extends StatelessWidget {
   final bool isFollowing;
   final bool isLoading;
   final VoidCallback onToggle;
+  final VoidCallback onTap;
 
   const _FollowerTile({
     required this.user,
     required this.isFollowing,
     required this.isLoading,
     required this.onToggle,
+    required this.onTap,
   });
 
   @override
@@ -194,7 +227,7 @@ class _FollowerTile extends StatelessWidget {
         avatarUrl.contains('default-avatar');
 
     return InkWell(
-      onTap: () {},
+      onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         child: Row(

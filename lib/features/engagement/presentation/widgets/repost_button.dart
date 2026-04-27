@@ -28,6 +28,7 @@ class RepostButton extends ConsumerWidget {
     final state = ref.watch(engagementProvider(params));
 
     return GestureDetector(
+      key: const ValueKey('engagement_repost_button'),
       onTap: state.isLoadingRepost
           ? null
           : () =>

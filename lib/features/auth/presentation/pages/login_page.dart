@@ -1,18 +1,20 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 
-class LoginPage extends StatefulWidget {
+class LoginPage extends ConsumerStatefulWidget {
   final String email;
   const LoginPage({super.key, this.email = ''});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  ConsumerState<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends ConsumerState<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isPasswordValid = false;
   bool _isPasswordVisible = false;
@@ -37,13 +39,23 @@ class _LoginPageState extends State<LoginPage> {
         'email': widget.email,
         'password': _passwordController.text.trim(),
       });
-      final user = response.data['user'];
+      final token = response.data['data']['token'] as String? ?? '';
+      final refreshToken = response.data['data']['refreshToken'] as String? ?? '';
+      final user = response.data['data']['user'] as Map<String, dynamic>? ?? {};
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userId', user['_id'] ?? '');
-      await prefs.setString('displayName', user['displayName'] ?? '');
-      await prefs.setString('role', user['role'] ?? '');
-      await prefs.setString('permalink', user['permalink'] ?? '');
-      if (mounted) context.go('/home');
+      await prefs.setString('accessToken', token);
+      await prefs.setString('refreshToken', refreshToken);
+      await prefs.setString('userId', user['_id'] as String? ?? '');
+      await prefs.setString('displayName', user['displayName'] as String? ?? '');
+      await prefs.setString('role', user['role'] as String? ?? '');
+      await prefs.setString('permalink', user['permalink'] as String? ?? '');
+      final avatarUrl = (user['avatarUrl'] ?? user['avatar'] ?? user['picture'] ?? '') as String;
+      await prefs.setString('avatarUrl', avatarUrl);
+      debugPrint('[Login] avatarUrl saved: $avatarUrl');
+      dioClient.setAuthToken(token);
+      if (!mounted) return;
+      ref.read(sessionUserIdProvider.notifier).state = user['_id'] as String? ?? '';
+      context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       final message = status == 401
@@ -78,6 +90,7 @@ class _LoginPageState extends State<LoginPage> {
           child: CircleAvatar(
             backgroundColor: Colors.grey[850],
             child: IconButton(
+              key: const ValueKey('auth_login_back_button'),
               icon: const Icon(Icons.arrow_back_ios_sharp, color: Colors.white, size: 30),
               onPressed: () => Navigator.pop(context),
             ),
@@ -129,6 +142,7 @@ class _LoginPageState extends State<LoginPage> {
             SizedBox(
               width: 380,
               child: TextField(
+                key: const ValueKey('auth_login_password_field'),
                 controller: _passwordController,
                 textAlignVertical: TextAlignVertical.top,
                 obscureText: !_isPasswordVisible,
@@ -156,6 +170,7 @@ class _LoginPageState extends State<LoginPage> {
                   errorText: _fieldError,
                   errorStyle: const TextStyle(color: Colors.white, fontSize: 16),
                   suffixIcon: IconButton(
+                    key: const ValueKey('auth_login_password_toggle_button'),
                     icon: Icon(
                       _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
                       size: 30,
@@ -189,6 +204,7 @@ class _LoginPageState extends State<LoginPage> {
             SizedBox(
               width: 400,
               child: ElevatedButton(
+                key: const ValueKey('auth_login_continue_button'),
                 style: TextButton.styleFrom(
                   backgroundColor: const Color(0xFF888888),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
@@ -220,6 +236,7 @@ class _LoginPageState extends State<LoginPage> {
 
             // Forgot password
             GestureDetector(
+              key: const ValueKey('auth_login_forgot_password_button'),
               onTap: () => context.push('/forgot-password'),
               child: Container(
                 margin: const EdgeInsets.only(right: 180, top: 20),

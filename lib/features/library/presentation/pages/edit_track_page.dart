@@ -257,6 +257,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
         backgroundColor: Colors.black,
         elevation: 0,
         leading: GestureDetector(
+          key: const ValueKey('edit_track_back_button'),
           onTap: () => context.pop(),
           child: Container(
             margin: const EdgeInsets.all(8),
@@ -475,6 +476,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
+          key: const ValueKey('edit_track_cover_image_button'),
           onTap: _pickCoverImage,
           child: Container(
             width: 100,
@@ -534,6 +536,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
               ),
               const SizedBox(height: 12),
               OutlinedButton(
+                key: const ValueKey('edit_track_replace_file_button'),
                 onPressed: () => context.pop(),
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: Colors.white, width: 1.2),
@@ -567,6 +570,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
         children: [
           _buildFormField(
             label: 'Title',
+            fieldKey: const ValueKey('track_metadata_title_field'),
             isRequired: true,
             controller: _titleController,
             maxLines: 3,
@@ -590,6 +594,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
 
   Widget _buildFormField({
     required String label,
+    Key? fieldKey,
     bool isRequired = false,
     TextEditingController? controller,
     String? initialValue,
@@ -619,6 +624,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
           ),
           const SizedBox(height: 8),
           TextField(
+            key: fieldKey,
             controller: controller,
             readOnly: isReadOnly,
             maxLines: maxLines,
@@ -654,12 +660,14 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
             scrollDirection: Axis.horizontal,
             children: [
               _buildGenreChip(
+                key: const ValueKey('edit_track_genre_picker'),
                 label: 'PICK GENRE',
                 icon: Icons.search,
                 onTap: _showGenrePicker,
               ),
               const SizedBox(width: 8),
               _buildGenreChip(
+                key: const ValueKey('edit_track_genre_chip'),
                 label: _selectedGenre?.toUpperCase() ?? 'ALL MUSIC GENRES',
                 isSelected: true,
                 onTap: () {},
@@ -667,6 +675,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
               if (_selectedGenre != null) const SizedBox(width: 8),
               if (_selectedGenre != null)
                 _buildGenreChip(
+                  key: const ValueKey('edit_track_genre_alt_chip'),
                   label: 'ALTERNATIVE',
                   onTap: () {
                     setState(() => _selectedGenre = 'Alternative Rock');
@@ -683,12 +692,14 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
   }
 
   Widget _buildGenreChip({
+    Key? key,
     required String label,
     IconData? icon,
     bool isSelected = false,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      key: key,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -754,6 +765,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
                     ),
                     const SizedBox(width: 6),
                     GestureDetector(
+                      key: const ValueKey('edit_track_tag_remove_button'),
                       onTap: () => _removeTag(tag),
                       child: const Icon(
                         Icons.close,
@@ -772,6 +784,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
           children: [
             Expanded(
               child: TextField(
+                key: const ValueKey('edit_track_tags_field'),
                 controller: _tagInputController,
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
@@ -787,6 +800,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
             ),
             const SizedBox(width: 8),
             GestureDetector(
+              key: const ValueKey('edit_track_add_tag_button'),
               onTap: _addTag,
               child: Container(
                 width: 38,
@@ -839,6 +853,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
             ),
           ),
           child: TextField(
+            key: const ValueKey('edit_track_description_field'),
             controller: _descriptionController,
             maxLines: 5,
             maxLength: 4000,
@@ -891,12 +906,14 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
   }
 
   Widget _buildPrivacyOption({
+    Key? key,
     required String title,
     required String subtitle,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      key: key,
       onTap: onTap,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1054,6 +1071,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
           children: [
             Expanded(
               child: GestureDetector(
+                key: const ValueKey('track_metadata_release_date_field'),
                 onTap: _pickDate,
                 child: Container(
                   padding:
@@ -1125,6 +1143,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: ElevatedButton(
+          key: const ValueKey('track_metadata_save_button'),
           onPressed: _saveTrack,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.white,

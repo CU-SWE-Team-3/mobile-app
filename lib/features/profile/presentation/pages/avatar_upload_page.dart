@@ -95,6 +95,7 @@ class _AvatarUploadPageState extends State<AvatarUploadPage> {
                 // circle avatar preview
                 Center(
                   child: GestureDetector(
+                    key: const ValueKey('profile_avatar_pick_button'),
                     onTap: _pickImage,
                     child: Container(
                       width: circleSize,
@@ -126,6 +127,7 @@ class _AvatarUploadPageState extends State<AvatarUploadPage> {
                         // Choose different photo
                         Expanded(
                           child: GestureDetector(
+                            key: const ValueKey('profile_avatar_choose_button'),
                             onTap: _pickImage,
                             child: Container(
                               padding:
@@ -150,6 +152,7 @@ class _AvatarUploadPageState extends State<AvatarUploadPage> {
                         // Save
                         Expanded(
                           child: GestureDetector(
+                            key: const ValueKey('profile_avatar_save_button'),
                             onTap: _isUploading ? null : _handleSave,
                             child: Container(
                               padding:
@@ -186,6 +189,7 @@ class _AvatarUploadPageState extends State<AvatarUploadPage> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 32, vertical: 24),
                     child: GestureDetector(
+                      key: const ValueKey('profile_avatar_choose_initial_button'),
                       onTap: _pickImage,
                       child: Container(
                         width: double.infinity,
@@ -214,6 +218,7 @@ class _AvatarUploadPageState extends State<AvatarUploadPage> {
               top: 12,
               left: 12,
               child: GestureDetector(
+                key: const ValueKey('profile_avatar_close_button'),
                 onTap: _handleClose,
                 child: Container(
                   width: 40,

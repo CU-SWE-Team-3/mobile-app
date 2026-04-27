@@ -1,7 +1,11 @@
 import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:math';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
@@ -113,7 +117,13 @@ class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tracksAsync = ref.watch(myTracksProvider);
+
+    // Derive the playable list now so shuffle/play buttons can use it
+    // even while the list area renders via .when().
+    final playable = _playable(tracksAsync.valueOrNull ?? []);
+
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -148,6 +158,7 @@ class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
                   ),
                   const Spacer(),
                   GestureDetector(
+                    key: const ValueKey('profile_tracks_cast_button'),
                     onTap: () {},
                     child: Container(
                       width: 38,
@@ -170,7 +181,6 @@ class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
               child: Row(
                 children: [
                   const Spacer(),
-                  // Shuffle
                   GestureDetector(
                     onTap: () {
                       if (_tracks.isEmpty) return;
@@ -250,6 +260,8 @@ class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
 
 // ── Track tile ────────────────────────────────────────────────────────────────
 
+// ── Track tile ────────────────────────────────────────────────────────────────
+
 class _TrackTile extends StatelessWidget {
   final _MyTrack track;
   final VoidCallback onTap;
@@ -307,11 +319,17 @@ class _TrackTile extends StatelessWidget {
                     Text(durationLabel,
                         style: TextStyle(color: sub, fontSize: 12)),
                   ],
+                  if (durationLabel.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(durationLabel,
+                        style: TextStyle(color: sub, fontSize: 12)),
+                  ],
                 ],
               ),
             ),
-            // More button
+            // More button (placeholder)
             GestureDetector(
+              key: const ValueKey('profile_tracks_more_button'),
               onTap: () {},
               child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ),
@@ -328,3 +346,4 @@ class _TrackTile extends StatelessWidget {
         child: const Icon(Icons.music_note, color: Colors.white70, size: 30),
       );
 }
+
