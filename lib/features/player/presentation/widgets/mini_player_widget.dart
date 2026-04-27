@@ -1,10 +1,10 @@
 import 'dart:ui';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
-import 'package:soundcloud_clone/features/player/presentation/providers/follow_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 class MiniPlayerWidget extends ConsumerStatefulWidget {
@@ -24,138 +24,183 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
 
     if (currentTrack == null) return const SizedBox.shrink();
 
-    final artistId = currentTrack.artistId;
-    final followState = artistId != null
-        ? ref.watch(followProvider(artistId))
-        : const FollowState();
-
     final isPlaying = playerState.isPlaying;
     final notifier = ref.read(playerProvider.notifier);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: BorderRadius.circular(34),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 40, sigmaY: 40),
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
-            height: 64,
+            height: 68,
             decoration: BoxDecoration(
-              color: const Color(0x261A1A1A),
-              borderRadius: BorderRadius.circular(32),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-        children: [
-          // White circle play/pause button
-          GestureDetector(
-            key: const ValueKey('mini_player_play_button'),
-            onTap: notifier.togglePlayPause,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withValues(alpha: 0.18),
+                  Colors.white.withValues(alpha: 0.10),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Icon(
-                isPlaying ? Icons.pause : Icons.play_arrow,
-                color: Colors.black,
-                size: 22,
+              borderRadius: BorderRadius.circular(34),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.30),
               ),
-            ),
-          ),
-          const SizedBox(width: 10),
-
-          // Center: title taps to expand player; artist taps to profile
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  key: const ValueKey('mini_player_expand_button'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => context.push('/player'),
-                  child: Text(
-                    currentTrack.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.24),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
                 ),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    final id = currentTrack.artistId;
-                    final permalink = currentTrack.artistPermalink;
-                    if (id != null && permalink != null) {
-                      navigateToUserProfile(
-                        context,
-                        userId: id,
-                        permalink: permalink,
-                        displayName: currentTrack.artist,
-                      );
-                    } else {
-                      context.push('/player');
-                    }
-                  },
-                  child: Text(
-                    currentTrack.artist,
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
+              ],
+            ),
+            child: Stack(
+              children: [
+                if (currentTrack.coverUrl != null &&
+                    currentTrack.coverUrl!.isNotEmpty)
+                  Positioned(
+                    right: -6,
+                    top: 7,
+                    bottom: 7,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Opacity(
+                        opacity: 0.42,
+                        child: SizedBox(
+                          width: 64,
+                          child: CachedNetworkImage(
+                            imageUrl: currentTrack.coverUrl!,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) =>
+                                const _MiniArtworkPlaceholder(),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 14, 8),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        key: const ValueKey('mini_player_play_button'),
+                        onTap: notifier.togglePlayPause,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.18),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            isPlaying ? Icons.pause : Icons.play_arrow,
+                            color: Colors.black,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          key: const ValueKey('mini_player_expand_button'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => context.push('/player'),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                currentTrack.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () {
+                                  final id = currentTrack.artistId;
+                                  final permalink = currentTrack.artistPermalink;
+                                  if (id != null && permalink != null) {
+                                    navigateToUserProfile(
+                                      context,
+                                      userId: id,
+                                      permalink: permalink,
+                                      displayName: currentTrack.artist,
+                                    );
+                                  } else {
+                                    context.push('/player');
+                                  }
+                                },
+                                child: Text(
+                                  currentTrack.artist,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFFD4D4D4),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        key: const ValueKey('mini_player_like_button'),
+                        onTap: () {
+                          setState(() {
+                            _isLiked = !_isLiked;
+                          });
+                        },
+                        child: SizedBox(
+                          width: 42,
+                          height: 42,
+                          child: Icon(
+                            _isLiked ? Icons.favorite : Icons.favorite_border,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-
-          // Follow/unfollow icon
-          if (artistId == null)
-            const Icon(Icons.person_add_outlined, color: Colors.white, size: 22)
-          else
-            IconButton(
-              key: const ValueKey('mini_player_follow_button'),
-              icon: followState.isLoading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Icon(
-                      followState.isFollowing
-                          ? Icons.person
-                          : Icons.person_add_outlined,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-              onPressed: () =>
-                  ref.read(followProvider(artistId).notifier).toggle(artistId),
-            ),
-
-          // Heart icon — local UI toggle only
-          IconButton(
-            key: const ValueKey('mini_player_like_button'),
-            icon: Icon(
-              _isLiked ? Icons.favorite : Icons.favorite_border,
-              color: Colors.white,
-              size: 22,
-            ),
-            onPressed: () {
-              setState(() {
-                _isLiked = !_isLiked;
-              });
-            },
-          ),
-        ],
+        ),
       ),
-          ),
+    );
+  }
+}
+
+class _MiniArtworkPlaceholder extends StatelessWidget {
+  const _MiniArtworkPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: const Color(0xFF2F2F2F),
+      child: const Center(
+        child: Icon(
+          Icons.music_note_rounded,
+          color: Colors.white24,
+          size: 22,
         ),
       ),
     );

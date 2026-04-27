@@ -45,8 +45,9 @@ String _formatCount(int count) {
 
 class SuggestedRow extends ConsumerStatefulWidget {
   final String? title;
+  final bool compact;
 
-  const SuggestedRow({super.key, this.title});
+  const SuggestedRow({super.key, this.title, this.compact = false});
 
   @override
   ConsumerState<SuggestedRow> createState() => _SuggestedRowState();
@@ -127,7 +128,7 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
           const SizedBox(height: 12),
         ],
         SizedBox(
-          height: 210,
+          height: widget.compact ? 156 : 210,
           child: _isLoading
               ? const Center(
                   child: CircularProgressIndicator(color: Color(0xFFFF5500)),
@@ -152,6 +153,7 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
                           isFollowing: isFollowing,
                           isButtonLoading: isButtonLoading,
                           onToggle: () => _toggleFollow(user.id),
+                          compact: widget.compact,
                         );
                       },
                     ),
@@ -168,12 +170,14 @@ class _UserCard extends StatelessWidget {
   final bool isFollowing;
   final bool isButtonLoading;
   final VoidCallback onToggle;
+  final bool compact;
 
   const _UserCard({
     required this.user,
     required this.isFollowing,
     required this.isButtonLoading,
     required this.onToggle,
+    required this.compact,
   });
 
   // Deterministic color from the user's display name initial
@@ -201,10 +205,10 @@ class _UserCard extends StatelessWidget {
         displayName: user.displayName,
       ),
       child: Container(
-      width: 130,
+      width: compact ? 108 : 130,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F1F),
+        color: compact ? Colors.transparent : const Color(0xFF1F1F1F),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -212,14 +216,14 @@ class _UserCard extends StatelessWidget {
         children: [
           // Avatar
           CircleAvatar(
-            radius: 25,
+            radius: compact ? 34 : 25,
             backgroundColor: _fallbackColor,
             child: showImage
                 ? ClipOval(
                     child: CachedNetworkImage(
                       imageUrl: user.avatarUrl!,
-                      width: 50,
-                      height: 50,
+                      width: compact ? 68 : 50,
+                      height: compact ? 68 : 50,
                       fit: BoxFit.cover,
                       errorWidget: (_, __, ___) => Text(
                         user.displayName.isNotEmpty
@@ -244,7 +248,7 @@ class _UserCard extends StatelessWidget {
                     ),
                   ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: compact ? 12 : 10),
 
           // Display name
           Text(
@@ -258,62 +262,62 @@ class _UserCard extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 2),
+          if (!compact) const SizedBox(height: 2),
 
-          // Permalink
-          Text(
-            '@${user.permalink}',
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xFF999999), fontSize: 11),
-          ),
-          const SizedBox(height: 2),
-
-          // Follower count
-          Text(
-            _formatCount(user.followerCount),
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFF999999), fontSize: 11),
-          ),
-          const SizedBox(height: 10),
-
-          // Follow / Following button
-          SizedBox(
-            width: double.infinity,
-            height: 30,
-            child: ElevatedButton(
-              onPressed: isButtonLoading ? null : onToggle,
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    isFollowing ? const Color(0xFFFF5500) : Colors.white,
-                disabledBackgroundColor:
-                    isFollowing ? const Color(0xFFFF5500) : Colors.white,
-                elevation: 0,
-                padding: EdgeInsets.zero,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-              child: isButtonLoading
-                  ? SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: isFollowing ? Colors.white : Colors.black,
-                      ),
-                    )
-                  : Text(
-                      isFollowing ? 'Following' : 'Follow',
-                      style: TextStyle(
-                        color: isFollowing ? Colors.white : Colors.black,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+          if (!compact)
+            Text(
+              '@${user.permalink}',
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF999999), fontSize: 11),
             ),
-          ),
+          if (!compact) const SizedBox(height: 2),
+
+          if (!compact)
+            Text(
+              _formatCount(user.followerCount),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF999999), fontSize: 11),
+            ),
+          if (!compact) const SizedBox(height: 10),
+
+          if (!compact)
+            SizedBox(
+              width: double.infinity,
+              height: 30,
+              child: ElevatedButton(
+                onPressed: isButtonLoading ? null : onToggle,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      isFollowing ? const Color(0xFFFF5500) : Colors.white,
+                  disabledBackgroundColor:
+                      isFollowing ? const Color(0xFFFF5500) : Colors.white,
+                  elevation: 0,
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: isButtonLoading
+                    ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: isFollowing ? Colors.white : Colors.black,
+                        ),
+                      )
+                    : Text(
+                        isFollowing ? 'Following' : 'Follow',
+                        style: TextStyle(
+                          color: isFollowing ? Colors.white : Colors.black,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
         ],
       ),
     ),

@@ -404,20 +404,17 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
           ),
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF5500)))
-              : _hasError
-                  ? _buildError()
-                  : _buildBody(),
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: MiniPlayerWidget(),
+          Expanded(
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFFFF5500)))
+                : _hasError
+                    ? _buildError()
+                    : _buildBody(),
           ),
+          const MiniPlayerWidget(),
         ],
       ),
     );

@@ -451,77 +451,95 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
     return Scaffold(
       backgroundColor: _bg,
-      body: Stack(
+      body: Column(
         children: [
-          SafeArea(
-        child: Column(
-          children: [
-            _topBar(context),
-            if (_isLoading)
-              const Expanded(
-                child: Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-                ),
-              )
-            else if (_hasError)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Couldn\'t load profile',
-                          style: TextStyle(color: Colors.white, fontSize: 15)),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        key: const ValueKey('profile_retry_button'),
-                        onPressed: _fetchProfile,
-                        child: const Text('Retry',
-                            style: TextStyle(color: Color(0xFFFF5500))),
+          Expanded(
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _topBar(context),
+                  if (_isLoading)
+                    const Expanded(
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFFF5500),
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _fetchProfile,
-                  color: const Color(0xFFFF5500),
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _heroSection(context),
-                        _bioSection(),
-                        _insightsRow(context),
-                        _spotlight(),
-                        _sectionHeader('Tracks',
-                            onSeeAll: () => context.push('/profile/tracks')),
-                        _tracksSection(myTracksAsync),
-                        _sectionHeader('Reposts',
-                            onSeeAll: () { _playFromReposts(0); context.push('/profile/reposts'); }),
-                        _repostsList(),
-                        _sectionHeader('Playlists'),
-                        _playlistRow(context),
-                        _sectionHeader('Likes',
-                            onSeeAll: () { _playFromLikes(0); context.push('/likes'); }),
-                        _likesList(),
-                        const SizedBox(height: 120),
-                      ],
+                    )
+                  else if (_hasError)
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Couldn\'t load profile',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              key: const ValueKey('profile_retry_button'),
+                              onPressed: _fetchProfile,
+                              child: const Text(
+                                'Retry',
+                                style: TextStyle(color: Color(0xFFFF5500)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: RefreshIndicator(
+                        onRefresh: _fetchProfile,
+                        color: const Color(0xFFFF5500),
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _heroSection(context),
+                              _bioSection(),
+                              _insightsRow(context),
+                              _spotlight(),
+                              _sectionHeader(
+                                'Tracks',
+                                onSeeAll: () => context.push('/profile/tracks'),
+                              ),
+                              _tracksSection(myTracksAsync),
+                              _sectionHeader(
+                                'Reposts',
+                                onSeeAll: () {
+                                  _playFromReposts(0);
+                                  context.push('/profile/reposts');
+                                },
+                              ),
+                              _repostsList(),
+                              _sectionHeader('Playlists'),
+                              _playlistRow(context),
+                              _sectionHeader(
+                                'Likes',
+                                onSeeAll: () {
+                                  _playFromLikes(0);
+                                  context.push('/likes');
+                                },
+                              ),
+                              _likesList(),
+                              const SizedBox(height: 120),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                ],
               ),
-          ],
-        ),
+            ),
           ),
-          const Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: MiniPlayerWidget(),
-          ),
+          const MiniPlayerWidget(),
         ],
       ),
     );
