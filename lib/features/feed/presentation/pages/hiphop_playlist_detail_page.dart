@@ -10,8 +10,6 @@ import '../../../../core/network/dio_client.dart';
 import '../../../player/domain/entities/player_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
-// ─── Models ───────────────────────────────────────────────────────────────────
-
 class _PlaylistMeta {
   final String id;
   final String title;
@@ -20,6 +18,7 @@ class _PlaylistMeta {
   final String? description;
   final int trackCount;
   final int likeCount;
+  final DateTime? createdAt;
   bool isLiked;
 
   _PlaylistMeta({
@@ -30,11 +29,13 @@ class _PlaylistMeta {
     this.description,
     this.trackCount = 0,
     this.likeCount = 0,
+    this.createdAt,
     this.isLiked = false,
   });
 
   factory _PlaylistMeta.fromJson(Map<String, dynamic> json) {
-    final creator = json['creator'] as Map<String, dynamic>?;
+    final creator = json['creator'] as Map<String, dynamic>? ??
+        json['user'] as Map<String, dynamic>?;
     return _PlaylistMeta(
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
@@ -45,6 +46,7 @@ class _PlaylistMeta {
       description: json['description'] as String?,
       trackCount: (json['trackCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
       isLiked: json['isLiked'] as bool? ?? false,
     );
   }
@@ -59,6 +61,7 @@ class _DetailTrack {
   final String? artistId;
   final String? artistPermalink;
   final int duration;
+  final int playCount;
 
   _DetailTrack({
     required this.id,
@@ -69,23 +72,25 @@ class _DetailTrack {
     this.artistId,
     this.artistPermalink,
     this.duration = 0,
+    this.playCount = 0,
   });
 
   factory _DetailTrack.fromJson(Map<String, dynamic> json) {
-    final artist = json['artist'];
-    final artistMap = artist is Map<String, dynamic> ? artist : null;
+    final artist = json['artist'] as Map<String, dynamic>? ??
+        json['user'] as Map<String, dynamic>?;
     return _DetailTrack(
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      artistName: artistMap?['displayName'] as String? ?? '',
-      artistId: artistMap?['_id'] as String?,
-      artistPermalink: artistMap?['permalink'] as String?,
+      artistName: artist?['displayName'] as String? ?? '',
+      artistId: artist?['_id'] as String?,
+      artistPermalink: artist?['permalink'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       hlsUrl: json['hlsUrl'] as String? ??
           json['audioUrl'] as String? ??
           json['streamUrl'] as String? ??
           '',
       duration: (json['duration'] as num?)?.toInt() ?? 0,
+      playCount: (json['playCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -99,8 +104,6 @@ class _DetailTrack {
         coverUrl: artworkUrl,
       );
 }
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 class HiphopPlaylistDetailPage extends ConsumerStatefulWidget {
   final String playlistId;
@@ -117,6 +120,7 @@ class _HiphopPlaylistDetailPageState
   List<_DetailTrack> _tracks = [];
   bool _isLoading = true;
   bool _hasError = false;
+  bool _isDescriptionExpanded = false;
 
   @override
   void initState() {
@@ -132,38 +136,35 @@ class _HiphopPlaylistDetailPageState
     try {
       final resp = await dioClient.dio.get('/playlists/${widget.playlistId}');
       final data = resp.data as Map<String, dynamic>;
-      final pl =
+      final playlist =
           ((data['data'] as Map<String, dynamic>?)?['playlist'])
               as Map<String, dynamic>? ??
           {};
-      final meta = _PlaylistMeta.fromJson(pl);
-      final rawTracks = (pl['tracks'] as List<dynamic>?) ?? [];
+      final meta = _PlaylistMeta.fromJson(playlist);
+      final rawTracks = (playlist['tracks'] as List<dynamic>?) ?? [];
       final tracks = rawTracks
           .whereType<Map<String, dynamic>>()
           .map(_DetailTrack.fromJson)
           .where((t) => t.id.isNotEmpty)
           .toList();
-      if (mounted) {
-        setState(() {
-          _meta = meta;
-          _tracks = tracks;
-          _isLoading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _meta = meta;
+        _tracks = tracks;
+        _isLoading = false;
+      });
     } on DioException {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
     }
   }
 
@@ -211,11 +212,15 @@ class _HiphopPlaylistDetailPageState
     _playFrom(idx);
   }
 
-  // ─── Formatters ────────────────────────────────────────────────────────────
-
   String _fmtLikeCount(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(0)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(0)}K';
+    return n.toString();
+  }
+
+  String _fmtPlayCount(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
     return n.toString();
   }
 
@@ -235,9 +240,16 @@ class _HiphopPlaylistDetailPageState
     return '$m:${sec.toString().padLeft(2, '0')}';
   }
 
-  int get _totalSeconds => _tracks.fold(0, (sum, t) => sum + t.duration);
+  String? _formatAge(DateTime? createdAt) {
+    if (createdAt == null) return null;
+    final diff = DateTime.now().difference(createdAt);
+    if (diff.inDays > 0) return '${diff.inDays}d ago';
+    if (diff.inHours > 0) return '${diff.inHours}h ago';
+    if (diff.inMinutes > 0) return '${diff.inMinutes}m ago';
+    return 'just now';
+  }
 
-  // ─── Build ─────────────────────────────────────────────────────────────────
+  int get _totalSeconds => _tracks.fold(0, (sum, t) => sum + t.duration);
 
   @override
   Widget build(BuildContext context) {
@@ -246,14 +258,30 @@ class _HiphopPlaylistDetailPageState
       appBar: AppBar(
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
+        titleSpacing: 0,
+        title: const Text(
+          'Playlist',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: context.pop,
         ),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 12),
+            child: Icon(Icons.cast_outlined, color: Colors.white70),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFFF5500)))
+              child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+            )
           : _hasError
               ? _buildError()
               : _buildContent(),
@@ -265,13 +293,16 @@ class _HiphopPlaylistDetailPageState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Failed to load playlist.',
-              style: TextStyle(color: Colors.grey[400], fontSize: 15)),
+          Text(
+            'Failed to load playlist.',
+            style: TextStyle(color: Colors.grey[400], fontSize: 15),
+          ),
           const SizedBox(height: 12),
           ElevatedButton(
             onPressed: _fetch,
             style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF5500)),
+              backgroundColor: const Color(0xFFFF5500),
+            ),
             child: const Text('Retry', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -281,10 +312,8 @@ class _HiphopPlaylistDetailPageState
 
   Widget _buildContent() {
     final meta = _meta!;
-    final hasDesc =
-        meta.description != null && meta.description!.isNotEmpty;
-    // Fixed items: header(0), actions(1), [description(2 if hasDesc)], divider
-    final fixedCount = hasDesc ? 4 : 3;
+    final hasDesc = meta.description != null && meta.description!.isNotEmpty;
+    final fixedCount = hasDesc ? 3 : 2;
 
     return RefreshIndicator(
       onRefresh: _fetch,
@@ -297,16 +326,14 @@ class _HiphopPlaylistDetailPageState
           if (i == 0) return _buildHeaderItem(meta);
           if (i == 1) return _buildActionRow(meta);
           if (hasDesc && i == 2) return _buildDescriptionItem(meta.description!);
-          if (i == fixedCount - 1) {
-            return const Divider(
-                color: Color(0xFF2A2A2A), height: 1, thickness: 1);
-          }
           if (_tracks.isEmpty) {
             return const Padding(
               padding: EdgeInsets.all(32),
               child: Center(
-                child: Text('No tracks',
-                    style: TextStyle(color: Colors.white54, fontSize: 15)),
+                child: Text(
+                  'No tracks',
+                  style: TextStyle(color: Colors.white54, fontSize: 15),
+                ),
               ),
             );
           }
@@ -317,63 +344,78 @@ class _HiphopPlaylistDetailPageState
   }
 
   Widget _buildHeaderItem(_PlaylistMeta meta) {
-    final hasArtwork =
-        meta.artworkUrl != null && meta.artworkUrl!.isNotEmpty;
+    final hasArtwork = meta.artworkUrl != null && meta.artworkUrl!.isNotEmpty;
     final totalSecs = _totalSeconds;
+    final subtitle = _buildSubtitle(meta.trackCount, totalSecs, meta.createdAt);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Square artwork 160×160
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: hasArtwork
                 ? CachedNetworkImage(
                     imageUrl: meta.artworkUrl!,
-                    width: 160,
-                    height: 160,
+                    width: 118,
+                    height: 118,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _artworkFallback160(),
+                    errorWidget: (_, __, ___) => _artworkFallback118(),
                   )
-                : _artworkFallback160(),
+                : _artworkFallback118(),
           ),
-          const SizedBox(width: 16),
-          // Info column
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   meta.title,
-                  maxLines: 3,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 Text(
-                  _buildSubtitle(meta.trackCount, totalSecs),
+                  subtitle,
                   style: const TextStyle(
-                      color: Colors.white54, fontSize: 12),
+                    color: Colors.white54,
+                    fontSize: 11,
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Row(
                   children: [
-                    const Icon(Icons.person_outline,
-                        color: Colors.white38, size: 15),
-                    const SizedBox(width: 4),
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        border: Border.all(color: Colors.white24),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.cloud,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'By ${meta.ownerName}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: Colors.white70, fontSize: 13),
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -386,9 +428,11 @@ class _HiphopPlaylistDetailPageState
     );
   }
 
-  String _buildSubtitle(int trackCount, int totalSecs) {
-    final parts = <String>['Playlist', '$trackCount tracks'];
+  String _buildSubtitle(int trackCount, int totalSecs, DateTime? createdAt) {
+    final parts = <String>['Playlist', '$trackCount Tracks'];
     if (totalSecs > 0) parts.add(_fmtTotalDuration(totalSecs));
+    final age = _formatAge(createdAt);
+    if (age != null) parts.add(age);
     return parts.join(' · ');
   }
 
@@ -396,58 +440,58 @@ class _HiphopPlaylistDetailPageState
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Heart
           GestureDetector(
             onTap: _toggleLike,
-            child: Icon(
-              meta.isLiked ? Icons.favorite : Icons.favorite_border,
-              color: meta.isLiked
-                  ? const Color(0xFFFF5500)
-                  : Colors.white54,
-              size: 26,
+            child: Row(
+              children: [
+                Icon(
+                  meta.isLiked ? Icons.favorite : Icons.favorite_border,
+                  color: meta.isLiked
+                      ? const Color(0xFFFF5500)
+                      : Colors.white54,
+                  size: 28,
+                ),
+                if (meta.likeCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    _fmtLikeCount(meta.likeCount),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          // Like count
-          if (meta.likeCount > 0) ...[
-            const SizedBox(width: 4),
-            Text(
-              _fmtLikeCount(meta.likeCount),
-              style: const TextStyle(color: Colors.white54, fontSize: 13),
-            ),
-          ],
-          const SizedBox(width: 16),
-          // Three-dot menu
-          const Icon(Icons.more_horiz, color: Colors.white54, size: 26),
+          const SizedBox(width: 14),
+          const Icon(Icons.more_vert, color: Colors.white54, size: 24),
           const Spacer(),
-          // Shuffle
           GestureDetector(
             onTap: _shufflePlay,
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: const BoxDecoration(
-                color: Color(0xFF2A2A2A),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.shuffle,
-                  color: Colors.white70, size: 22),
+            child: const Icon(
+              Icons.shuffle_rounded,
+              color: Colors.white70,
+              size: 25,
             ),
           ),
-          const SizedBox(width: 12),
-          // Play all
+          const SizedBox(width: 22),
           GestureDetector(
             onTap: () => _playFrom(0),
             child: Container(
-              width: 54,
-              height: 54,
+              width: 72,
+              height: 72,
               decoration: const BoxDecoration(
-                color: Color(0xFFFF5500),
+                color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.play_arrow,
-                  color: Colors.white, size: 30),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.black,
+                size: 40,
+              ),
             ),
           ),
         ],
@@ -457,11 +501,37 @@ class _HiphopPlaylistDetailPageState
 
   Widget _buildDescriptionItem(String desc) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Text(
-        desc,
-        style: const TextStyle(
-            color: Colors.white54, fontSize: 14, height: 1.5),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            desc,
+            maxLines: _isDescriptionExpanded ? null : 3,
+            overflow: _isDescriptionExpanded ? null : TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isDescriptionExpanded = !_isDescriptionExpanded;
+              });
+            },
+            child: Text(
+              _isDescriptionExpanded ? 'Show less' : 'Show more',
+              style: const TextStyle(
+                color: Color(0xFF6EA8FF),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -474,20 +544,21 @@ class _HiphopPlaylistDetailPageState
     return GestureDetector(
       onTap: () => _playFrom(i),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(8),
               child: hasArtwork
                   ? CachedNetworkImage(
                       imageUrl: track.artworkUrl!,
-                      width: 52,
-                      height: 52,
+                      width: 72,
+                      height: 72,
                       fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => _artworkFallback52(),
+                      errorWidget: (_, __, ___) => _artworkFallback72(),
                     )
-                  : _artworkFallback52(),
+                  : _artworkFallback72(),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -500,54 +571,80 @@ class _HiphopPlaylistDetailPageState
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   if (track.artistName.isNotEmpty)
                     Text(
                       track.artistName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                          color: Colors.white54, fontSize: 13),
+                        color: Colors.white54,
+                        fontSize: 13,
+                      ),
                     ),
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white54,
+                        size: 15,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        _fmtPlayCount(track.playCount),
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (track.duration > 0) ...[
+                        const Text(
+                          ' · ',
+                          style: TextStyle(color: Colors.white38, fontSize: 12),
+                        ),
+                        Text(
+                          _fmtTrackDuration(track.duration),
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
-            if (track.duration > 0)
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Text(
-                  _fmtTrackDuration(track.duration),
-                  style: const TextStyle(
-                      color: Colors.white38, fontSize: 13),
-                ),
-              ),
             const SizedBox(width: 4),
-            const Icon(Icons.more_horiz, color: Colors.white38, size: 20),
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Icon(Icons.more_vert, color: Colors.white38, size: 22),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // ─── Fallbacks ─────────────────────────────────────────────────────────────
-
-  Widget _artworkFallback160() => Container(
-        width: 160,
-        height: 160,
+  Widget _artworkFallback118() => Container(
+        width: 118,
+        height: 118,
         decoration: BoxDecoration(
           color: const Color(0xFF2A2A2A),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Icon(Icons.queue_music, color: Colors.white38, size: 48),
+        child: const Icon(Icons.queue_music, color: Colors.white38, size: 40),
       );
 
-  Widget _artworkFallback52() => Container(
-        width: 52,
-        height: 52,
+  Widget _artworkFallback72() => Container(
+        width: 72,
+        height: 72,
         color: const Color(0xFF2A2A2A),
-        child: const Icon(Icons.music_note, color: Colors.white38, size: 22),
+        child: const Icon(Icons.music_note, color: Colors.white38, size: 28),
       );
 }

@@ -1,12 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/network/dio_client.dart';
 import '../../../player/domain/entities/player_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
-
-// ─── Local data models ────────────────────────────────────────────────────────
 
 class _Track {
   final String id;
@@ -17,9 +17,11 @@ class _Track {
   final String? artistId;
   final String? artistPermalink;
   final int playCount;
+  final int duration;
   final List<int>? waveform;
+  final DateTime? createdAt;
 
-  _Track({
+  const _Track({
     required this.id,
     required this.title,
     required this.artistName,
@@ -28,11 +30,15 @@ class _Track {
     this.artistId,
     this.artistPermalink,
     this.playCount = 0,
+    this.duration = 0,
     this.waveform,
+    this.createdAt,
   });
 
   factory _Track.fromJson(Map<String, dynamic> json) {
-    final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final artist = json['artist'] as Map<String, dynamic>? ??
+        json['user'] as Map<String, dynamic>? ??
+        {};
     return _Track(
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
@@ -40,11 +46,20 @@ class _Track {
       artistId: artist['_id'] as String?,
       artistPermalink: artist['permalink'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
-      hlsUrl: json['hlsUrl'] as String? ?? json['audioUrl'] as String? ?? '',
+      hlsUrl: json['hlsUrl'] as String? ??
+          json['audioUrl'] as String? ??
+          json['streamUrl'] as String? ??
+          '',
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
+      duration: (json['duration'] as num?)?.toInt() ?? 0,
       waveform: (json['waveform'] as List<dynamic>?)
           ?.map((e) => (e as num).toInt())
           .toList(),
+      createdAt: DateTime.tryParse(
+        json['createdAt'] as String? ??
+            json['uploadedAt'] as String? ??
+            '',
+      ),
     );
   }
 
@@ -65,18 +80,25 @@ class _PlaylistInfo {
   final String title;
   final String ownerName;
   final String? artworkUrl;
+  final String? description;
   final int trackCount;
+  final int likeCount;
+  final bool isLiked;
 
-  _PlaylistInfo({
+  const _PlaylistInfo({
     required this.id,
     required this.title,
     required this.ownerName,
     this.artworkUrl,
+    this.description,
     this.trackCount = 0,
+    this.likeCount = 0,
+    this.isLiked = false,
   });
 
   factory _PlaylistInfo.fromJson(Map<String, dynamic> json) {
-    final creator = json['creator'] as Map<String, dynamic>?;
+    final creator = json['creator'] as Map<String, dynamic>? ??
+        json['user'] as Map<String, dynamic>?;
     return _PlaylistInfo(
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
@@ -84,12 +106,35 @@ class _PlaylistInfo {
           json['ownerName'] as String? ??
           '',
       artworkUrl: json['artworkUrl'] as String?,
+      description: json['description'] as String?,
       trackCount: (json['trackCount'] as num?)?.toInt() ?? 0,
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      isLiked: json['isLiked'] as bool? ?? false,
+    );
+  }
+
+  _PlaylistInfo copyWith({
+    String? id,
+    String? title,
+    String? ownerName,
+    String? artworkUrl,
+    String? description,
+    int? trackCount,
+    int? likeCount,
+    bool? isLiked,
+  }) {
+    return _PlaylistInfo(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      ownerName: ownerName ?? this.ownerName,
+      artworkUrl: artworkUrl ?? this.artworkUrl,
+      description: description ?? this.description,
+      trackCount: trackCount ?? this.trackCount,
+      likeCount: likeCount ?? this.likeCount,
+      isLiked: isLiked ?? this.isLiked,
     );
   }
 }
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
 
 class HiphopGenrePage extends ConsumerStatefulWidget {
   const HiphopGenrePage({super.key});
@@ -100,27 +145,28 @@ class HiphopGenrePage extends ConsumerStatefulWidget {
 
 class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     with TickerProviderStateMixin {
+  static const _pageBackground = Color(0xFF111111);
+  static const _panelBackground = Color(0xFF1A1A1A);
+  static const _hiphopQuery = 'Hiphop & rap';
+
   late final TabController _tabController;
 
-  // All tab — GET /discovery/genre/Hiphop%20%26%20rap
   List<_Track> _tracks = [];
   bool _isLoading = true;
   bool _hasError = false;
 
-  // Trending tab — GET /discovery/trending?genre=Hiphop & rap (public, no auth)
   List<_Track> _trendingTracks = [];
   bool _isTrendingLoading = true;
   bool _trendingError = false;
 
-  // Playlists tab — GET /playlists?genre=Hiphop & rap
   List<_PlaylistInfo> _playlists = [];
   bool _isPlaylistsLoading = true;
   bool _playlistsError = false;
 
-  // Albums tab — GET /playlists?genre=Hiphop & rap&releaseType=album
   List<_PlaylistInfo> _albumPlaylists = [];
   bool _isAlbumsLoading = true;
   bool _albumsError = false;
+  bool _isRecentCollectionLiked = false;
 
   @override
   void initState() {
@@ -158,27 +204,19 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
   Future<void> _fetchGenreTracks() async {
     try {
       final resp = await dioClient.dio.get(
-        '/discovery/genre/${Uri.encodeComponent('Hiphop & rap')}',
+        '/discovery/genre/${Uri.encodeComponent(_hiphopQuery)}',
       );
-      final respData = resp.data;
-      List<dynamic> rawTracks;
-      if (respData['data'] is List) {
-        rawTracks = respData['data'] as List<dynamic>;
-      } else if (respData['data'] is Map) {
-        final m = respData['data'] as Map<String, dynamic>;
-        rawTracks =
-            (m['tracks'] ?? m['trending'] ?? m['items'] ?? []) as List<dynamic>;
-      } else {
-        rawTracks = [];
-      }
-      final tracks = rawTracks
-          .whereType<Map<String, dynamic>>()
-          .map(_Track.fromJson)
-          .where((t) => t.id.isNotEmpty)
-          .toList();
-      if (mounted) setState(() { _tracks = tracks; _isLoading = false; });
+      if (!mounted) return;
+      setState(() {
+        _tracks = _extractTracks(resp.data);
+        _isLoading = false;
+      });
     } catch (_) {
-      if (mounted) setState(() { _isLoading = false; _hasError = true; });
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _hasError = true;
+      });
     }
   }
 
@@ -186,20 +224,27 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     try {
       final resp = await dioClient.dio.get(
         '/discovery/trending',
-        queryParameters: {'genre': 'Hiphop & rap'},
+        queryParameters: {'genre': _hiphopQuery},
       );
-      final data = resp.data['data'] as Map<String, dynamic>? ?? {};
-      final raw = data['trending'] as List<dynamic>? ?? [];
-      final tracks = raw
-          .whereType<Map<String, dynamic>>()
-          .map(_Track.fromJson)
-          .where((t) => t.id.isNotEmpty)
-          .toList();
-      if (mounted) {
-        setState(() { _trendingTracks = tracks; _isTrendingLoading = false; });
-      }
+      final data = resp.data as Map<String, dynamic>;
+      final raw = ((data['data'] as Map<String, dynamic>?) ?? {})['trending']
+              as List<dynamic>? ??
+          [];
+      if (!mounted) return;
+      setState(() {
+        _trendingTracks = raw
+            .whereType<Map<String, dynamic>>()
+            .map(_Track.fromJson)
+            .where((t) => t.id.isNotEmpty)
+            .toList();
+        _isTrendingLoading = false;
+      });
     } catch (_) {
-      if (mounted) setState(() { _isTrendingLoading = false; _trendingError = true; });
+      if (!mounted) return;
+      setState(() {
+        _isTrendingLoading = false;
+        _trendingError = true;
+      });
     }
   }
 
@@ -207,61 +252,75 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     try {
       final resp = await dioClient.dio.get(
         '/playlists',
-        queryParameters: {'genre': 'Hiphop & rap', 'limit': 10},
+        queryParameters: {'genre': _hiphopQuery, 'limit': 10},
       );
-      final plData = resp.data;
-      List<dynamic> rawPlaylists;
-      if (plData['data'] is List) {
-        rawPlaylists = plData['data'] as List<dynamic>;
-      } else if (plData['data'] is Map) {
-        final m = plData['data'] as Map<String, dynamic>;
-        rawPlaylists = (m['playlists'] ?? m['items'] ?? []) as List<dynamic>;
-      } else {
-        rawPlaylists = [];
-      }
-      final playlists = rawPlaylists
-          .whereType<Map<String, dynamic>>()
-          .map(_PlaylistInfo.fromJson)
-          .where((p) => p.id.isNotEmpty)
-          .toList();
-      if (mounted) setState(() { _playlists = playlists; _isPlaylistsLoading = false; });
+      if (!mounted) return;
+      setState(() {
+        _playlists = _extractPlaylists(resp.data);
+        _isPlaylistsLoading = false;
+      });
     } catch (_) {
-      if (mounted) setState(() { _isPlaylistsLoading = false; _playlistsError = true; });
+      if (!mounted) return;
+      setState(() {
+        _isPlaylistsLoading = false;
+        _playlistsError = true;
+      });
     }
   }
 
-  // Albums are fetched via the same playlists endpoint with a releaseType filter.
-  // If the backend does not differentiate, this will return an empty list and
-  // "No albums available" is shown — a real API call is still made.
   Future<void> _fetchAlbums() async {
     try {
       final resp = await dioClient.dio.get(
         '/playlists',
         queryParameters: {
-          'genre': 'Hiphop & rap',
+          'genre': _hiphopQuery,
           'releaseType': 'album',
           'limit': 10,
         },
       );
-      final plData = resp.data;
-      List<dynamic> rawAlbums;
-      if (plData['data'] is List) {
-        rawAlbums = plData['data'] as List<dynamic>;
-      } else if (plData['data'] is Map) {
-        final m = plData['data'] as Map<String, dynamic>;
-        rawAlbums = (m['playlists'] ?? m['items'] ?? []) as List<dynamic>;
-      } else {
-        rawAlbums = [];
-      }
-      final albums = rawAlbums
-          .whereType<Map<String, dynamic>>()
-          .map(_PlaylistInfo.fromJson)
-          .where((p) => p.id.isNotEmpty)
-          .toList();
-      if (mounted) setState(() { _albumPlaylists = albums; _isAlbumsLoading = false; });
+      if (!mounted) return;
+      setState(() {
+        _albumPlaylists = _extractPlaylists(resp.data);
+        _isAlbumsLoading = false;
+      });
     } catch (_) {
-      if (mounted) setState(() { _isAlbumsLoading = false; _albumsError = true; });
+      if (!mounted) return;
+      setState(() {
+        _isAlbumsLoading = false;
+        _albumsError = true;
+      });
     }
+  }
+
+  List<_Track> _extractTracks(dynamic body) {
+    if (body is! Map<String, dynamic>) return [];
+    final data = body['data'];
+    final raw = data is List
+        ? data
+        : data is Map<String, dynamic>
+            ? (data['tracks'] ?? data['trending'] ?? data['items'] ?? [])
+                as List<dynamic>
+            : <dynamic>[];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(_Track.fromJson)
+        .where((t) => t.id.isNotEmpty)
+        .toList();
+  }
+
+  List<_PlaylistInfo> _extractPlaylists(dynamic body) {
+    if (body is! Map<String, dynamic>) return [];
+    final data = body['data'];
+    final raw = data is List
+        ? data
+        : data is Map<String, dynamic>
+            ? (data['playlists'] ?? data['items'] ?? []) as List<dynamic>
+            : <dynamic>[];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(_PlaylistInfo.fromJson)
+        .where((p) => p.id.isNotEmpty)
+        .toList();
   }
 
   void _playFrom(List<_Track> tracks, int index) {
@@ -276,81 +335,141 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
         );
   }
 
-  // ─── Build ─────────────────────────────────────────────────────────────────
+  List<_Track> get _previewTrendingTracks => _trendingTracks.isNotEmpty
+      ? _trendingTracks.take(3).toList()
+      : _tracks.take(3).toList();
+
+  List<_Track> get _recentGenreTracks {
+    final tracks = List<_Track>.from(_tracks);
+    tracks.sort((a, b) {
+      final aTime = a.createdAt?.millisecondsSinceEpoch ?? 0;
+      final bTime = b.createdAt?.millisecondsSinceEpoch ?? 0;
+      return bTime.compareTo(aTime);
+    });
+    return tracks;
+  }
+
+  List<List<_Track>> _chunkTracks(List<_Track> tracks, int size) {
+    final chunks = <List<_Track>>[];
+    for (int i = 0; i < tracks.length; i += size) {
+      final end = (i + size < tracks.length) ? i + size : tracks.length;
+      chunks.add(tracks.sublist(i, end));
+    }
+    return chunks;
+  }
+
+  void _playRecentTracks(List<_Track> tracks) {
+    if (tracks.isEmpty) return;
+    _playFrom(tracks, 0);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF111111),
+      backgroundColor: _pageBackground,
       body: NestedScrollView(
         headerSliverBuilder: (_, __) => [
           SliverAppBar(
-            expandedHeight: 240,
+            expandedHeight: 205,
             pinned: true,
-            backgroundColor: const Color(0xFF111111),
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
             automaticallyImplyLeading: false,
-            leading: GestureDetector(
-              onTap: context.pop,
-              child: Container(
-                margin: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
+            leadingWidth: 68,
+            leading: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+                child: GestureDetector(
+                  onTap: context.pop,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF2D2D2D),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
                 ),
-                child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
               ),
             ),
             flexibleSpace: FlexibleSpaceBar(
+              collapseMode: CollapseMode.pin,
               background: Stack(
                 fit: StackFit.expand,
                 children: [
                   Image.asset(
                     'assets/images/Hiphop_&_Rap_bg.png',
                     fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
                   ),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.transparent, Color(0xE0111111)],
-                        stops: [0.3, 1.0],
+                        colors: [
+                          Colors.transparent,
+                          Color(0x33000000),
+                          Color(0xFF111111),
+                        ],
+                        stops: [0.0, 0.55, 1.0],
                       ),
                     ),
                   ),
                   const Positioned(
-                    bottom: 64,
-                    left: 16,
-                    right: 16,
+                    left: 28,
+                    right: 24,
+                    bottom: 54,
                     child: Text(
                       'Hip Hop & Rap',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        shadows: [Shadow(color: Colors.black87, blurRadius: 6)],
+                        fontSize: 36,
+                        fontWeight: FontWeight.w700,
+                        height: 0.98,
+                        letterSpacing: -1.8,
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-            bottom: TabBar(
-              controller: _tabController,
-              indicatorColor: Colors.white,
-              indicatorWeight: 2,
-              indicatorSize: TabBarIndicatorSize.tab,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white54,
-              labelStyle:
-                  const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              unselectedLabelStyle: const TextStyle(fontSize: 14),
-              tabs: const [
-                Tab(text: 'All'),
-                Tab(text: 'Trending'),
-                Tab(text: 'Playlists'),
-                Tab(text: 'Albums'),
-              ],
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(52),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: false,
+                  dividerColor: Colors.transparent,
+                  indicatorColor: Colors.white,
+                  indicatorWeight: 2,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicatorPadding: EdgeInsets.zero,
+                  labelPadding: EdgeInsets.zero,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white70,
+                  labelStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  unselectedLabelStyle: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  tabs: const [
+                    Tab(text: 'All'),
+                    Tab(text: 'Trending'),
+                    Tab(text: 'Playlists'),
+                    Tab(text: 'Albums'),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -367,127 +486,273 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     );
   }
 
-  // ─── Tab content ───────────────────────────────────────────────────────────
-
   Widget _buildAllTab() {
-    if (_isLoading) {
+    final previewTracks = _previewTrendingTracks;
+    final trendingSlides = _chunkTracks(
+      _trendingTracks.isNotEmpty ? _trendingTracks : _tracks,
+      3,
+    );
+    final recentTracks = _recentGenreTracks;
+    final isLoading =
+        (_isLoading || _isTrendingLoading) &&
+            previewTracks.isEmpty &&
+            recentTracks.isEmpty;
+    final hasBlockingError = _hasError && _trendingError;
+
+    if (isLoading) {
       return const Center(
-          child: CircularProgressIndicator(color: Color(0xFFFF5500)));
+        child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+      );
     }
-    if (_hasError) {
+    if (hasBlockingError) {
       return _buildErrorState(onRetry: _fetchAll);
     }
-    if (_tracks.isEmpty) {
-      return const Center(
-          child: Text('No tracks found',
-              style: TextStyle(color: Colors.white54)));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 32),
-      itemCount: _tracks.length,
-      itemBuilder: (_, i) => _buildTrackTile(_tracks, i),
+
+    return RefreshIndicator(
+      onRefresh: _fetchAll,
+      color: const Color(0xFFFF5500),
+      backgroundColor: _panelBackground,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(0, 14, 0, 32),
+        children: [
+          if (previewTracks.isNotEmpty) ...[
+            _buildSectionHeader(
+              title: 'Trending',
+              actionLabel: 'See all',
+              onAction: () => _tabController.animateTo(1),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 180,
+              child: PageView.builder(
+                controller: PageController(viewportFraction: 0.94),
+                itemCount: trendingSlides.length,
+                padEnds: false,
+                itemBuilder: (context, pageIndex) {
+                  final slideTracks = trendingSlides[pageIndex];
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: pageIndex == trendingSlides.length - 1 ? 16 : 8,
+                    ),
+                    child: Column(
+                      children: [
+                        for (int i = 0; i < slideTracks.length; i++)
+                          _buildTrendingPreviewTile(slideTracks, i),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 22),
+          ],
+          if (recentTracks.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Introducing',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            _buildRecentTracksCard(recentTracks),
+          ],
+          if (previewTracks.isEmpty && recentTracks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+              child: Text(
+                'No Hip Hop content available right now.',
+                style: TextStyle(color: Colors.white54, fontSize: 15),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   Widget _buildTrendingTab() {
     if (_isTrendingLoading) {
       return const Center(
-          child: CircularProgressIndicator(color: Color(0xFFFF5500)));
+        child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+      );
     }
     if (_trendingError) {
       return _buildErrorState(
         onRetry: () async {
-          setState(() { _isTrendingLoading = true; _trendingError = false; });
+          setState(() {
+            _isTrendingLoading = true;
+            _trendingError = false;
+          });
           await _fetchTrendingTracks();
         },
       );
     }
     if (_trendingTracks.isEmpty) {
       return const Center(
-          child: Text('No trending tracks found',
-              style: TextStyle(color: Colors.white54)));
+        child: Text(
+          'No trending tracks found',
+          style: TextStyle(color: Colors.white54),
+        ),
+      );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 32),
-      itemCount: _trendingTracks.length,
-      itemBuilder: (_, i) => _buildTrackTile(_trendingTracks, i),
+
+    return RefreshIndicator(
+      onRefresh: _fetchTrendingTracks,
+      color: const Color(0xFFFF5500),
+      backgroundColor: _panelBackground,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(top: 12, bottom: 32),
+        itemCount: _trendingTracks.length,
+        itemBuilder: (_, i) => _buildTrackListTile(_trendingTracks, i),
+      ),
     );
   }
 
   Widget _buildPlaylistsTab() {
     if (_isPlaylistsLoading) {
       return const Center(
-          child: CircularProgressIndicator(color: Color(0xFFFF5500)));
+        child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+      );
     }
     if (_playlistsError) {
       return _buildErrorState(
         onRetry: () async {
-          setState(() { _isPlaylistsLoading = true; _playlistsError = false; });
+          setState(() {
+            _isPlaylistsLoading = true;
+            _playlistsError = false;
+          });
           await _fetchPlaylists();
         },
       );
     }
     if (_playlists.isEmpty) {
       return const Center(
-          child: Text('No playlists available',
-              style: TextStyle(color: Colors.white54)));
+        child: Text(
+          'No playlists available',
+          style: TextStyle(color: Colors.white54),
+        ),
+      );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 32),
-      itemCount: _playlists.length,
-      itemBuilder: (_, i) => _buildPlaylistTile(_playlists[i]),
+
+    return RefreshIndicator(
+      onRefresh: _fetchPlaylists,
+      color: const Color(0xFFFF5500),
+      backgroundColor: _panelBackground,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        itemCount: _playlists.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (_, i) => _buildPlaylistListCard(_playlists[i]),
+      ),
     );
   }
 
   Widget _buildAlbumsTab() {
     if (_isAlbumsLoading) {
       return const Center(
-          child: CircularProgressIndicator(color: Color(0xFFFF5500)));
+        child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+      );
     }
     if (_albumsError) {
       return _buildErrorState(
         onRetry: () async {
-          setState(() { _isAlbumsLoading = true; _albumsError = false; });
+          setState(() {
+            _isAlbumsLoading = true;
+            _albumsError = false;
+          });
           await _fetchAlbums();
         },
       );
     }
     if (_albumPlaylists.isEmpty) {
       return const Center(
-          child: Text('No albums available',
-              style: TextStyle(color: Colors.white54)));
+        child: Text(
+          'No albums available',
+          style: TextStyle(color: Colors.white54),
+        ),
+      );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 32),
-      itemCount: _albumPlaylists.length,
-      itemBuilder: (_, i) => _buildPlaylistTile(_albumPlaylists[i]),
+
+    return RefreshIndicator(
+      onRefresh: _fetchAlbums,
+      color: const Color(0xFFFF5500),
+      backgroundColor: _panelBackground,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        itemCount: _albumPlaylists.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (_, i) => _buildPlaylistListCard(_albumPlaylists[i]),
+      ),
     );
   }
 
-  // ─── Item builders ─────────────────────────────────────────────────────────
+  Widget _buildSectionHeader({
+    required String title,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          if (actionLabel != null && onAction != null)
+            GestureDetector(
+              onTap: onAction,
+              child: Text(
+                actionLabel,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
-  Widget _buildTrackTile(List<_Track> tracks, int index) {
+  Widget _buildTrendingPreviewTile(List<_Track> tracks, int index) {
     final track = tracks[index];
     final hasArtwork = track.artworkUrl != null &&
         track.artworkUrl!.isNotEmpty &&
         !track.artworkUrl!.contains('default-artwork');
+
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        padding: const EdgeInsets.fromLTRB(0, 2, 0, 2),
         child: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(8),
               child: hasArtwork
                   ? CachedNetworkImage(
                       imageUrl: track.artworkUrl!,
-                      width: 56,
-                      height: 56,
+                      width: 52,
+                      height: 52,
                       fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => _artworkFallback(),
+                      errorWidget: (_, __, ___) => _artworkFallback(52),
                     )
-                  : _artworkFallback(),
+                  : _artworkFallback(52),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -500,36 +765,26 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  if (track.artistName.isNotEmpty)
-                    Text(
-                      track.artistName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 13),
+                  const SizedBox(height: 2),
+                  Text(
+                    track.artistName.isEmpty ? 'Unknown artist' : track.artistName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
                     ),
-                  Row(
-                    children: [
-                      const Icon(Icons.play_arrow_rounded,
-                          color: Colors.white38, size: 13),
-                      Text(
-                        ' ${track.playCount}',
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 11),
-                      ),
-                    ],
                   ),
                 ],
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.more_horiz, color: Colors.white38),
               onPressed: () {},
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              icon: const Icon(Icons.more_horiz, color: Colors.white54),
               visualDensity: VisualDensity.compact,
             ),
           ],
@@ -538,57 +793,362 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     );
   }
 
-  Widget _buildPlaylistTile(_PlaylistInfo playlist) {
-    final hasArtwork =
-        playlist.artworkUrl != null && playlist.artworkUrl!.isNotEmpty;
+  Widget _buildRecentTracksCard(List<_Track> recentTracks) {
+    final playableTracks =
+        recentTracks.where((track) => track.hlsUrl.isNotEmpty).toList();
+    final previewTracks = recentTracks.take(2).toList();
+    final heroTrack = previewTracks.isNotEmpty ? previewTracks.first : recentTracks.first;
+    final hasArtwork = heroTrack.artworkUrl != null &&
+        heroTrack.artworkUrl!.isNotEmpty &&
+        !heroTrack.artworkUrl!.contains('default-artwork');
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF262626),
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF2F2935), Color(0xFF40334F)],
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: hasArtwork
+                        ? CachedNetworkImage(
+                            imageUrl: heroTrack.artworkUrl!,
+                            width: 136,
+                            height: 136,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => _artworkFallback(136),
+                          )
+                        : _artworkFallback(136),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Latest Hip Hop\n& Rap',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 23,
+                            fontWeight: FontWeight.w500,
+                            height: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Most recent tracks uploaded in this genre.',
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Container(
+                              width: 58,
+                              height: 58,
+                              decoration: const BoxDecoration(
+                                color: Color(0xCC111111),
+                                shape: BoxShape.circle,
+                              ),
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _isRecentCollectionLiked =
+                                        !_isRecentCollectionLiked;
+                                  });
+                                },
+                                child: Icon(
+                                  _isRecentCollectionLiked
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            GestureDetector(
+                              onTap: playableTracks.isEmpty
+                                  ? null
+                                  : () => _playRecentTracks(playableTracks),
+                              child: Container(
+                                width: 66,
+                                height: 66,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Colors.black,
+                                  size: 40,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+              decoration: const BoxDecoration(
+                color: Color(0xFF262626),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(28),
+                ),
+              ),
+              child: Column(
+                children: [
+                  for (int i = 0; i < previewTracks.length; i++) ...[
+                    _buildFeaturedTrackRow(
+                      previewTracks,
+                      i,
+                    ),
+                    if (i < previewTracks.length - 1)
+                      const SizedBox(height: 14),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeaturedTrackRow(List<_Track> tracks, int index) {
+    final track = tracks[index];
+    final hasArtwork = track.artworkUrl != null &&
+        track.artworkUrl!.isNotEmpty &&
+        !track.artworkUrl!.contains('default-artwork');
+    return GestureDetector(
+      onTap: () => _playFrom(tracks, index),
       child: Row(
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(10),
             child: hasArtwork
                 ? CachedNetworkImage(
-                    imageUrl: playlist.artworkUrl!,
-                    width: 56,
-                    height: 56,
+                    imageUrl: track.artworkUrl!,
+                    width: 62,
+                    height: 62,
                     fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _artworkFallback(),
+                    errorWidget: (_, __, ___) => _artworkFallback(62),
                   )
-                : _artworkFallback(),
+                : _artworkFallback(62),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  playlist.title,
+                  track.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600),
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
+                const SizedBox(height: 4),
                 Text(
-                  'by ${playlist.ownerName} · ${playlist.trackCount} tracks',
+                  track.artistName.isEmpty ? 'Unknown artist' : track.artistName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(color: Colors.white54, fontSize: 13),
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 16,
+                  ),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 10),
+          const Icon(Icons.more_horiz, color: Colors.white54, size: 30),
         ],
       ),
     );
   }
 
-  // ─── Shared error state ────────────────────────────────────────────────────
+  Widget _buildTrackListTile(List<_Track> tracks, int index) {
+    final track = tracks[index];
+    final hasArtwork = track.artworkUrl != null &&
+        track.artworkUrl!.isNotEmpty &&
+        !track.artworkUrl!.contains('default-artwork');
 
-  Widget _buildErrorState({required VoidCallback onRetry}) {
+    return GestureDetector(
+      onTap: () => _playFrom(tracks, index),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 2, 8, 2),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: hasArtwork
+                  ? CachedNetworkImage(
+                      imageUrl: track.artworkUrl!,
+                      width: 50,
+                      height: 50,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _artworkFallback(50),
+                    )
+                  : _artworkFallback(50),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    track.artistName.isEmpty ? 'Unknown artist' : track.artistName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (track.playCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  _formatPlays(track.playCount),
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            const Icon(Icons.more_horiz, color: Colors.white54),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaylistListCard(_PlaylistInfo playlist) {
+    final hasArtwork =
+        playlist.artworkUrl != null && playlist.artworkUrl!.isNotEmpty;
+
+    return GestureDetector(
+      onTap: () => context.push('/search/playlist/${playlist.id}'),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _panelBackground,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: hasArtwork
+                  ? CachedNetworkImage(
+                      imageUrl: playlist.artworkUrl!,
+                      width: 72,
+                      height: 72,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _artworkFallback(72),
+                    )
+                  : _artworkFallback(72),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    playlist.ownerName.isEmpty ? 'Playlist' : playlist.ownerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (playlist.trackCount > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${playlist.trackCount} tracks',
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white38,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState({required Future<void> Function() onRetry}) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -601,21 +1161,32 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
           ElevatedButton(
             onPressed: onRetry,
             style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF5500)),
-            child:
-                const Text('Retry', style: TextStyle(color: Colors.white)),
+              backgroundColor: const Color(0xFFFF5500),
+            ),
+            child: const Text(
+              'Retry',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
     );
   }
 
-  // ─── Fallbacks ─────────────────────────────────────────────────────────────
+  String _formatPlays(int plays) {
+    if (plays >= 1000000) return '${(plays / 1000000).toStringAsFixed(1)}M';
+    if (plays >= 1000) return '${(plays / 1000).toStringAsFixed(1)}K';
+    return plays.toString();
+  }
 
-  Widget _artworkFallback() => Container(
-        width: 56,
-        height: 56,
+  Widget _artworkFallback(double size) => Container(
+        width: size,
+        height: size,
         color: const Color(0xFF2A2A2A),
-        child: const Icon(Icons.music_note, color: Colors.white38, size: 24),
+        child: Icon(
+          Icons.music_note,
+          color: Colors.white38,
+          size: size * 0.4,
+        ),
       );
 }
