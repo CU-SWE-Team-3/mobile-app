@@ -10,15 +10,7 @@ class _Genre {
   final Color color;
   final int imageWidth;
   final int imageHeight;
-  final String? searchQuery;
-  const _Genre(
-    this.name,
-    this.assetPath,
-    this.color,
-    this.imageWidth,
-    this.imageHeight, {
-    this.searchQuery,
-  });
+  const _Genre(this.name, this.assetPath, this.color, this.imageWidth, this.imageHeight);
 }
 
 class SearchPage extends StatefulWidget {
@@ -36,12 +28,6 @@ class _SearchPageState extends State<SearchPage> {
     _Genre('R&B',           'assets/images/R&B.png',          Color(0xFF9B59B6), 495, 206),
     _Genre('Chill',         'assets/images/Chill.png',        Color(0xFF1AAD6E), 501, 212),
     _Genre('Party',         'assets/images/Party.png',        Color(0xFFDDAA1A), 500, 429),
-    _Genre('Workout',       'assets/images/Workout.png',      Color(0xFF7A2BD8), 434, 575),
-    _Genre('Techno',        'assets/images/Techno.png',       Color(0xFF1A6EDD), 434, 575, searchQuery: 'Electronic'),
-    _Genre('House',         'assets/images/House.png',        Color(0xFFD27E2A), 434, 575),
-    _Genre('Feel Good',     'assets/images/Feel_good.png',    Color(0xFF00A889), 434, 575, searchQuery: 'Feel Good'),
-    _Genre('At Home',       'assets/images/At_home.png',      Color(0xFF7C5C3B), 434, 575),
-    _Genre('Healing Era',   'assets/images/Healing_era.png',  Color(0xFF4E8D7C), 434, 575),
   ];
 
   final _controller = TextEditingController();
@@ -284,18 +270,12 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildVibesGrid() {
-    const columnGap = 4.0;
-    const itemGap = 2.0;
-    final leftColumn = <_Genre>[];
-    final rightColumn = <_Genre>[];
+    const gap = 6.0;
 
-    for (int i = 0; i < _genres.length; i++) {
-      if (i.isEven) {
-        leftColumn.add(_genres[i]);
-      } else {
-        rightColumn.add(_genres[i]);
-      }
-    }
+    // left column:  Hip Hop & Rap, Pop, Chill
+    // right column: Electronic, R&B, Party
+    final left  = [_genres[0], _genres[2], _genres[4]];
+    final right = [_genres[1], _genres[3], _genres[5]];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -317,20 +297,20 @@ class _SearchPageState extends State<SearchPage> {
               Expanded(
                 child: Column(
                   children: [
-                    for (int i = 0; i < leftColumn.length; i++) ...[
-                      _buildGenreCard(leftColumn[i]),
-                      if (i < leftColumn.length - 1) const SizedBox(height: itemGap),
+                    for (int i = 0; i < left.length; i++) ...[
+                      _buildGenreCard(left[i]),
+                      if (i < left.length - 1) const SizedBox(height: gap),
                     ],
                   ],
                 ),
               ),
-              const SizedBox(width: columnGap),
+              const SizedBox(width: gap),
               Expanded(
                 child: Column(
                   children: [
-                    for (int i = 0; i < rightColumn.length; i++) ...[
-                      _buildGenreCard(rightColumn[i]),
-                      if (i < rightColumn.length - 1) const SizedBox(height: itemGap),
+                    for (int i = 0; i < right.length; i++) ...[
+                      _buildGenreCard(right[i]),
+                      if (i < right.length - 1) const SizedBox(height: gap),
                     ],
                   ],
                 ),
@@ -344,26 +324,21 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildGenreCard(_Genre genre) {
     return GestureDetector(
-      onTap: () {
-        if (genre.name == 'Hip Hop & Rap') {
-          context.push('/search/hiphop');
-          return;
-        }
-        context.push(
-          '/search/genre/${Uri.encodeComponent(genre.searchQuery ?? genre.name)}',
-        );
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.asset(
-            genre.assetPath,
-            width: double.infinity,
-            fit: BoxFit.fitWidth,
+      onTap: () => context.push(
+          '/search/genre/${Uri.encodeComponent(genre.name)}'),
+      child: AspectRatio(
+        aspectRatio: genre.imageWidth / genre.imageHeight,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.asset(
+              genre.assetPath,
+              fit: BoxFit.cover,
+            ),
           ),
         ),
       ),
