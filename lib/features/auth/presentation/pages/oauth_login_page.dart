@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 
 class OAuthLoginPage extends ConsumerStatefulWidget {
   const OAuthLoginPage({super.key});
@@ -78,10 +79,9 @@ debugPrint('[Login] refreshToken extracted: $refreshToken');
       await prefs.setString('avatarUrl', avatarUrl);
       debugPrint('[Login] avatarUrl saved: $avatarUrl');
       dioClient.setAuthToken(token);
-
-      if (mounted) {
-        context.go('/home');
-      }
+      if (!mounted) return;
+      ref.read(sessionUserIdProvider.notifier).state = user['_id'] as String? ?? '';
+      context.go('/home');
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

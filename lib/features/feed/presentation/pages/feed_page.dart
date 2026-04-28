@@ -1,14 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../../core/network/dio_client.dart';
-import '../../../../core/network/user_session.dart';
-import '../../../engagement/presentation/providers/engagement_provider.dart';
-import '../../../player/presentation/providers/player_provider.dart';
-import '../providers/feed_provider.dart';
-import '../widgets/feed_track_card.dart';
-
-enum _Tab { discover, following }
+import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 
 class FeedPage extends ConsumerStatefulWidget {
   const FeedPage({super.key});
@@ -184,81 +176,83 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Column(
-        children: [
-          // ── Tab toggle ──────────────────────────────────────────────────
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Center(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(32),
-                  ),
-                  padding: const EdgeInsets.all(4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _TabButton(
-                        key: const ValueKey('feed_discover_tab_button'),
-                        label: 'Discover',
-                        isSelected: _tab == _Tab.discover,
-                        onTap: () => _switchTab(_Tab.discover),
+      body: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+
+            // ── Toggle buttons ─────────────────────────────────────
+            Center(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                padding: const EdgeInsets.all(4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _TabButton(
+                      key: const ValueKey('feed_discover_tab_button'),
+                      label: 'Discover',
+                      isSelected: _selectedTab == 'Discover',
+                      onTap: () => setState(() => _selectedTab = 'Discover'),
+                    ),
+                    _TabButton(
+                      key: const ValueKey('feed_following_tab_button'),
+                      label: 'Following',
+                      isSelected: _selectedTab == 'Following',
+                      onTap: () => setState(() => _selectedTab = 'Following'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Body ───────────────────────────────────────────────
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () async {},
+                color: const Color(0xFFFF5500),
+                backgroundColor: const Color(0xFF1A1A1A),
+                child: const SingleChildScrollView(
+                  physics: AlwaysScrollableScrollPhysics(),
+                  child: SizedBox(
+                    height: 400,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'No Content',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Please follow some artists first.\nPull to try again.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
                       ),
-                      _TabButton(
-                        key: const ValueKey('feed_following_tab_button'),
-                        label: 'Following',
-                        isSelected: _tab == _Tab.following,
-                        onTap: () => _switchTab(_Tab.following),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // ── Body ────────────────────────────────────────────────────────
-          Expanded(
-            child: _buildBody(feedState),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBody(FeedState feedState) {
-    if (feedState.isLoading && feedState.tracks.isEmpty) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-      );
-    }
-
-    if (feedState.error != null && feedState.tracks.isEmpty) {
-      return _ErrorView(
-        message: feedState.error!,
-        onRetry: () {
-          _loaded.remove(_tab);
-          _ensureLoaded(_tab);
-        },
-      );
-    }
-
-    if (feedState.tracks.isEmpty) {
-      return _EmptyView(tab: _tab);
-    }
-
-    return PageView.builder(
-      controller: _pageController,
-      scrollDirection: Axis.vertical,
-      itemCount: feedState.tracks.length,
-      onPageChanged: (i) => _onPageChanged(i, feedState.tracks),
-      itemBuilder: (context, index) => FeedTrackCard(
-        key: ValueKey(feedState.tracks[index].id),
-        track: feedState.tracks[index],
-        isActive: index == _currentPage,
+            // ── Mini player bar (Following tab only) ───────────────
+          ],
+        ),
       ),
     );
   }

@@ -267,10 +267,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           .whereType<Map<String, dynamic>>()
           .map(_ProfilePlaylist.fromJson)
           .toList();
-      if (mounted) setState(() {
-        _playlists = playlists;
-        _playlistsLoading = false;
-      });
+      if (mounted)
+        setState(() {
+          _playlists = playlists;
+          _playlistsLoading = false;
+        });
     } catch (_) {
       if (mounted) setState(() => _playlistsLoading = false);
     }
@@ -288,13 +289,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _fetchProfile() async {
-    setState(() { _isLoading = true; _hasError = false; });
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
     try {
       final prefs = await SharedPreferences.getInstance();
       final String userId = prefs.getString('userId') ?? '';
 
       if (userId.isEmpty) {
-        if (mounted) setState(() { _username = prefs.getString('displayName') ?? ''; _isLoading = false; });
+        if (mounted)
+          setState(() {
+            _username = prefs.getString('displayName') ?? '';
+            _isLoading = false;
+          });
         return;
       }
 
@@ -304,13 +312,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       Map<String, dynamic>? profileData;
 
       try {
-        final profileResponse = await _withRetry(() => dioClient.dio.get('/profile/me'));
+        final profileResponse =
+            await _withRetry(() => dioClient.dio.get('/profile/me'));
 
         // Null-safe extraction — avoids hard-cast TypeErrors on unexpected shapes.
         final respBody = profileResponse.data;
         final dataNode = (respBody is Map) ? respBody['data'] : null;
         final userNode = (dataNode is Map) ? dataNode['user'] : null;
-        profileData    = (userNode is Map) ? Map<String, dynamic>.from(userNode) : null;
+        profileData =
+            (userNode is Map) ? Map<String, dynamic>.from(userNode) : null;
 
         if (profileData == null) {
           throw Exception('Unexpected /profile/me response: $respBody');
@@ -321,7 +331,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         final statusCode = e.response?.statusCode;
         final responseBody = e.response?.data;
         // ignore: avoid_print
-        print('=== /profile/me FAILED: status=$statusCode body=$responseBody\n$e');
+        print(
+            '=== /profile/me FAILED: status=$statusCode body=$responseBody\n$e');
 
         // ── attempt 2: fallback to GET /profile/:permalink (no auth needed) ──
         final permalink = prefs.getString('permalink') ?? '';
@@ -352,10 +363,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         if (cachedName.isNotEmpty) {
           if (mounted) {
             setState(() {
-              _username  = cachedName;
-              _bio       = prefs.getString('bio')     ?? '';
-              _city      = prefs.getString('city')    ?? '';
-              _country   = prefs.getString('country') ?? '';
+              _username = cachedName;
+              _bio = prefs.getString('bio') ?? '';
+              _city = prefs.getString('city') ?? '';
+              _country = prefs.getString('country') ?? '';
               _isLoading = false;
               // Show stale data rather than an error screen — retry is still
               // available via pull-to-refresh.
@@ -364,7 +375,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           return;
         }
         // No cached data at all — surface the error so the retry button appears.
-        if (mounted) setState(() { _isLoading = false; _hasError = true; });
+        if (mounted)
+          setState(() {
+            _isLoading = false;
+            _hasError = true;
+          });
         return;
       }
 
@@ -373,11 +388,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
       // Cache to prefs so edit-page re-fetches and network-error fallbacks
       // have fresh values.
-      final bio     = data['bio']     as String? ?? '';
-      final city    = data['city']    as String? ?? '';
+      final bio = data['bio'] as String? ?? '';
+      final city = data['city'] as String? ?? '';
       final country = data['country'] as String? ?? '';
-      await prefs.setString('bio',     bio);
-      await prefs.setString('city',    city);
+      await prefs.setString('bio', bio);
+      await prefs.setString('city', city);
       await prefs.setString('country', country);
       final avatarUrl = data['avatarUrl'] as String? ?? '';
       if (avatarUrl.isNotEmpty) {
@@ -386,7 +401,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       }
 
       // Always fetch counts from the network endpoints — they are authoritative.
-      int followerCount  = 0;
+      int followerCount = 0;
       int followingCount = 0;
       try {
         final followersResp = await _withRetry(
@@ -394,18 +409,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         await Future.delayed(const Duration(milliseconds: 200));
         final followingResp = await _withRetry(
             () => dioClient.dio.get('/network/$userId/following'));
-        followerCount  = _parseInt(followersResp.data['total'] ?? followersResp.data['count']);
-        followingCount = _parseInt(followingResp.data['total'] ?? followingResp.data['count']);
+        followerCount = _parseInt(
+            followersResp.data['total'] ?? followersResp.data['count']);
+        followingCount = _parseInt(
+            followingResp.data['total'] ?? followingResp.data['count']);
       } catch (_) {}
 
       if (mounted) {
         setState(() {
-          _username       = data['displayName'] as String? ?? prefs.getString('displayName') ?? '';
-          _bio            = bio;
-          _city           = city;
-          _country        = country;
-          _avatarUrl      = data['avatarUrl']   as String? ?? '';
-          _followerCount  = followerCount;
+          _username = data['displayName'] as String? ??
+              prefs.getString('displayName') ??
+              '';
+          _bio = bio;
+          _city = city;
+          _country = country;
+          _avatarUrl = data['avatarUrl'] as String? ?? '';
+          _followerCount = followerCount;
           _followingCount = followingCount;
           _isLoading = false;
         });
@@ -414,13 +433,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } catch (e, st) {
       // ignore: avoid_print
       print('=== PROFILE FETCH ERROR: $e\n$st');
-      if (mounted) setState(() { _isLoading = false; _hasError = true; });
+      if (mounted)
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
     }
   }
 
   // ── navigate to edit, then re-fetch to show latest data ─────────────
   Future<void> _openEdit() async {
-    final result = await context.push<Map<String, String>>('/profile/edit', extra: {
+    final result =
+        await context.push<Map<String, String>>('/profile/edit', extra: {
       'displayName': _username,
       'bio': _bio,
       'country': _country,
@@ -433,9 +457,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     if (result != null) {
       setState(() {
         _username = result['displayName'] ?? _username;
-        _bio      = result['bio']         ?? _bio;
-        _city     = result['city']        ?? _city;
-        _country  = result['country']     ?? _country;
+        _bio = result['bio'] ?? _bio;
+        _city = result['city'] ?? _city;
+        _country = result['country'] ?? _country;
       });
     }
     if (mounted) _fetchProfile();
@@ -455,11 +479,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     // mirror the removal into _playlists so the profile section updates immediately.
     ref.listen<List<Playlist>>(playlistsProvider, (previous, current) {
       if (previous == null || previous.length <= current.length) return;
-      final removedIds = previous.map((p) => p.id).toSet()
+      final removedIds = previous
+          .map((p) => p.id)
+          .toSet()
           .difference(current.map((p) => p.id).toSet());
       if (removedIds.isNotEmpty && mounted) {
         setState(() {
-          _playlists = _playlists.where((p) => !removedIds.contains(p.id)).toList();
+          _playlists =
+              _playlists.where((p) => !removedIds.contains(p.id)).toList();
         });
       }
     });
@@ -469,67 +496,74 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       body: Stack(
         children: [
           SafeArea(
-        child: Column(
-          children: [
-            _topBar(context),
-            if (_isLoading)
-              const Expanded(
-                child: Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-                ),
-              )
-            else if (_hasError)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('Couldn\'t load profile',
-                          style: TextStyle(color: Colors.white, fontSize: 15)),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        key: const ValueKey('profile_retry_button'),
-                        onPressed: _fetchProfile,
-                        child: const Text('Retry',
-                            style: TextStyle(color: Color(0xFFFF5500))),
+            child: Column(
+              children: [
+                _topBar(context),
+                if (_isLoading)
+                  const Expanded(
+                    child: Center(
+                      child:
+                          CircularProgressIndicator(color: Color(0xFFFF5500)),
+                    ),
+                  )
+                else if (_hasError)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Couldn\'t load profile',
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 15)),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            key: const ValueKey('profile_retry_button'),
+                            onPressed: _fetchProfile,
+                            child: const Text('Retry',
+                                style: TextStyle(color: Color(0xFFFF5500))),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _fetchProfile,
-                  color: const Color(0xFFFF5500),
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _heroSection(context),
-                        _bioSection(),
-                        _insightsRow(context),
-                        _spotlight(),
-                        _sectionHeader('Tracks',
-                            onSeeAll: () => context.push('/profile/tracks')),
-                        _tracksSection(myTracksAsync),
-                        _sectionHeader('Reposts',
-                            onSeeAll: () { _playFromReposts(0); context.push('/profile/reposts'); }),
-                        _repostsList(),
-                        _sectionHeader('Playlists'),
-                        _playlistRow(context),
-                        _sectionHeader('Likes',
-                            onSeeAll: () { _playFromLikes(0); context.push('/likes'); }),
-                        _likesList(),
-                        const SizedBox(height: 120),
-                      ],
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _fetchProfile,
+                      color: const Color(0xFFFF5500),
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _heroSection(context),
+                            _bioSection(),
+                            _insightsRow(context),
+                            _spotlight(),
+                            _sectionHeader('Tracks',
+                                onSeeAll: () =>
+                                    context.push('/profile/tracks')),
+                            _tracksSection(myTracksAsync),
+                            _sectionHeader('Reposts', onSeeAll: () {
+                              _playFromReposts(0);
+                              context.push('/profile/reposts');
+                            }),
+                            _repostsList(),
+                            _sectionHeader('Playlists'),
+                            _playlistRow(context),
+                            _sectionHeader('Likes', onSeeAll: () {
+                              _playFromLikes(0);
+                              context.push('/likes');
+                            }),
+                            _likesList(),
+                            const SizedBox(height: 120),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-          ],
-        ),
+              ],
+            ),
           ),
           const Positioned(
             left: 0,
@@ -786,7 +820,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       ),
       error: (_, __) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        child: Text('No tracks yet', style: TextStyle(color: _sub, fontSize: 14)),
+        child:
+            Text('No tracks yet', style: TextStyle(color: _sub, fontSize: 14)),
       ),
       data: (tracks) {
         if (tracks.isEmpty) {
@@ -802,8 +837,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             final t = e.value;
             // Find this track's index in the full cached list so playback
             // starts from the right position in the complete queue.
-            final fullIdx =
-                _cachedTracks.indexWhere((c) => c.id == t.id);
+            final fullIdx = _cachedTracks.indexWhere((c) => c.id == t.id);
             return _TrackTile(
               track: _Track(t.title, t.artist, _fmtDuration(t.duration)),
               artworkUrl: t.artworkUrl,
@@ -848,8 +882,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     if (_reposts.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        child: Text('No reposts yet',
-            style: TextStyle(color: _sub, fontSize: 14)),
+        child:
+            Text('No reposts yet', style: TextStyle(color: _sub, fontSize: 14)),
       );
     }
     // Watch each repost's engagement state. Pass isReposted:true in params so
@@ -875,50 +909,50 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         return GestureDetector(
           onTap: () => _playFromReposts(e.key),
           child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: hasArtwork
-                      ? Image.network(r.artworkUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _artworkPlaceholder())
-                      : _artworkPlaceholder(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: hasArtwork
+                        ? Image.network(r.artworkUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _artworkPlaceholder())
+                        : _artworkPlaceholder(),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(r.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 2),
-                    Text(r.artistName,
-                        style: TextStyle(color: sub, fontSize: 13)),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(Icons.play_arrow_rounded, size: 13, color: sub),
-                        Text('  ${_fmtCount(r.playCount)}',
-                            style: TextStyle(color: sub, fontSize: 11)),
-                      ],
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(r.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text(r.artistName,
+                          style: TextStyle(color: sub, fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.play_arrow_rounded, size: 13, color: sub),
+                          Text('  ${_fmtCount(r.playCount)}',
+                              style: TextStyle(color: sub, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.more_vert_rounded, color: sub, size: 20),
-            ],
-          ),
+                Icon(Icons.more_vert_rounded, color: sub, size: 20),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -944,50 +978,50 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         return GestureDetector(
           onTap: () => _playFromLikes(e.key),
           child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: hasArtwork
-                      ? Image.network(r.artworkUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _artworkPlaceholder())
-                      : _artworkPlaceholder(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: hasArtwork
+                        ? Image.network(r.artworkUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _artworkPlaceholder())
+                        : _artworkPlaceholder(),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(r.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 2),
-                    Text(r.artistName,
-                        style: TextStyle(color: sub, fontSize: 13)),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(Icons.play_arrow_rounded, size: 13, color: sub),
-                        Text('  ${_fmtCount(r.playCount)}',
-                            style: TextStyle(color: sub, fontSize: 11)),
-                      ],
-                    ),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(r.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text(r.artistName,
+                          style: TextStyle(color: sub, fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.play_arrow_rounded, size: 13, color: sub),
+                          Text('  ${_fmtCount(r.playCount)}',
+                              style: TextStyle(color: sub, fontSize: 11)),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.more_vert_rounded, color: sub, size: 20),
-            ],
-          ),
+                Icon(Icons.more_vert_rounded, color: sub, size: 20),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -996,8 +1030,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Widget _artworkPlaceholder() => const ColoredBox(
         color: Color(0xFF2A2A2A),
-        child:
-            Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+        child: Center(
+            child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
       );
 
   String _fmtCount(int count) {
@@ -1029,87 +1063,89 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       );
     }
     return SizedBox(
-        height: 215,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: _playlists.length,
-          itemBuilder: (_, i) {
-            final p = _playlists[i];
-            // Artwork chain: own HTTPS artwork → first track HTTPS artwork → placeholder
-            final _cardArtwork = () {
-              final own = p.artworkUrl;
-              if (own != null && own.startsWith('https://') && !own.contains('default')) {
-                return own;
-              }
-              return p.firstTrackArtworkUrl;
-            }();
-            return GestureDetector(
-              key: ValueKey('profile_playlist_tile_$i'),
-              onTap: () async {
-                await context.push('/playlist', extra: {'playlistId': p.id});
-                if (mounted) _fetchPlaylists();
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(right: 14),
-                child: SizedBox(
-                  width: 160,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: SizedBox(
-                          width: 160,
-                          height: 160,
-                          child: _cardArtwork != null
-                              ? CachedNetworkImage(
-                                  imageUrl: _cardArtwork,
-                                  fit: BoxFit.cover,
-                                  placeholder: (_, __) => Container(
-                                    color: Colors.grey[850],
-                                    child: const Icon(Icons.queue_music,
-                                        size: 52, color: Colors.white38),
-                                  ),
-                                  errorWidget: (_, __, ___) => Container(
-                                    color: Colors.grey[850],
-                                    child: const Icon(Icons.queue_music,
-                                        size: 52, color: Colors.white38),
-                                  ),
-                                )
-                              : Container(
+      height: 215,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: _playlists.length,
+        itemBuilder: (_, i) {
+          final p = _playlists[i];
+          // Artwork chain: own HTTPS artwork → first track HTTPS artwork → placeholder
+          final cardArtwork = () {
+            final own = p.artworkUrl;
+            if (own != null &&
+                own.startsWith('https://') &&
+                !own.contains('default')) {
+              return own;
+            }
+            return p.firstTrackArtworkUrl;
+          }();
+          return GestureDetector(
+            key: ValueKey('profile_playlist_tile_$i'),
+            onTap: () async {
+              await context.push('/playlist', extra: {'playlistId': p.id});
+              if (mounted) _fetchPlaylists();
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: SizedBox(
+                width: 160,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: SizedBox(
+                        width: 160,
+                        height: 160,
+                        child: cardArtwork != null
+                            ? CachedNetworkImage(
+                                imageUrl: cardArtwork,
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) => Container(
                                   color: Colors.grey[850],
                                   child: const Icon(Icons.queue_music,
                                       size: 52, color: Colors.white38),
                                 ),
-                        ),
+                                errorWidget: (_, __, ___) => Container(
+                                  color: Colors.grey[850],
+                                  child: const Icon(Icons.queue_music,
+                                      size: 52, color: Colors.white38),
+                                ),
+                              )
+                            : Container(
+                                color: Colors.grey[850],
+                                child: const Icon(Icons.queue_music,
+                                    size: 52, color: Colors.white38),
+                              ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        p.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        p.ownerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: _sub, fontSize: 12),
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      p.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      p.ownerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: _sub, fontSize: 12),
+                    ),
+                  ],
                 ),
               ),
-            );
-          },
-        ),
-      );
+            ),
+          );
+        },
+      ),
+    );
   }
 
   // ── helpers ──────────────────────────────────────────────────────────
@@ -1214,7 +1250,9 @@ class _ProfilePlaylist {
       final first = tracks.first;
       if (first is Map<String, dynamic>) {
         final url = first['artworkUrl'] as String?;
-        if (url != null && url.startsWith('https://') && !url.contains('default')) {
+        if (url != null &&
+            url.startsWith('https://') &&
+            !url.contains('default')) {
           firstTrackArtwork = url;
         }
       }

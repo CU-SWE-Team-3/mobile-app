@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/deep_link_state.dart';
 import '../../../../core/network/user_session.dart';
+import '../../../../core/services/socket_service.dart';
 import '../../../notifications/presentation/providers/notification_provider.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
@@ -32,11 +33,19 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
   if (mounted) {
     if (hasSession) {
-      // Fire-and-forget: badge updates as soon as the response arrives.
-      // FCM: add firebase_messaging to pubspec.yaml, retrieve the token,
-      // then call ref.read(notificationProvider.notifier).registerFcmToken(t).
-      ref.read(notificationProvider.notifier).fetchUnreadCount();
-      context.go('/home');
+      // Wire real-time notification callbacks before connecting the socket.
+      // Capture the notifier reference so callbacks outlive this widget.
+      final notifier = ref.read(notificationProvider.notifier);
+      final socketSvc = ref.read(socketServiceProvider);
+      socketSvc.onNewNotification = notifier.socketAddNotification;
+      socketSvc.onNotificationRead = notifier.socketMarkNotificationRead;
+      socketSvc.onAllNotificationsRead = notifier.socketMarkAllRead;
+      socketSvc.onNotificationDeleted = notifier.socketRemoveNotification;
+      socketSvc.connect(accessToken!);
+context.go('/home');
+await Future.delayed(const Duration(milliseconds: 500));
+notifier.fetchUnreadCount();
+notifier.registerFcmToken('stub-fcm-token-replace-with-firebase');
     } else {
       context.go('/start');
     }
