@@ -1,12 +1,8 @@
 import 'dart:async';
-import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../router/app_router.dart';
 
 class DioClient {
@@ -31,19 +27,7 @@ class DioClient {
   }
 
   Future<void> init() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final cookieJar =
-        PersistCookieJar(storage: FileStorage('${dir.path}/.cookies/'));
-    dio.interceptors.add(CookieManager(cookieJar));
-    dio.interceptors.add(LogInterceptor(
-  request: true,
-  requestHeader: true,
-  requestBody: true,
-  responseBody: true,
-  responseHeader: false,
-  logPrint: (o) => debugPrint(o.toString()),
-));
-
+    // No cookie jar — pure Bearer token auth
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('accessToken');
     if (token != null && token.isNotEmpty) {

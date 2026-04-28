@@ -15,6 +15,7 @@ import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/register_screen.dart';
 
 import '../../features/feed/presentation/pages/home_page.dart';
+import '../../features/feed/presentation/pages/recommended_tracks_page.dart';
 import '../../features/feed/presentation/pages/search_page.dart';
 import '../../features/feed/presentation/pages/discover_page.dart';
 import '../../features/feed/presentation/pages/feed_page.dart';
@@ -23,7 +24,9 @@ import '../../features/feed/presentation/pages/search_results_users_page.dart';
 import '../../features/feed/presentation/pages/search_results_playlists_page.dart';
 import '../../features/feed/presentation/pages/electronic_genre_page.dart';
 import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
+import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/pop_genre_page.dart';
+import '../../features/feed/presentation/pages/genre_results_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
 
@@ -162,6 +165,9 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'trending',
                     builder: (_, __) => const TrendingChartsPage()),
+                GoRoute(
+                    path: 'recommended',
+                    builder: (_, __) => const RecommendedTracksPage()),
                 GoRoute(path: 'cast', builder: (_, __) => const CastPage()),
                 GoRoute(
                     path: 'genre/electronic',
@@ -203,6 +209,18 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'playlists',
                     builder: (_, __) => const SearchResultsPlaylistsPage()),
+                 GoRoute(
+                     path: 'hiphop/introducing',
+                     builder: (_, state) => HiphopPlaylistDetailPage(
+                           playlistId:
+                               state.uri.queryParameters['playlistId'] ?? '',
+                           useBuzzingPreset: true,
+                         )),
+                GoRoute(
+                    path: 'genre/:genreName',
+                    builder: (_, state) => GenreResultsPage(
+                          genreName: state.pathParameters['genreName']!,
+                        )),
               ],
             ),
           ],
@@ -358,7 +376,7 @@ final appRouter = GoRouter(
     // ── LIKES (global — accessible from profile and other global routes) ─
     GoRoute(
       path: '/likes',
-      builder: (_, __) => const LibraryLikesPage(),
+      redirect: (_, __) => '/library/likes',
     ),
 
     // ── ENGAGEMENT ────────────────────────────────────────────────────
@@ -371,21 +389,22 @@ final appRouter = GoRouter(
           trackTitle: extra['trackTitle'] as String?,
           trackArtist: extra['trackArtist'] as String?,
           trackArtworkUrl: extra['trackArtworkUrl'] as String?,
-          currentPositionSeconds:
-              extra['currentPositionSeconds'] as int? ?? 0,
+          currentPositionSeconds: extra['currentPositionSeconds'] as int? ?? 0,
         );
       },
     ),
     GoRoute(
       path: '/likers',
       builder: (_, state) => LikersListPage(
-        trackId: (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
+        trackId:
+            (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
       ),
     ),
     GoRoute(
       path: '/reposters',
       builder: (_, state) => RepostersListPage(
-        trackId: (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
+        trackId:
+            (state.extra as Map<String, dynamic>?)?['trackId'] as String? ?? '',
       ),
     ),
 
@@ -407,9 +426,9 @@ final appRouter = GoRouter(
         GoRoute(
           path: 'add-track',
           builder: (_, state) => AddToPlaylistPage(
-            trackId: (state.extra as Map<String, dynamic>?)?['trackId']
-                    as String? ??
-                '',
+            trackId:
+                (state.extra as Map<String, dynamic>?)?['trackId'] as String? ??
+                    '',
           ),
         ),
       ],
