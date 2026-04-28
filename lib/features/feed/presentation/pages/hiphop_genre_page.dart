@@ -1,7 +1,12 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-class HiphopGenrePage extends ConsumerWidget {
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/network/dio_client.dart';
+import '../../../player/presentation/providers/player_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
+class HiphopGenrePage extends ConsumerStatefulWidget {
   const HiphopGenrePage({super.key});
 
   @override
@@ -1155,5 +1160,72 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
           color: Colors.white38,
           size: size * 0.4,
         ),
+      );
+}
+class _Track {
+  final String id;
+  final String title;
+  final String artistName;
+  final String artworkUrl;
+  final String hlsUrl;
+  final int playCount;
+  final DateTime? createdAt;
+
+  const _Track({
+    required this.id,
+    required this.title,
+    required this.artistName,
+    required this.artworkUrl,
+    required this.hlsUrl,
+    required this.playCount,
+    this.createdAt,
+  });
+
+  factory _Track.fromJson(dynamic json) => _Track(
+        id: json['id']?.toString() ?? '',
+        title: json['title'] ?? '',
+        artistName: json['user']?['username'] ?? '',
+        artworkUrl: (json['artwork_url'] ?? '').replaceAll('large', 't500x500'),
+        hlsUrl: json['media']?['transcodings']
+                ?.firstWhere(
+                  (t) => t['format']?['protocol'] == 'hls',
+                  orElse: () => null,
+                )?['url'] ?? '',
+        playCount: json['playback_count'] ?? 0,
+        createdAt: json['created_at'] != null
+            ? DateTime.tryParse(json['created_at'])
+            : null,
+      );
+
+ PlayerTrack toPlayerTrack() => PlayerTrack(
+      id: id,
+      title: title,
+      artist: artistName,
+      audioUrl: hlsUrl,
+      coverUrl: artworkUrl,
+    );
+}
+
+class _PlaylistInfo {
+  final String id;
+  final String title;
+  final String artworkUrl;
+  final String ownerName;
+  final int trackCount;
+
+  const _PlaylistInfo({
+    required this.id,
+    required this.title,
+    required this.artworkUrl,
+    required this.ownerName,
+    required this.trackCount,
+  });
+
+  factory _PlaylistInfo.fromJson(dynamic json) => _PlaylistInfo(
+        id: json['id']?.toString() ?? '',
+        title: json['title'] ?? '',
+        artworkUrl: (json['artwork_url'] ?? '').replaceAll('large', 't500x500'),
+        ownerName: json['user']?['username'] ?? '',
+        trackCount: json['track_count'] ?? 0,
       );
 }
