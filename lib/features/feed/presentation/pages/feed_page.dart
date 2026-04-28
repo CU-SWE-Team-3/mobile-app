@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/network/user_session.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/feed/presentation/providers/feed_provider.dart';
+import 'package:soundcloud_clone/features/feed/presentation/widgets/feed_track_card.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
+
+// Fix 1: Define the _Tab enum that is referenced throughout the file but was missing.
+enum _Tab { discover, following }
 
 class FeedPage extends ConsumerStatefulWidget {
   const FeedPage({super.key});
@@ -81,19 +90,22 @@ class _FeedPageState extends ConsumerState<FeedPage> {
   // Re-seeds engagement state for every track across both feed providers
   // using the now-populated liked/reposted ID sets.
   void _reseedLoadedTracks() {
-    for (final feedProvider in [discoverFeedProvider, followingFeedProvider]) {
-      for (final track in ref.read(feedProvider).tracks) {
-        if (track.id.isEmpty) continue;
-        ref
-            .read(engagementProvider(EngagementParams(trackId: track.id))
-                .notifier)
-            .seed(
-              isLiked: _likedIds.contains(track.id),
-              isReposted: _repostedIds.contains(track.id),
-              likeCount: track.likeCount,
-              repostCount: track.repostCount,
-            );
-      }
+    _seedTracks(ref.read(discoverFeedProvider).tracks);
+    _seedTracks(ref.read(followingFeedProvider).tracks);
+  }
+
+  void _seedTracks(List<FeedTrack> tracks) {
+    for (final track in tracks) {
+      if (track.id.isEmpty) continue;
+      ref
+          .read(engagementProvider(EngagementParams(trackId: track.id))
+              .notifier)
+          .seed(
+            isLiked: _likedIds.contains(track.id),
+            isReposted: _repostedIds.contains(track.id),
+            likeCount: track.likeCount,
+            repostCount: track.repostCount,
+          );
     }
   }
 
@@ -120,12 +132,17 @@ class _FeedPageState extends ConsumerState<FeedPage> {
   void _ensureLoaded(_Tab tab) {
     if (_loaded.contains(tab)) return;
     _loaded.add(tab);
-    if (tab == _Tab.discover) {
-      ref.read(discoverFeedProvider.notifier).load();
-    } else {
-      ref.read(followingFeedProvider.notifier).load();
-    }
+    _loadTab(tab);
   }
+
+  Future<void> _loadTab(_Tab tab) {
+    if (tab == _Tab.discover) {
+      return ref.read(discoverFeedProvider.notifier).load();
+    }
+    return ref.read(followingFeedProvider.notifier).load();
+  }
+
+  Future<void> _refreshCurrentTab() => _loadTab(_tab);
 
   // ── Page change ─────────────────────────────────────────────────────────────
 
@@ -140,29 +157,18 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
   @override
   Widget build(BuildContext context) {
-    final feedState = ref.watch(
-      _tab == _Tab.discover ? discoverFeedProvider : followingFeedProvider,
-    );
+    final ProviderListenable<FeedState> selectedFeedProvider =
+        _tab == _Tab.discover ? discoverFeedProvider : followingFeedProvider;
+    final feedState = ref.watch(selectedFeedProvider);
 
     // Seed engagement state and auto-play first track when feed loads.
-    ref.listen(
-      _tab == _Tab.discover ? discoverFeedProvider : followingFeedProvider,
+    ref.listen<FeedState>(
+      selectedFeedProvider,
       (prev, next) {
         // Use the pre-fetched liked/reposted ID sets for correct initial state.
         // If IDs haven't arrived yet, seed() is called again from
         // _reseedLoadedTracks() once _fetchUserInteractionIds() completes.
-        for (final track in next.tracks) {
-          if (track.id.isEmpty) continue;
-          ref
-              .read(engagementProvider(EngagementParams(trackId: track.id))
-                  .notifier)
-              .seed(
-                isLiked: _likedIds.contains(track.id),
-                isReposted: _repostedIds.contains(track.id),
-                likeCount: track.likeCount,
-                repostCount: track.repostCount,
-              );
-        }
+        _seedTracks(next.tracks);
         // Auto-play the first track as soon as it arrives.
         if ((prev == null || prev.tracks.isEmpty) &&
             next.tracks.isNotEmpty &&
@@ -195,14 +201,19 @@ class _FeedPageState extends ConsumerState<FeedPage> {
                     _TabButton(
                       key: const ValueKey('feed_discover_tab_button'),
                       label: 'Discover',
-                      isSelected: _selectedTab == 'Discover',
-                      onTap: () => setState(() => _selectedTab = 'Discover'),
+                      // Fix 2: Was `_selectedTab == 'Discover'` (undefined variable).
+                      // Now correctly compares against the existing _tab enum field.
+                      isSelected: _tab == _Tab.discover,
+                      // Fix 2 (cont.): Was `setState(() => _selectedTab = 'Discover')`.
+                      // Now delegates to _switchTab which handles all tab-switch logic.
+                      onTap: () => _switchTab(_Tab.discover),
                     ),
                     _TabButton(
                       key: const ValueKey('feed_following_tab_button'),
                       label: 'Following',
-                      isSelected: _selectedTab == 'Following',
-                      onTap: () => setState(() => _selectedTab = 'Following'),
+                      // Fix 2: Same correction as above for the Following tab.
+                      isSelected: _tab == _Tab.following,
+                      onTap: () => _switchTab(_Tab.following),
                     ),
                   ],
                 ),
@@ -212,47 +223,73 @@ class _FeedPageState extends ConsumerState<FeedPage> {
             const SizedBox(height: 24),
 
             // ── Body ───────────────────────────────────────────────
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () async {},
-                color: const Color(0xFFFF5500),
-                backgroundColor: const Color(0xFF1A1A1A),
-                child: const SingleChildScrollView(
-                  physics: AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(
-                    height: 400,
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'No Content',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Please follow some artists first.\nPull to try again.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            Expanded(child: _buildFeedBody(feedState)),
 
             // ── Mini player bar (Following tab only) ───────────────
+            const MiniPlayerWidget(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFeedBody(FeedState feedState) {
+    if (feedState.isLoading && feedState.tracks.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+      );
+    }
+
+    if (feedState.error != null) {
+      return RefreshIndicator(
+        onRefresh: _refreshCurrentTab,
+        color: const Color(0xFFFF5500),
+        backgroundColor: const Color(0xFF1A1A1A),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.55,
+            child: _ErrorView(
+              message: feedState.error!,
+              onRetry: _refreshCurrentTab,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (feedState.tracks.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _refreshCurrentTab,
+        color: const Color(0xFFFF5500),
+        backgroundColor: const Color(0xFF1A1A1A),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.55,
+            child: _EmptyView(tab: _tab),
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refreshCurrentTab,
+      color: const Color(0xFFFF5500),
+      backgroundColor: const Color(0xFF1A1A1A),
+      child: PageView.builder(
+        controller: _pageController,
+        scrollDirection: Axis.vertical,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: feedState.tracks.length,
+        onPageChanged: (index) => _onPageChanged(index, feedState.tracks),
+        itemBuilder: (context, index) {
+          final track = feedState.tracks[index];
+          return FeedTrackCard(
+            track: track,
+            isActive: index == _currentPage,
+          );
+        },
       ),
     );
   }

@@ -434,7 +434,6 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         trackId: track.id,
         position: position.inSeconds.toDouble(),
         isPlaying: state.isPlaying,
-        volume: state.volume,
       );
     });
   }
