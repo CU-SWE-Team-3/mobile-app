@@ -840,22 +840,12 @@ class _WaveformPainter extends CustomPainter {
   final List<int>? waveform;
   final bool isPlaying;
 
-  static const _fallbackHeights = [
-    0.30, 0.50, 0.70, 0.40, 0.90, 0.60, 0.80, 0.50, 0.30, 0.70,
-    0.40, 0.60, 0.80, 0.50, 0.30, 0.90, 0.70, 0.40, 0.60, 0.50,
-    0.80, 0.30, 0.70, 0.50, 0.40, 0.90, 0.60, 0.30, 0.80, 0.50,
-    0.40, 0.70, 0.30, 0.60, 0.90, 0.50, 0.80, 0.40, 0.70, 0.30,
-    0.50, 0.80, 0.60, 0.40, 0.70, 0.30, 0.90, 0.50, 0.60, 0.40,
-    0.80, 0.30, 0.70, 0.50, 0.40, 0.60, 0.90, 0.30, 0.50, 0.70,
-    0.40, 0.80, 0.60, 0.30, 0.90, 0.50, 0.70, 0.40, 0.60, 0.30,
-  ];
-
   _WaveformPainter(
       {required this.progress, this.waveform, required this.isPlaying});
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (!isPlaying) {
+    if (waveform == null || waveform!.isEmpty) {
       const strokeWidth = 2.0;
       final playedPaint = Paint()
         ..color = AppTheme.primary
@@ -872,12 +862,7 @@ class _WaveformPainter extends CustomPainter {
       return;
     }
 
-    final List<double> heights;
-    if (waveform != null && waveform!.isNotEmpty) {
-      heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
-    } else {
-      heights = _fallbackHeights;
-    }
+    final heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
 
     final barCount = heights.length;
     const spacing = 2.0;
@@ -905,5 +890,7 @@ class _WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WaveformPainter old) =>
-      old.progress != progress || old.isPlaying != isPlaying;
+      old.progress != progress ||
+      old.isPlaying != isPlaying ||
+      old.waveform != waveform;
 }

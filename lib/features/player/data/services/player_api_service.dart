@@ -32,6 +32,60 @@ class PlayerApiService {
     }
   }
 
+  Future<PlayerTrack?> getTrackDetails(
+    String trackId, {
+    String? trackPermalink,
+  }) async {
+    final refs = <String>[
+      trackId,
+      if (trackPermalink != null && trackPermalink.isNotEmpty) trackPermalink,
+    ];
+
+    for (final ref in refs) {
+      final track = await _fetchTrackDetails(ref);
+      if (track != null) return track;
+    }
+
+    return null;
+  }
+
+  Future<PlayerTrack?> _fetchTrackDetails(String trackRef) async {
+    try {
+      final response = await _dio.get('/tracks/$trackRef');
+      final body = response.data;
+      final inner = body is Map ? (body['data'] ?? body) : body;
+      final rawTrack = inner is Map<String, dynamic>
+          ? (inner['track'] is Map<String, dynamic>
+              ? inner['track'] as Map<String, dynamic>
+              : inner)
+          : null;
+      if (rawTrack == null) return null;
+
+      final artistRaw = rawTrack['artist'] ?? rawTrack['user'];
+      final artist = artistRaw is Map<String, dynamic> ? artistRaw : const {};
+      final durationRaw = rawTrack['duration'];
+
+      return PlayerTrack(
+        id: (rawTrack['_id'] ?? rawTrack['id'] ?? trackRef).toString(),
+        title: (rawTrack['title'] ?? '').toString(),
+        artist: (artist['displayName'] ?? artist['username'] ?? '').toString(),
+        audioUrl: (rawTrack['hlsUrl'] ?? rawTrack['audioUrl'] ?? '').toString(),
+        coverUrl: (rawTrack['artworkUrl'] ?? rawTrack['coverUrl']) as String?,
+        duration: durationRaw is num
+            ? Duration(seconds: durationRaw.toInt())
+            : null,
+        waveform: (rawTrack['waveform'] as List<dynamic>?)
+            ?.map((e) => (e as num).toInt())
+            .toList(),
+        artistId: artist['_id'] as String? ?? artist['id'] as String?,
+        artistPermalink: artist['permalink'] as String?,
+        trackPermalink: rawTrack['permalink'] as String?,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Heartbeat ─────────────────────────────────────────────────────────────
 
   /// PUT /player/state — fire-and-forget position heartbeat every few seconds.

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/utils/profile_navigation.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 class HiphopGenrePage extends ConsumerStatefulWidget {
@@ -18,6 +19,11 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
   static const _pageBackground = Color(0xFF111111);
   static const _panelBackground = Color(0xFF1A1A1A);
   static const _hiphopQuery = 'Hiphop & rap';
+  static const _hiphopGenreQueries = [
+    'Hiphop & rap',
+    'Hip Hop & Rap',
+    'Hip-hop & Rap',
+  ];
   static const _buzzingLikeKey = 'buzzing_hiphop_rap_liked';
 
   late final TabController _tabController;
@@ -75,12 +81,25 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
 
   Future<void> _fetchGenreTracks() async {
     try {
-      final resp = await dioClient.dio.get(
-        '/discovery/genre/${Uri.encodeComponent(_hiphopQuery)}',
+      final discoveryResponses = await Future.wait(
+        _hiphopGenreQueries.map(
+          (genre) => dioClient.dio
+              .get('/discovery/genre/${Uri.encodeComponent(genre)}')
+              .then<dynamic>((resp) => resp.data)
+              .catchError((_) => null),
+        ),
       );
+
+      final mergedTracks = <_Track>[];
+      for (final body in discoveryResponses) {
+        mergedTracks.addAll(_extractTracks(body));
+      }
+
+      final dedupedTracks = _dedupeTracks(mergedTracks);
+
       if (!mounted) return;
       setState(() {
-        _tracks = _extractTracks(resp.data);
+        _tracks = dedupedTracks;
         _isLoading = false;
       });
     } catch (_) {
@@ -122,10 +141,12 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
 
   Future<void> _fetchPlaylists() async {
     try {
+      debugPrint('[HiphopGenrePage] _fetchPlaylists: requesting genre="Hip Hop & Rap"');
       final resp = await dioClient.dio.get(
         '/playlists',
-        queryParameters: {'genre': _hiphopQuery, 'limit': 10},
+        queryParameters: {'genre': 'Hip Hop & Rap', 'limit': 10},
       );
+      debugPrint('[HiphopGenrePage] _fetchPlaylists raw: ${resp.data}');
       if (!mounted) return;
       setState(() {
         _playlists = _extractPlaylists(resp.data);
@@ -180,6 +201,15 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
         .toList();
   }
 
+  List<_Track> _dedupeTracks(List<_Track> tracks) {
+    final byId = <String, _Track>{};
+    for (final track in tracks) {
+      if (track.id.isEmpty) continue;
+      byId.putIfAbsent(track.id, () => track);
+    }
+    return byId.values.toList();
+  }
+
   List<_PlaylistInfo> _extractPlaylists(dynamic body) {
     if (body is! Map<String, dynamic>) return [];
     final data = body['data'];
@@ -219,6 +249,17 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
       return bTime.compareTo(aTime);
     });
     return tracks;
+  }
+
+  List<_ArtistProfile> get _artistProfiles {
+    final byKey = <String, _ArtistProfile>{};
+    for (final track in _tracks) {
+      final artist = _ArtistProfile.fromTrack(track);
+      if (artist == null) continue;
+      final key = artist.permalink.isNotEmpty ? artist.permalink : artist.name;
+      byKey.putIfAbsent(key.toLowerCase(), () => artist);
+    }
+    return byKey.values.take(8).toList();
   }
 
   List<List<_Track>> _chunkTracks(List<_Track> tracks, int size) {
@@ -448,8 +489,12 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
             ),
             const SizedBox(height: 10),
             _buildRecentTracksCard(recentTracks),
+            const SizedBox(height: 20),
+            _buildHomePlaylistsSection(),
+            const SizedBox(height: 20),
+            _buildProfilesSection(),
           ],
-          if (previewTracks.isEmpty && recentTracks.isEmpty)
+          if (previewTracks.isEmpty && recentTracks.isEmpty && _playlists.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 40),
               child: Text(
@@ -726,7 +771,9 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     final selectedPlaylist = _playlists.firstWhere(
       (playlist) {
         final title = playlist.title.toLowerCase();
-        return title.contains('buzzing') || title.contains('introducing');
+        return title.contains('buzzing hip hop') ||
+            title.contains('buzzing hiphop') ||
+            title.contains('buzzing');
       },
       orElse: () => _playlists.first,
     );
@@ -828,15 +875,16 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                           const SizedBox(height: 14),
                           Row(
                             children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xCC111111),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: GestureDetector(
-                                  onTap: _toggleBuzzingLike,
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _toggleBuzzingLike,
+                                child: Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xCC111111),
+                                    shape: BoxShape.circle,
+                                  ),
                                   child: Icon(
                                     _isRecentCollectionLiked
                                         ? Icons.favorite
@@ -848,6 +896,7 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                               ),
                               const SizedBox(width: 12),
                               GestureDetector(
+                                behavior: HitTestBehavior.opaque,
                                 onTap: hasPlayablePlaylistTrack
                                     ? _playBuzzingPlaylist
                                     : null,
@@ -1046,7 +1095,9 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
         playlist.artworkUrl != null && playlist.artworkUrl!.isNotEmpty;
 
     return GestureDetector(
-      onTap: () => context.push('/search/playlist/${playlist.id}'),
+      onTap: () => context.push(
+                '/search/hiphop/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+              ),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -1056,7 +1107,9 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
         child: Row(
           children: [
             GestureDetector(
-              onTap: () => context.push('/search/playlist/${playlist.id}'),
+              onTap: () => context.push(
+                '/search/hiphop/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+              ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: hasArtwork
@@ -1120,6 +1173,235 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     );
   }
 
+  Widget _buildPlaylistsGrid() {
+    final gridPlaylists = _playlists.take(4).toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.78,
+        ),
+        itemCount: gridPlaylists.length,
+        itemBuilder: (_, i) => _buildPlaylistGridCard(gridPlaylists[i]),
+      ),
+    );
+  }
+
+  Widget _buildHomePlaylistsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          title: 'Playlists',
+          actionLabel: 'See all',
+          onAction: () => _tabController.animateTo(2),
+        ),
+        const SizedBox(height: 12),
+        if (_isPlaylistsLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+            ),
+          )
+        else if (_playlistsError)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: _buildInlineRetryCard(onRetry: _fetchPlaylists),
+          )
+        else if (_playlists.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'No Hip Hop & Rap playlists available right now.',
+              style: TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          )
+        else
+          _buildPlaylistsGrid(),
+      ],
+    );
+  }
+
+  Widget _buildProfilesSection() {
+    final artists = _artistProfiles;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(title: 'Profiles'),
+        const SizedBox(height: 12),
+        if (_isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+            ),
+          )
+        else if (_hasError)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: _buildInlineRetryCard(
+              message: 'Failed to load Hip Hop & Rap artist profiles.',
+              onRetry: _fetchGenreTracks,
+            ),
+          )
+        else if (artists.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'No Hip Hop & Rap artist profiles available right now.',
+              style: TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          )
+        else
+          SizedBox(
+            height: 104,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              scrollDirection: Axis.horizontal,
+              itemCount: artists.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (_, i) => _buildArtistProfileCard(artists[i]),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildArtistProfileCard(_ArtistProfile artist) {
+    final hasAvatar = artist.avatarUrl.isNotEmpty &&
+        !artist.avatarUrl.contains('default-avatar');
+    final initial = artist.name.isNotEmpty ? artist.name[0].toUpperCase() : '?';
+
+    return GestureDetector(
+      onTap: artist.permalink.isEmpty
+          ? null
+          : () => navigateToUserProfile(
+                context,
+                userId: artist.id,
+                permalink: artist.permalink,
+                displayName: artist.name,
+              ),
+      child: SizedBox(
+        width: 84,
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: const Color(0xFF262626),
+              child: hasAvatar
+                  ? ClipOval(
+                      child: CachedNetworkImage(
+                        imageUrl: artist.avatarUrl,
+                        width: 60,
+                        height: 60,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    )
+                  : Text(
+                      initial,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              artist.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlaylistGridCard(_PlaylistInfo playlist) {
+    final hasArtwork = playlist.artworkUrl.isNotEmpty &&
+        !playlist.artworkUrl.contains('default-artwork');
+    return GestureDetector(
+      onTap: () => context.push(
+        '/search/hiphop/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: hasArtwork
+                  ? CachedNetworkImage(
+                      imageUrl: playlist.artworkUrl,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        color: const Color(0xFF2A2A2A),
+                        child: const Icon(
+                          Icons.music_note,
+                          color: Colors.white38,
+                          size: 36,
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: const Color(0xFF2A2A2A),
+                      child: const Icon(
+                        Icons.music_note,
+                        color: Colors.white38,
+                        size: 36,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            playlist.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            playlist.ownerName.isEmpty ? 'Playlist' : playlist.ownerName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildErrorState({required Future<void> Function() onRetry}) {
     return Center(
       child: Column(
@@ -1128,6 +1410,41 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
           Text(
             'Failed to load. Please try again.',
             style: TextStyle(color: Colors.grey[400], fontSize: 15),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: onRetry,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF5500),
+            ),
+            child: const Text(
+              'Retry',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInlineRetryCard({
+    required Future<void> Function() onRetry,
+    String message = 'Failed to load Hip Hop & Rap playlists.',
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF262626),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message,
+            style: TextStyle(color: Colors.grey[300], fontSize: 14),
           ),
           const SizedBox(height: 12),
           ElevatedButton(
@@ -1166,8 +1483,13 @@ class _Track {
   final String id;
   final String title;
   final String artistName;
+  final String artistId;
+  final String artistPermalink;
+  final String artistAvatarUrl;
   final String artworkUrl;
   final String hlsUrl;
+  final String permalink;
+  final List<int>? waveform;
   final int playCount;
   final DateTime? createdAt;
 
@@ -1175,35 +1497,82 @@ class _Track {
     required this.id,
     required this.title,
     required this.artistName,
+    required this.artistId,
+    required this.artistPermalink,
+    required this.artistAvatarUrl,
     required this.artworkUrl,
     required this.hlsUrl,
+    required this.permalink,
+    this.waveform,
     required this.playCount,
     this.createdAt,
   });
 
-  factory _Track.fromJson(dynamic json) => _Track(
-        id: json['id']?.toString() ?? '',
-        title: json['title'] ?? '',
-        artistName: json['user']?['username'] ?? '',
-        artworkUrl: (json['artwork_url'] ?? '').replaceAll('large', 't500x500'),
-        hlsUrl: json['media']?['transcodings']
-                ?.firstWhere(
-                  (t) => t['format']?['protocol'] == 'hls',
-                  orElse: () => null,
-                )?['url'] ?? '',
-        playCount: json['playback_count'] ?? 0,
-        createdAt: json['created_at'] != null
-            ? DateTime.tryParse(json['created_at'])
-            : null,
-      );
+  factory _Track.fromJson(dynamic json) {
+    final user = json['user'] as Map<String, dynamic>? ?? const {};
+    return _Track(
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      title: json['title'] ?? '',
+      artistName:
+          user['displayName'] as String? ?? user['username'] as String? ?? '',
+      artistId: user['_id']?.toString() ?? user['id']?.toString() ?? '',
+      artistPermalink: user['permalink'] as String? ?? '',
+      artistAvatarUrl: user['avatarUrl'] as String? ?? '',
+      artworkUrl: (json['artwork_url'] ?? json['artworkUrl'] ?? '')
+          .replaceAll('large', 't500x500'),
+      hlsUrl: json['media']?['transcodings']
+              ?.firstWhere(
+                (t) => t['format']?['protocol'] == 'hls',
+                orElse: () => null,
+                )?['url'] ??
+            json['hlsUrl'] ??
+            '',
+      permalink: json['permalink'] as String? ?? '',
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      playCount: json['playback_count'] ?? json['playCount'] ?? 0,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'])
+          : json['createdAt'] != null
+              ? DateTime.tryParse(json['createdAt'])
+          : null,
+    );
+  }
 
  PlayerTrack toPlayerTrack() => PlayerTrack(
       id: id,
       title: title,
-      artist: artistName,
-      audioUrl: hlsUrl,
-      coverUrl: artworkUrl,
+       artist: artistName,
+       audioUrl: hlsUrl,
+       coverUrl: artworkUrl,
+       waveform: waveform,
+       trackPermalink: permalink,
+     );
+  }
+
+class _ArtistProfile {
+  final String id;
+  final String name;
+  final String permalink;
+  final String avatarUrl;
+
+  const _ArtistProfile({
+    required this.id,
+    required this.name,
+    required this.permalink,
+    required this.avatarUrl,
+  });
+
+  static _ArtistProfile? fromTrack(_Track track) {
+    if (track.artistName.isEmpty) return null;
+    return _ArtistProfile(
+      id: track.artistId,
+      name: track.artistName,
+      permalink: track.artistPermalink,
+      avatarUrl: track.artistAvatarUrl,
     );
+  }
 }
 
 class _PlaylistInfo {
@@ -1222,10 +1591,10 @@ class _PlaylistInfo {
   });
 
   factory _PlaylistInfo.fromJson(dynamic json) => _PlaylistInfo(
-        id: json['id']?.toString() ?? '',
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
         title: json['title'] ?? '',
-        artworkUrl: (json['artwork_url'] ?? '').replaceAll('large', 't500x500'),
-        ownerName: json['user']?['username'] ?? '',
-        trackCount: json['track_count'] ?? 0,
+        artworkUrl: (json['artwork_url'] ?? json['artworkUrl'] ?? '').replaceAll('large', 't500x500'),
+        ownerName: json['user']?['username'] ?? json['creator']?['displayName'] ?? '',
+        trackCount: json['track_count'] ?? json['trackCount'] ?? 0,
       );
 }

@@ -64,6 +64,8 @@ class _DetailTrack {
   final String? artworkUrl;
   final String? artistId;
   final String? artistPermalink;
+  final String? permalink;
+  final List<int>? waveform;
   final int duration;
   final int playCount;
   final int likeCount;
@@ -76,6 +78,8 @@ class _DetailTrack {
     this.artworkUrl,
     this.artistId,
     this.artistPermalink,
+    this.permalink,
+    this.waveform,
     this.duration = 0,
     this.playCount = 0,
     this.likeCount = 0,
@@ -90,11 +94,15 @@ class _DetailTrack {
       artistName: artist?['displayName'] as String? ?? '',
       artistId: artist?['_id'] as String?,
       artistPermalink: artist?['permalink'] as String?,
+      permalink: json['permalink'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
       hlsUrl: json['hlsUrl'] as String? ??
           json['audioUrl'] as String? ??
           json['streamUrl'] as String? ??
           '',
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
       duration: (json['duration'] as num?)?.toInt() ?? 0,
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
@@ -109,6 +117,8 @@ class _DetailTrack {
         artistPermalink: artistPermalink,
         audioUrl: hlsUrl,
         coverUrl: artworkUrl,
+        waveform: waveform,
+        trackPermalink: permalink,
       );
 }
 
@@ -369,7 +379,7 @@ class _HiphopPlaylistDetailPageState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Align(
-                alignment: Alignment.topRight,
+                alignment: Alignment.topLeft,
                 child: IconButton(
                   onPressed: () => Navigator.of(sheetContext).pop(),
                   icon: const Icon(Icons.close, color: Colors.white, size: 24),
@@ -710,7 +720,7 @@ class _HiphopPlaylistDetailPageState
         children: [
           Text(
             desc,
-            maxLines: 3,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
@@ -743,7 +753,7 @@ class _HiphopPlaylistDetailPageState
     return GestureDetector(
       onTap: () => _playFrom(i),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+        padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
