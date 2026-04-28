@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
+import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 class MiniPlayerWidget extends ConsumerStatefulWidget {
@@ -15,9 +17,6 @@ class MiniPlayerWidget extends ConsumerStatefulWidget {
 }
 
 class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
-  bool _isLiked = false;
-
-  @override
   Widget build(BuildContext context) {
     final playerState = ref.watch(playerProvider);
     final currentTrack = playerState.currentTrack;
@@ -30,6 +29,8 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
     final progress = durationMs <= 0
         ? 0.0
         : (playerState.position.inMilliseconds / durationMs).clamp(0.0, 1.0);
+    final engParams = EngagementParams(trackId: currentTrack.id);
+    final engState = ref.watch(engagementProvider(engParams));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
@@ -192,17 +193,66 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                       const SizedBox(width: 10),
                       GestureDetector(
                         key: const ValueKey('mini_player_like_button'),
-                        onTap: () {
-                          setState(() {
-                            _isLiked = !_isLiked;
-                          });
-                        },
+                        onTap: engState.isLoadingLike
+                            ? null
+                            : () async {
+                                final wasLiked = engState.isLiked;
+                                final overrides =
+                                    ref.read(likedTrackOverridesProvider.notifier);
+                                void writeOverride({
+                                  required bool liked,
+                                  required int likeCount,
+                                }) {
+                                  final current =
+                                      Map<String, TrackSummary>.from(
+                                    ref.read(likedTrackOverridesProvider),
+                                  );
+                                  if (liked) {
+                                    current[currentTrack.id] = TrackSummary(
+                                      id: currentTrack.id,
+                                      title: currentTrack.title,
+                                      artistName: currentTrack.artist,
+                                      artistId: currentTrack.artistId,
+                                      artistPermalink:
+                                          currentTrack.artistPermalink,
+                                      artworkUrl: currentTrack.coverUrl,
+                                      audioUrl: currentTrack.audioUrl,
+                                      waveform: currentTrack.waveform,
+                                      likeCount: likeCount,
+                                    );
+                                  } else {
+                                    current.remove(currentTrack.id);
+                                  }
+                                  overrides.state = current;
+                                }
+
+                                writeOverride(
+                                  liked: !wasLiked,
+                                  likeCount: wasLiked
+                                      ? engState.likeCount
+                                      : engState.likeCount + 1,
+                                );
+                                final success = await ref
+                                    .read(
+                                        engagementProvider(engParams).notifier)
+                                    .toggleLike();
+                                if (!success) {
+                                  writeOverride(
+                                    liked: wasLiked,
+                                    likeCount: engState.likeCount,
+                                  );
+                                }
+                              },
                         child: SizedBox(
                           width: 42,
                           height: 42,
                           child: Icon(
-                            _isLiked ? Icons.favorite : Icons.favorite_border,
-                            color: Colors.white,
+                            engState.isLiked
+                                ? Icons.favorite
+                                : Icons.favorite_border,
+                            color: engState.isLiked
+                                ? const Color(0xFFFF5500)
+                                : Colors.white,
                             size: 28,
                           ),
                         ),

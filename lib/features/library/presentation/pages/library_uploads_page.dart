@@ -25,12 +25,14 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   List<UploadTrack> _allTracks = [];
   List<UploadTrack> _filteredTracks = [];
   final Set<String> _deletingTrackIds = <String>{};
+  String _currentDisplayName = '';
 
   @override
   void initState() {
     super.initState();
     _searchController = TextEditingController();
     _searchController.addListener(_applyFilter);
+    _loadCurrentDisplayName();
   }
 
   @override
@@ -52,6 +54,22 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
             .toList();
       }
     });
+  }
+
+  Future<void> _loadCurrentDisplayName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final displayName = prefs.getString('displayName') ??
+        prefs.getString('username') ??
+        prefs.getString('name') ??
+        '';
+    if (!mounted) return;
+    setState(() {
+      _currentDisplayName = displayName;
+    });
+  }
+
+  String _resolvedArtistName(UploadTrack track) {
+    return track.artist.isNotEmpty ? track.artist : _currentDisplayName;
   }
 
   Future<void> _pickAndUpload(BuildContext context) async {
@@ -161,7 +179,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
         .map((t) => PlayerTrack(
               id: t.id ?? t.hlsUrl!,
               title: t.title,
-              artist: t.artist,
+              artist: _resolvedArtistName(t),
               audioUrl: t.hlsUrl!,
               coverUrl: t.artworkUrl,
               waveform: t.waveform,
@@ -626,7 +644,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        track.artist,
+                                        _resolvedArtistName(track),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(

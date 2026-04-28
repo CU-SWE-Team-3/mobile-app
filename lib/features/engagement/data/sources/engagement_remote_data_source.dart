@@ -146,21 +146,21 @@ class EngagementRemoteDataSource {
   // ── Like ──────────────────────────────────────────────────────────────────
 
   Future<void> likeTrack(String trackId) async {
-    await _dio.post('/tracks/$trackId/like');
+    await _dio.post('/tracks/$trackId/like', data: {'targetModel': 'Track'});
   }
 
   Future<void> unlikeTrack(String trackId) async {
-    await _dio.delete('/tracks/$trackId/like');
+    await _dio.delete('/tracks/$trackId/like', data: {'targetModel': 'Track'});
   }
 
   // ── Repost ────────────────────────────────────────────────────────────────
 
   Future<void> repostTrack(String trackId) async {
-    await _dio.post('/tracks/$trackId/repost');
+    await _dio.post('/tracks/$trackId/repost', data: {'targetModel': 'Track'});
   }
 
   Future<void> unRepostTrack(String trackId) async {
-    await _dio.delete('/tracks/$trackId/repost');
+    await _dio.delete('/tracks/$trackId/repost', data: {'targetModel': 'Track'});
   }
 
   // ── Likers list ───────────────────────────────────────────────────────────
@@ -234,11 +234,12 @@ class EngagementRemoteDataSource {
   Future<List<TrackSummary>> getUserReposts(String userId) async {
     final response = await _dio.get('/profile/$userId/reposts');
     final data = response.data['data'] as Map<String, dynamic>? ?? {};
-    final raw =
-        (data['repostedTracks'] as List<dynamic>?) ?? [];
+    final raw = (data['repostedTracks'] as List<dynamic>?) ?? [];
     return raw.map((item) {
       final map = item as Map<String, dynamic>;
-      final track = map['track'] as Map<String, dynamic>? ?? map;
+      // The backend uses 'target' as the track key (same as the likes endpoint).
+      // Fall back to 'track' for backward compatibility with older API versions.
+      final track = (map['target'] ?? map['track']) as Map<String, dynamic>? ?? map;
       return TrackSummary.fromJson(track);
     }).toList();
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart' as ja;
 
 import '../../../../core/services/audio_handler_service.dart';
 import '../../../../injection_container.dart';
@@ -28,6 +29,9 @@ class PlayerState {
   final double volume;
   final bool isCurrentTrackLiked;
   final bool isTogglingLike;
+  // PUT /player/state context fields (API: queueContext enum + contextId ObjectId).
+  final String queueContext;
+  final String? contextId;
 
   const PlayerState({
     this.currentTrack,
@@ -42,6 +46,8 @@ class PlayerState {
     this.volume = 0.7,
     this.isCurrentTrackLiked = false,
     this.isTogglingLike = false,
+    this.queueContext = 'none',
+    this.contextId,
   });
 
   // Backward-compat getters used by existing UI
@@ -65,6 +71,9 @@ class PlayerState {
     double? volume,
     bool? isCurrentTrackLiked,
     bool? isTogglingLike,
+    String? queueContext,
+    String? contextId,
+    bool clearContextId = false,
   }) {
     return PlayerState(
       currentTrack:
@@ -80,6 +89,8 @@ class PlayerState {
       volume: volume ?? this.volume,
       isCurrentTrackLiked: isCurrentTrackLiked ?? this.isCurrentTrackLiked,
       isTogglingLike: isTogglingLike ?? this.isTogglingLike,
+      queueContext: queueContext ?? this.queueContext,
+      contextId: clearContextId ? null : (contextId ?? this.contextId),
     );
   }
 }
@@ -89,13 +100,16 @@ class PlayerState {
 // ---------------------------------------------------------------------------
 
 class PlayerNotifier extends StateNotifier<PlayerState> {
+  final ja.AudioPlayer _audioPlayer = ja.AudioPlayer();
   final AppAudioHandler _audioHandler;
   final PlayerApiService _api;
   final EngagementRemoteDataSource _engagementApi;
+  
 
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration?> _durationSub;
   late final StreamSubscription<PlaybackState> _playbackStateSub;
+  
 
   /// Fires PUT /player/state every 5 seconds while a track is playing.
   Timer? _heartbeatTimer;
@@ -148,10 +162,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
           trackId: track.id,
           position: state.position.inSeconds.toDouble(),
           isPlaying: state.isPlaying,
-          volume: state.volume,
+          queueContext: state.queueContext,
+          contextId: state.contextId,
         );
       }
     });
+  }
+
+  /// Records the playback context so the heartbeat can include it in
+  /// PUT /player/state.  Call immediately after playQueue / playTrack.
+  void setQueueContext(String context, {String? contextId}) {
+    state = state.copyWith(queueContext: context, contextId: contextId);
   }
 
   // -------------------------------------------------------------------------
@@ -184,12 +205,34 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       );
       _audioHandler.setLiked(false);
 
-      // Resolve the server-authorized HLS URL; fall back to track.audioUrl
-      // if the API is unreachable (e.g. offline or unauthenticated).
-      final streamUrl = await _api.getStreamUrl(track.id) ?? track.audioUrl;
+      // Resolve the server-authorized HLS URL.
+      // If the stream endpoint fails, fall back to track.audioUrl only when
+      // it is a valid remote URL — never pass an empty or local path to
+      // ExoPlayer (setFilePath("") throws FileNotFoundException: ENOENT).
+      final streamUrl = await _api.getStreamUrl(track.id);
+      final fallback = track.audioUrl;
+      final bool fallbackIsRemote =
+          fallback.startsWith('http://') || fallback.startsWith('https://');
 
-      await _audioHandler.loadTrack(track, streamUrl);
-      await _audioHandler.play();
+      final String? resolvedUrl = (streamUrl != null && streamUrl.isNotEmpty)
+          ? streamUrl
+          : (fallbackIsRemote ? fallback : null);
+
+      if (resolvedUrl == null) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Track audio is unavailable',
+        );
+        return;
+      }
+
+      if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
+        await _audioPlayer.setUrl(resolvedUrl);
+      } else {
+        await _audioPlayer.setFilePath(resolvedUrl);
+      }
+
+      await _audioPlayer.play();
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -447,7 +490,6 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         trackId: track.id,
         position: position.inSeconds.toDouble(),
         isPlaying: state.isPlaying,
-        volume: state.volume,
       );
     });
   }

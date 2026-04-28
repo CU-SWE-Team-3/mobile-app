@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
@@ -579,6 +580,28 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _buildLikesBanner() {
+    final mergedLikesAsync = ref.watch(mergedUserLikesProvider);
+    final visibleLikedTracks = mergedLikesAsync.maybeWhen(
+      data: (tracks) => tracks
+          .map(
+            (track) => _FeedTrack(
+              id: track.id,
+              title: track.title,
+              artistName: track.artistName,
+              artworkUrl: track.artworkUrl,
+              hlsUrl: track.audioUrl ?? '',
+              playCount: track.playCount,
+              artistId: track.artistId,
+              artistPermalink: track.artistPermalink,
+              likeCount: track.likeCount,
+              repostCount: track.repostCount,
+              isLiked: true,
+              waveform: track.waveform,
+            ),
+          )
+          .toList(),
+      orElse: () => _likedTracks,
+    );
     return GestureDetector(
       onTap: () => context.push('/library/likes'),
       child: Container(
@@ -624,7 +647,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               ],
             ),
             const SizedBox(height: 14),
-            if (_likedTracks.isEmpty)
+            if (visibleLikedTracks.isEmpty)
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -637,11 +660,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _SmallTrackTile(track: _likedTracks[0])),
+                      Expanded(child: _SmallTrackTile(track: visibleLikedTracks[0])),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _SmallTrackTile(
-                          track: _likedTracks[_likedTracks.length > 1 ? 1 : 0],
+                          track: visibleLikedTracks[
+                              visibleLikedTracks.length > 1 ? 1 : 0],
                         ),
                       ),
                     ],
@@ -651,13 +675,15 @@ class _HomePageState extends ConsumerState<HomePage> {
                     children: [
                       Expanded(
                         child: _SmallTrackTile(
-                          track: _likedTracks[_likedTracks.length > 2 ? 2 : 0],
+                          track: visibleLikedTracks[
+                              visibleLikedTracks.length > 2 ? 2 : 0],
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _SmallTrackTile(
-                          track: _likedTracks[_likedTracks.length > 3 ? 3 : 0],
+                          track: visibleLikedTracks[
+                              visibleLikedTracks.length > 3 ? 3 : 0],
                         ),
                       ),
                     ],
@@ -862,6 +888,12 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(likesRefreshTickProvider, (previous, next) {
+      if (previous != next) {
+        _fetchFeed();
+      }
+    });
+
     final recommendationTracks = _recommendedTracks;
     final mixedTracks = _mixedShelfTracks;
     final followLikedTracks = _likedByFollowingTracks;

@@ -8,24 +8,25 @@ import '../../../../core/utils/profile_navigation.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/providers/follow_provider.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
-class ElectronicGenrePage extends ConsumerStatefulWidget {
-  const ElectronicGenrePage({super.key});
+class RnbGenrePage extends ConsumerStatefulWidget {
+  const RnbGenrePage({super.key});
 
   @override
-  ConsumerState<ElectronicGenrePage> createState() =>
-      _ElectronicGenrePageState();
+  ConsumerState<RnbGenrePage> createState() => _RnbGenrePageState();
 }
 
-class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
+class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
     with TickerProviderStateMixin {
   static const _pageBackground = Color(0xFF111111);
   static const _panelBackground = Color(0xFF1A1A1A);
-  static const _electronicQuery = 'Electronic';
-  static const _electronicGenreQueries = [
-    'Electronic',
-    'electronic',
+  static const _rnbQuery = 'R&B';
+  static const _rnbGenreQueries = [
+    'R&B',
+    'RnB',
+    'Rnb',
+    'R & B',
   ];
-  static const _buzzingLikeKey = 'buzzing_electronic_liked';
+  static const _buzzingLikeKey = 'buzzing_rnb_liked';
 
   late final TabController _tabController;
 
@@ -83,7 +84,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
   Future<void> _fetchGenreTracks() async {
     try {
       final discoveryResponses = await Future.wait(
-        _electronicGenreQueries.map(
+        _rnbGenreQueries.map(
           (genre) => dioClient.dio
               .get('/discovery/genre/${Uri.encodeComponent(genre)}')
               .then<dynamic>((resp) => resp.data)
@@ -116,7 +117,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
     try {
       final resp = await dioClient.dio.get(
         '/discovery/trending',
-        queryParameters: {'genre': _electronicQuery},
+        queryParameters: {'genre': _rnbQuery},
       );
       final data = resp.data as Map<String, dynamic>;
       final raw = ((data['data'] as Map<String, dynamic>?) ?? {})['trending']
@@ -142,13 +143,12 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
 
   Future<void> _fetchPlaylists() async {
     try {
-      debugPrint(
-          '[ElectronicGenrePage] _fetchPlaylists: requesting genre="Electronic"');
+      debugPrint('[RnbGenrePage] _fetchPlaylists: requesting genre="R&B"');
       final resp = await dioClient.dio.get(
         '/playlists',
-        queryParameters: {'genre': _electronicQuery, 'limit': 10},
+        queryParameters: {'genre': _rnbQuery, 'limit': 10},
       );
-      debugPrint('[ElectronicGenrePage] _fetchPlaylists raw: ${resp.data}');
+      debugPrint('[RnbGenrePage] _fetchPlaylists raw: ${resp.data}');
       if (!mounted) return;
       setState(() {
         _playlists = _extractPlaylists(resp.data);
@@ -168,7 +168,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
       final resp = await dioClient.dio.get(
         '/playlists',
         queryParameters: {
-          'genre': _electronicQuery,
+          'genre': _rnbQuery,
           'releaseType': 'album',
           'limit': 10,
         },
@@ -350,7 +350,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
                 fit: StackFit.expand,
                 children: [
                   Image.asset(
-                    'assets/images/Electronic_bg.png',
+                    'assets/images/R&B_bg.png',
                     fit: BoxFit.cover,
                     alignment: Alignment.topCenter,
                   ),
@@ -373,7 +373,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
                     right: 24,
                     bottom: 54,
                     child: Text(
-                      'Electronic',
+                      'R&B',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 36,
@@ -523,7 +523,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 40),
               child: Text(
-                'No Electronic content available right now.',
+                'No R&B content available right now.',
                 style: TextStyle(color: Colors.white54, fontSize: 15),
               ),
             ),
@@ -789,29 +789,27 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
 
   void _openIntroducingPlaylist() {
     if (_playlists.isEmpty) {
-      _pushIntroducingPlaylist('/search/electronic/introducing');
+      _pushIntroducingPlaylist('/search/rnb/introducing');
       return;
     }
 
     final selectedPlaylist = _playlists.firstWhere(
       (playlist) {
         final title = playlist.title.toLowerCase();
-        return title.contains('buzzing electronic') ||
-            title.contains('electronic buzzing') ||
+        return title.contains('buzzing r&b') ||
+            title.contains('buzzing rnb') ||
             title.contains('buzzing');
       },
       orElse: () => _playlists.first,
     );
 
     if (selectedPlaylist.id.isEmpty) {
-      _pushIntroducingPlaylist('/search/electronic/introducing');
+      _pushIntroducingPlaylist('/search/rnb/introducing');
       return;
     }
 
     final playlistId = Uri.encodeComponent(selectedPlaylist.id);
-    _pushIntroducingPlaylist(
-      '/search/electronic/introducing?playlistId=$playlistId',
-    );
+    _pushIntroducingPlaylist('/search/rnb/introducing?playlistId=$playlistId');
   }
 
   Widget _buildRecentTracksCard(List<_Track> recentTracks) {
@@ -852,11 +850,11 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
                     center: const Alignment(0, -0.1),
                     radius: 1.22,
                     colors: [
-                      const Color(0xFFFFC1DC).withValues(alpha: 0.96),
-                      const Color(0xFFFF8FC3).withValues(alpha: 0.88),
-                      const Color(0xFFE65A9D).withValues(alpha: 0.68),
-                      const Color(0xFF9A3B6A).withValues(alpha: 0.46),
-                      const Color(0xFF3F1F30).withValues(alpha: 0.24),
+                      const Color(0xFFD6B8FF).withValues(alpha: 0.96),
+                      const Color(0xFFB58CFF).withValues(alpha: 0.88),
+                      const Color(0xFF8D68D8).withValues(alpha: 0.68),
+                      const Color(0xFF5E4686).withValues(alpha: 0.46),
+                      const Color(0xFF352744).withValues(alpha: 0.24),
                     ],
                     stops: const [0.0, 0.22, 0.48, 0.76, 1.0],
                   ),
@@ -884,7 +882,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
                         children: [
                           const SizedBox(height: 18),
                           const Text(
-                            'Buzzing Electronic',
+                            'Buzzing R&B',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1140,7 +1138,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
 
     return GestureDetector(
       onTap: () => context.push(
-                '/search/electronic/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+                '/search/rnb/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
               ),
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -1152,7 +1150,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
           children: [
             GestureDetector(
               onTap: () => context.push(
-                '/search/electronic/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+                '/search/rnb/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -1281,7 +1279,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'No Electronic playlists available right now.',
+              'No R&B playlists available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
           )
@@ -1312,7 +1310,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: _buildInlineRetryCard(
-              message: 'Failed to load Electronic albums.',
+              message: 'Failed to load R&B albums.',
               onRetry: _fetchAlbums,
             ),
           )
@@ -1320,7 +1318,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'No Electronic albums available right now.',
+              'No R&B albums available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
           )
@@ -1348,7 +1346,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: _buildInlineRetryCard(
-              message: 'Failed to load Electronic artist profiles.',
+              message: 'Failed to load R&B artist profiles.',
               onRetry: _fetchGenreTracks,
             ),
           )
@@ -1356,7 +1354,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'No Electronic artist profiles available right now.',
+              'No R&B artist profiles available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
           )
@@ -1393,7 +1391,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: _buildInlineRetryCard(
-              message: 'Failed to load more Electronic tracks.',
+              message: 'Failed to load more R&B tracks.',
               onRetry: _fetchGenreTracks,
             ),
           )
@@ -1401,7 +1399,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'No more Electronic tracks available right now.',
+              'No more R&B tracks available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
           )
@@ -1540,7 +1538,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
         !playlist.artworkUrl.contains('default-artwork');
     return GestureDetector(
       onTap: () => context.push(
-        '/search/electronic/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+        '/search/rnb/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1625,7 +1623,7 @@ class _ElectronicGenrePageState extends ConsumerState<ElectronicGenrePage>
 
   Widget _buildInlineRetryCard({
     required Future<void> Function() onRetry,
-    String message = 'Failed to load Electronic playlists.',
+    String message = 'Failed to load R&B playlists.',
   }) {
     return Container(
       width: double.infinity,

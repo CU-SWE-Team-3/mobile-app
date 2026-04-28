@@ -26,8 +26,63 @@ class _PlaylistNotifier extends StateNotifier<List<Playlist>> {
       final list = (jsonDecode(raw) as List<dynamic>)
           .map((e) => Playlist.fromJson(e as Map<String, dynamic>))
           .toList();
-      if (mounted) state = list;
+      if (mounted) {
+        state = list;
+        // Backfill firstTrackArtworkUrl for any playlist that was cached before
+        // this field existed or that still has no artwork — runs in background.
+        _backfillArtwork();
+      }
     }
+  }
+
+  // Fetches GET /playlists/{id} sequentially for each playlist missing
+  // firstTrackArtworkUrl, then persists the result. Throttled to 300 ms
+  // between calls to avoid hammering the API.
+  Future<void> _backfillArtwork() async {
+    for (final p in List<Playlist>.from(state)) {
+      if (!mounted) return;
+      if (p.firstTrackArtworkUrl != null) continue;
+      await _fetchAndStoreFirstTrackArtwork(p.id);
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+  }
+
+  Future<void> _fetchAndStoreFirstTrackArtwork(String playlistId) async {
+    try {
+      final response = await dioClient.dio.get('/playlists/$playlistId');
+      final data = response.data['data'] as Map<String, dynamic>? ?? {};
+      final playlistData = data['playlist'] as Map<String, dynamic>? ?? {};
+      final tracks = playlistData['tracks'] as List? ?? [];
+      String? artwork;
+      for (final raw in tracks) {
+        if (raw is Map<String, dynamic>) {
+          final url = raw['artworkUrl'] as String?;
+          if (url != null &&
+              url.startsWith('https://') &&
+              !url.contains('default')) {
+            artwork = url;
+            break;
+          }
+        }
+      }
+      if (artwork == null || !mounted) return;
+      state = state.map((p) {
+        if (p.id != playlistId) return p;
+        return Playlist(
+          id: p.id,
+          title: p.title,
+          artworkUrl: p.artworkUrl,
+          firstTrackArtworkUrl: artwork,
+          ownerName: p.ownerName,
+          trackCount: p.trackCount,
+          isPublic: p.isPublic,
+          permalink: p.permalink,
+          ownerPermalink: p.ownerPermalink,
+          secretToken: p.secretToken,
+        );
+      }).toList();
+      await _persist();
+    } catch (_) {}
   }
 
   Future<void> add(Playlist playlist) async {
@@ -35,7 +90,10 @@ class _PlaylistNotifier extends StateNotifier<List<Playlist>> {
     await _persist();
   }
 
+  // Calls DELETE /playlists/{id} first; updates local state only on 204.
+  // Throws on API failure so the calling UI can surface feedback.
   Future<void> remove(String id) async {
+    await dioClient.dio.delete('/playlists/$id');
     state = state.where((p) => p.id != id).toList();
     await _persist();
   }
@@ -47,6 +105,7 @@ class _PlaylistNotifier extends StateNotifier<List<Playlist>> {
                 id: p.id,
                 title: p.title,
                 artworkUrl: p.artworkUrl,
+                firstTrackArtworkUrl: p.firstTrackArtworkUrl,
                 ownerName: p.ownerName,
                 trackCount: p.trackCount,
                 isPublic: isPublic,
@@ -507,7 +566,13 @@ class _PlaylistTileState extends State<_PlaylistTile> {
   @override
   Widget build(BuildContext context) {
     final playlist = widget.playlist;
-    final hasArtwork = playlist.artworkUrl != null && playlist.artworkUrl!.isNotEmpty;
+    final hasArtwork = playlist.artworkUrl != null &&
+        playlist.artworkUrl!.startsWith('https://') &&
+        !playlist.artworkUrl!.contains('default');
+    final hasFirstTrackArtwork = !hasArtwork &&
+        playlist.firstTrackArtworkUrl != null &&
+        playlist.firstTrackArtworkUrl!.startsWith('https://') &&
+        !playlist.firstTrackArtworkUrl!.contains('default');
     final hasValidAvatar =
         _avatarUrl.isNotEmpty && !_avatarUrl.contains('default-avatar');
 
@@ -515,6 +580,19 @@ class _PlaylistTileState extends State<_PlaylistTile> {
     if (hasArtwork) {
       thumbnailChild = CachedNetworkImage(
         imageUrl: playlist.artworkUrl!,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => const ColoredBox(
+          color: Color(0xFF2A2A2A),
+          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+        ),
+        errorWidget: (_, __, ___) => const ColoredBox(
+          color: Color(0xFF2A2A2A),
+          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+        ),
+      );
+    } else if (hasFirstTrackArtwork) {
+      thumbnailChild = CachedNetworkImage(
+        imageUrl: playlist.firstTrackArtworkUrl!,
         fit: BoxFit.cover,
         placeholder: (_, __) => const ColoredBox(
           color: Color(0xFF2A2A2A),
@@ -758,15 +836,22 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
               icon: Icons.delete_outline,
               label: 'Delete',
               onTap: () {
-                Navigator.pop(context);
-                ref.read(playlistsProvider.notifier).remove(playlist.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                final nav = Navigator.of(context);
+                final messenger = ScaffoldMessenger.of(context);
+                nav.pop();
+                ref.read(playlistsProvider.notifier).remove(playlist.id).then((_) {
+                  messenger.showSnackBar(const SnackBar(
                     content: Text('Playlist deleted'),
                     backgroundColor: _surface,
                     behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                  ));
+                }).catchError((_) {
+                  messenger.showSnackBar(const SnackBar(
+                    content: Text('Could not delete playlist. Please try again.'),
+                    backgroundColor: Color(0xFF3A1A1A),
+                    behavior: SnackBarBehavior.floating,
+                  ));
+                });
               },
             ),
             // Share

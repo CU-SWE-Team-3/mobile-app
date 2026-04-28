@@ -27,6 +27,7 @@ class DioClient {
       receiveTimeout: const Duration(seconds: 15),
       validateStatus: (status) =>
           status != null && status >= 200 && status < 300,
+      
     ));
   }
 
@@ -179,3 +180,4 @@ final dioClient = DioClient();
 final dioClientProvider = Provider<DioClient>((ref) {
   return dioClient;
 });
+

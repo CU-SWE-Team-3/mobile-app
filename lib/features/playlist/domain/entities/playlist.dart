@@ -2,6 +2,9 @@ class Playlist {
   final String id;
   final String title;
   final String? artworkUrl;
+  // Persisted by _PlaylistNotifier after fetching GET /playlists/{id} once.
+  // Null until the backfill fetch completes. Never stored in the API response.
+  final String? firstTrackArtworkUrl;
   final String ownerName;
   final int trackCount;
   final bool isPublic;
@@ -13,6 +16,7 @@ class Playlist {
     String? id,
     required this.title,
     this.artworkUrl,
+    this.firstTrackArtworkUrl,
     required this.ownerName,
     this.trackCount = 0,
     this.isPublic = true,
@@ -25,6 +29,7 @@ class Playlist {
         'id': id,
         'title': title,
         'artworkUrl': artworkUrl,
+        'firstTrackArtworkUrl': firstTrackArtworkUrl,
         'ownerName': ownerName,
         'trackCount': trackCount,
         'isPublic': isPublic,
@@ -36,6 +41,7 @@ class Playlist {
       id: json['id'] as String?,
       title: json['title'] as String? ?? '',
       artworkUrl: json['artworkUrl'] as String?,
+      firstTrackArtworkUrl: json['firstTrackArtworkUrl'] as String?,
       ownerName: (json['ownerName'] as String?) ??
           (creator?['displayName'] as String?) ??
           '',
