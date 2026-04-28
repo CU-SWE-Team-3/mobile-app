@@ -1,18 +1,21 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../player/domain/entities/player_track.dart';
+import '../../../player/presentation/providers/player_provider.dart';
 
-class GenreResultsPage extends StatefulWidget {
+class GenreResultsPage extends ConsumerStatefulWidget {
   final String genreName;
   const GenreResultsPage({super.key, required this.genreName});
 
   @override
-  State<GenreResultsPage> createState() => _GenreResultsPageState();
+  ConsumerState<GenreResultsPage> createState() => _GenreResultsPageState();
 }
 
-class _GenreResultsPageState extends State<GenreResultsPage> {
-  List<Map<String, dynamic>> _results = [];
+class _GenreResultsPageState extends ConsumerState<GenreResultsPage> {
+  List<_GenreTrack> _results = [];
   bool _isLoading = true;
   bool _hasError = false;
 
@@ -34,7 +37,11 @@ class _GenreResultsPageState extends State<GenreResultsPage> {
       );
       final data = response.data['data'] as List;
       setState(() {
-        _results = data.cast<Map<String, dynamic>>();
+        _results = data
+            .whereType<Map<String, dynamic>>()
+            .map(_GenreTrack.fromJson)
+            .where((track) => track.id.isNotEmpty)
+            .toList();
         _isLoading = false;
       });
     } on DioException {
@@ -49,6 +56,18 @@ class _GenreResultsPageState extends State<GenreResultsPage> {
     final m = seconds ~/ 60;
     final s = seconds % 60;
     return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  void _playFrom(int index) {
+    final playable = _results.where((track) => track.hlsUrl.isNotEmpty).toList();
+    if (playable.isEmpty) return;
+
+    final tapped = _results[index];
+    final startIndex = playable.indexWhere((track) => track.id == tapped.id);
+    ref.read(playerProvider.notifier).playQueue(
+          playable.map((track) => track.toPlayerTrack()).toList(),
+          startIndex: startIndex < 0 ? 0 : startIndex,
+        );
   }
 
   @override
@@ -106,89 +125,78 @@ class _GenreResultsPageState extends State<GenreResultsPage> {
                         itemCount: _results.length,
                         itemBuilder: (context, i) {
                           final track = _results[i];
-                          final title =
-                              track['title'] as String? ?? 'Unknown';
-                          final artworkUrl =
-                              track['artworkUrl'] as String?;
-                          final duration =
-                              track['duration'] as int? ?? 0;
-                          final playCount =
-                              track['playCount'] as int? ?? 0;
-                          final artist =
-                              track['user'] as Map<String, dynamic>? ??
-                                  track['artist'] as Map<String, dynamic>?;
-                          final artistName =
-                              artist?['displayName'] as String? ?? '';
-                          final hasArtwork = artworkUrl != null &&
-                              artworkUrl.isNotEmpty &&
-                              !artworkUrl.contains('default-artwork');
+                          final hasArtwork = track.artworkUrl.isNotEmpty &&
+                              !track.artworkUrl.contains('default-artwork');
 
                           return Padding(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 8),
-                            child: Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: hasArtwork
-                                      ? CachedNetworkImage(
-                                          imageUrl: artworkUrl,
-                                          width: 56,
-                                          height: 56,
-                                          fit: BoxFit.cover,
-                                          errorWidget: (_, __, ___) =>
-                                              _artworkFallback(),
-                                        )
-                                      : _artworkFallback(),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      if (artistName.isNotEmpty)
+                            child: GestureDetector(
+                              onTap: track.hlsUrl.isEmpty ? null : () => _playFrom(i),
+                              child: Row(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: hasArtwork
+                                        ? CachedNetworkImage(
+                                            imageUrl: track.artworkUrl,
+                                            width: 56,
+                                            height: 56,
+                                            fit: BoxFit.cover,
+                                            errorWidget: (_, __, ___) =>
+                                                _artworkFallback(),
+                                          )
+                                        : _artworkFallback(),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
                                         Text(
-                                          artistName,
+                                          track.title,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(
-                                              color: Colors.white54,
-                                              fontSize: 13),
-                                        ),
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                              Icons.play_arrow_rounded,
-                                              color: Colors.white38,
-                                              size: 13),
-                                          Text(
-                                            ' $playCount',
-                                            style: const TextStyle(
-                                                color: Colors.white38,
-                                                fontSize: 11),
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
                                           ),
-                                        ],
-                                      ),
-                                    ],
+                                        ),
+                                        if (track.artistName.isNotEmpty)
+                                          Text(
+                                            track.artistName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                                color: Colors.white54,
+                                                fontSize: 13),
+                                          ),
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                                Icons.play_arrow_rounded,
+                                                color: Colors.white38,
+                                                size: 13),
+                                            Text(
+                                              ' ${track.playCount}',
+                                              style: const TextStyle(
+                                                  color: Colors.white38,
+                                                  fontSize: 11),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  _formatDuration(duration),
-                                  style: const TextStyle(
-                                      color: Colors.white38, fontSize: 13),
-                                ),
-                              ],
+                                  Text(
+                                    _formatDuration(track.duration),
+                                    style: const TextStyle(
+                                        color: Colors.white38, fontSize: 13),
+                                  ),
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -202,5 +210,66 @@ class _GenreResultsPageState extends State<GenreResultsPage> {
         height: 56,
         color: const Color(0xFF2A2A2A),
         child: const Icon(Icons.music_note, color: Colors.white38, size: 24),
+      );
+}
+
+class _GenreTrack {
+  final String id;
+  final String permalink;
+  final String title;
+  final String artistName;
+  final String hlsUrl;
+  final String artworkUrl;
+  final int duration;
+  final int playCount;
+  final List<int>? waveform;
+
+  const _GenreTrack({
+    required this.id,
+    required this.permalink,
+    required this.title,
+    required this.artistName,
+    required this.hlsUrl,
+    required this.artworkUrl,
+    required this.duration,
+    required this.playCount,
+    this.waveform,
+  });
+
+  factory _GenreTrack.fromJson(Map<String, dynamic> json) {
+    final artist = json['user'] as Map<String, dynamic>? ??
+        json['artist'] as Map<String, dynamic>? ??
+        const {};
+    final media = json['media'] as Map<String, dynamic>?;
+    return _GenreTrack(
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      permalink: json['permalink'] as String? ?? '',
+      title: json['title'] as String? ?? 'Unknown',
+      artistName: artist['displayName'] as String? ??
+          artist['username'] as String? ??
+          '',
+      hlsUrl: json['hlsUrl'] as String? ??
+          media?['hlsUrl'] as String? ??
+          json['audioUrl'] as String? ??
+          '',
+      artworkUrl: (json['artworkUrl'] ?? json['artwork_url'] ?? '') as String,
+      duration: (json['duration'] as num?)?.toInt() ?? 0,
+      playCount: (json['playCount'] as num?)?.toInt() ??
+          (json['playback_count'] as num?)?.toInt() ??
+          0,
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+    );
+  }
+
+  PlayerTrack toPlayerTrack() => PlayerTrack(
+        id: id,
+        title: title,
+        artist: artistName,
+        audioUrl: hlsUrl,
+        coverUrl: artworkUrl.isEmpty ? null : artworkUrl,
+        duration: duration > 0 ? Duration(seconds: duration) : null,
+        trackPermalink: permalink,
       );
 }

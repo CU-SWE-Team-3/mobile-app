@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/network/dio_client.dart';
 import '../../domain/entities/upload_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../providers/upload_provider.dart';
@@ -23,6 +24,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   late TextEditingController _searchController;
   List<UploadTrack> _allTracks = [];
   List<UploadTrack> _filteredTracks = [];
+  final Set<String> _deletingTrackIds = <String>{};
 
   @override
   void initState() {
@@ -233,11 +235,9 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                 leading: const Icon(Icons.delete, color: Colors.red),
                 title:
                     const Text('Delete', style: TextStyle(color: Colors.red)),
-                onTap: () {
+                onTap: () async {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Track deleted')),
-                  );
+                  await _deleteTrackPermanently(track);
                 },
               ),
             ],
@@ -245,6 +245,96 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
         );
       },
     );
+  }
+
+  Future<void> _deleteTrackPermanently(UploadTrack track) async {
+    final trackId = track.id;
+    if (trackId == null || trackId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This track cannot be deleted right now.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: const Text(
+          'Delete Track',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'Delete "${track.title}" permanently? This action cannot be undone.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _deletingTrackIds.add(trackId);
+    });
+
+    try {
+      await ref.read(dioClientProvider).dio.delete('/tracks/$trackId');
+
+      final currentTrackId = ref.read(playerProvider).currentTrack?.id;
+      if (currentTrackId == trackId) {
+        ref.read(playerProvider.notifier).stop();
+        ref.read(playerProvider.notifier).clearQueue();
+      }
+
+      _allTracks.removeWhere((t) => t.id == trackId);
+      _filteredTracks.removeWhere((t) => t.id == trackId);
+
+      ref.invalidate(myTracksProvider);
+
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Track deleted permanently'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete track: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingTrackIds.remove(trackId);
+        });
+      }
+    }
   }
 
   @override
@@ -458,6 +548,8 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                     itemCount: _filteredTracks.length,
                     itemBuilder: (context, index) {
                       final track = _filteredTracks[index];
+                      final isDeleting = track.id != null &&
+                          _deletingTrackIds.contains(track.id);
                       final isCurrentTrack =
                           track.id != null &&
                           playerState.currentTrack?.id == track.id;
@@ -574,13 +666,24 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                                 // Options menu
                                 GestureDetector(
                                   key: const ValueKey('uploads_track_options_button'),
-                                  onTap: () => _showTrackOptionsSheet(track),
+                                  onTap: isDeleting
+                                      ? null
+                                      : () => _showTrackOptionsSheet(track),
                                   child: Padding(
                                     padding: const EdgeInsets.all(8),
-                                    child: Icon(
-                                      Icons.more_vert,
-                                      color: Colors.white.withOpacity(0.5),
-                                    ),
+                                    child: isDeleting
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Color(0xFFFF5500),
+                                            ),
+                                          )
+                                        : Icon(
+                                            Icons.more_vert,
+                                            color: Colors.white.withOpacity(0.5),
+                                          ),
                                   ),
                                 ),
                               ],
