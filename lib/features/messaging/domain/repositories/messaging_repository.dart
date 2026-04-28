@@ -16,4 +16,6 @@ abstract class MessagingRepository {
   Future<List<Participant>> searchUsers(String query);
   Future<List<Participant>> getFollowing(String userId);
   Future<void> markAsRead(String conversationId);
+  Future<Message> editMessage(String messageId, String content);
+  Future<void> deleteMessageForEveryone(String messageId);
 }

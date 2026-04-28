@@ -9,59 +9,113 @@ class MessageBubble extends StatelessWidget {
   final Message message;
   final bool isOwn;
   final Participant? otherParticipant;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   const MessageBubble({
     super.key,
     required this.message,
     required this.isOwn,
     this.otherParticipant,
+    this.onEdit,
+    this.onDelete,
   });
+
+  void _showContextMenu(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1F1F1F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onEdit != null)
+              ListTile(
+                leading:
+                    const Icon(Icons.edit_outlined, color: Colors.white),
+                title: const Text(
+                  'Edit',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  onEdit!();
+                },
+              ),
+            if (onDelete != null)
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.redAccent,
+                ),
+                title: const Text(
+                  'Delete',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  onDelete!();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final hasMenu = onEdit != null || onDelete != null;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-      child: Row(
-        mainAxisAlignment:
-            isOwn ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!isOwn) ...[
-            ParticipantAvatar(
-              avatarUrl: otherParticipant?.avatarUrl,
-              displayName: otherParticipant?.displayName ?? '?',
-              radius: 16,
-            ),
-            const SizedBox(width: 8),
-          ],
-          Flexible(
-            child: Column(
-              crossAxisAlignment:
-                  isOwn ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                _BubbleBody(message: message, isOwn: isOwn),
-                const SizedBox(height: 3),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      formatRelativeTime(message.createdAt),
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11,
+      child: GestureDetector(
+        onLongPress: hasMenu ? () => _showContextMenu(context) : null,
+        child: Row(
+          mainAxisAlignment:
+              isOwn ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!isOwn) ...[
+              ParticipantAvatar(
+                avatarUrl: otherParticipant?.avatarUrl,
+                displayName: otherParticipant?.displayName ?? '?',
+                radius: 16,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Flexible(
+              child: Column(
+                crossAxisAlignment: isOwn
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  _BubbleBody(message: message, isOwn: isOwn),
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        formatRelativeTime(message.createdAt),
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                    if (isOwn) ...[
-                      const SizedBox(width: 3),
-                      _StatusTick(status: message.status),
+                      if (isOwn) ...[
+                        const SizedBox(width: 3),
+                        _StatusTick(status: message.status),
+                      ],
                     ],
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          if (isOwn) const SizedBox(width: 4),
-        ],
+            if (isOwn) const SizedBox(width: 4),
+          ],
+        ),
       ),
     );
   }
@@ -95,13 +149,17 @@ class _BubbleBody extends StatelessWidget {
           if (message.content.isNotEmpty) ...[
             const SizedBox(height: 6),
             _MessageText(
-                content: message.content, isEdited: message.isEdited),
+              content: message.content,
+              isEdited: message.isEdited,
+            ),
           ],
         ],
       );
     } else {
-      content =
-          _MessageText(content: message.content, isEdited: message.isEdited);
+      content = _MessageText(
+        content: message.content,
+        isEdited: message.isEdited,
+      );
     }
 
     return Container(

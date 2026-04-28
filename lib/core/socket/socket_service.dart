@@ -19,16 +19,40 @@ class SocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _readReceiptController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _typingController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _stoppedTypingController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _messageEditedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _messageDeletedEveryoneController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   /// Raw JSON stream for `receive_message` events.
   Stream<Map<String, dynamic>> get newMessages => _newMessageController.stream;
 
-  /// Raw JSON stream for `message_delivered` events.
+  /// Raw JSON stream for `messages_delivered` events.
   Stream<Map<String, dynamic>> get deliveryReceipts =>
       _deliveryReceiptController.stream;
 
-  /// Raw JSON stream for `message_read` events.
-  Stream<Map<String, dynamic>> get readReceipts => _readReceiptController.stream;
+  /// Raw JSON stream for `messages_read` events.
+  Stream<Map<String, dynamic>> get readReceipts =>
+      _readReceiptController.stream;
+
+  /// Raw JSON stream for `user_typing` events.
+  Stream<Map<String, dynamic>> get userTyping => _typingController.stream;
+
+  /// Raw JSON stream for `user_stopped_typing` events.
+  Stream<Map<String, dynamic>> get userStoppedTyping =>
+      _stoppedTypingController.stream;
+
+  /// Raw JSON stream for `message_edited` events.
+  Stream<Map<String, dynamic>> get messageEdited =>
+      _messageEditedController.stream;
+
+  /// Raw JSON stream for `message_deleted_everyone` events.
+  Stream<Map<String, dynamic>> get messageDeletedEveryone =>
+      _messageDeletedEveryoneController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -73,6 +97,16 @@ class SocketService {
     debugPrint('[SocketService] leave_chat: $conversationId');
   }
 
+  /// Emits `typing` to notify the receiver that the current user is typing.
+  void sendTyping(String receiverId) {
+    _socket?.emit('typing', {'receiverId': receiverId});
+  }
+
+  /// Emits `stop_typing` to notify the receiver that the current user stopped.
+  void stopTyping(String receiverId) {
+    _socket?.emit('stop_typing', {'receiverId': receiverId});
+  }
+
   /// Disconnects and reconnects with the latest token.
   /// Call this after a token refresh if the socket reports auth failure.
   void reconnectWithNewToken() {
@@ -105,7 +139,11 @@ class SocketService {
           debugPrint('[SocketService] Connection error: $err'))
       ..on('receive_message', _onReceiveMessage)
       ..on('messages_delivered', _onMessageDelivered)
-      ..on('messages_read', _onMessageRead);
+      ..on('messages_read', _onMessageRead)
+      ..on('user_typing', _onUserTyping)
+      ..on('user_stopped_typing', _onUserStoppedTyping)
+      ..on('message_edited', _onMessageEdited)
+      ..on('message_deleted_everyone', _onMessageDeletedEveryone);
   }
 
   void _onReceiveMessage(dynamic data) {
@@ -132,10 +170,47 @@ class SocketService {
     }
   }
 
+  void _onUserTyping(dynamic data) {
+    try {
+      _typingController.add(Map<String, dynamic>.from(data as Map));
+    } catch (e) {
+      debugPrint('[SocketService] user_typing parse error: $e');
+    }
+  }
+
+  void _onUserStoppedTyping(dynamic data) {
+    try {
+      _stoppedTypingController.add(Map<String, dynamic>.from(data as Map));
+    } catch (e) {
+      debugPrint('[SocketService] user_stopped_typing parse error: $e');
+    }
+  }
+
+  void _onMessageEdited(dynamic data) {
+    try {
+      _messageEditedController.add(Map<String, dynamic>.from(data as Map));
+    } catch (e) {
+      debugPrint('[SocketService] message_edited parse error: $e');
+    }
+  }
+
+  void _onMessageDeletedEveryone(dynamic data) {
+    try {
+      _messageDeletedEveryoneController
+          .add(Map<String, dynamic>.from(data as Map));
+    } catch (e) {
+      debugPrint('[SocketService] message_deleted_everyone parse error: $e');
+    }
+  }
+
   void dispose() {
     disconnect();
     _newMessageController.close();
     _deliveryReceiptController.close();
     _readReceiptController.close();
+    _typingController.close();
+    _stoppedTypingController.close();
+    _messageEditedController.close();
+    _messageDeletedEveryoneController.close();
   }
 }
