@@ -11,6 +11,11 @@ class PremiumPaywallPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sub = ref.watch(subscriptionProvider);
 
+    // Already subscribed — show management view instead of subscribe UI
+    if (sub.isPremium) {
+      return const _SubscribedView();
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: CustomScrollView(
@@ -232,23 +237,19 @@ class PremiumPaywallPage extends ConsumerWidget {
                   // Feature list
                   const _FeatureRow(
                     icon: Icons.cloud_upload_outlined,
-                    text: 'Unlimited upload time',
+                    text: 'Unlimited audio uploads',
                   ),
                   const _FeatureRow(
-                    icon: Icons.bar_chart,
-                    text: 'Advanced audience insights',
+                    icon: Icons.playlist_add,
+                    text: 'Unlimited playlists',
                   ),
                   const _FeatureRow(
-                    icon: Icons.attach_money,
-                    text: 'Get paid fairly for your plays',
+                    icon: Icons.music_off,
+                    text: 'Ad-free listening',
                   ),
                   const _FeatureRow(
-                    icon: Icons.swap_horiz,
-                    text: 'Replace tracks without losing stats',
-                  ),
-                  const _FeatureRow(
-                    icon: Icons.push_pin_outlined,
-                    text: 'Pin your favorite tracks',
+                    icon: Icons.download_outlined,
+                    text: 'Offline downloads',
                   ),
 
                   const SizedBox(height: 40),
@@ -261,6 +262,208 @@ class PremiumPaywallPage extends ConsumerWidget {
     );
   }
 }
+
+// ── Already-subscribed management view ────────────────────────────────────────
+
+class _SubscribedView extends ConsumerWidget {
+  const _SubscribedView();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sub = ref.watch(subscriptionProvider);
+    final planName = sub.planType ?? 'Premium';
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 40),
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00C853).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.verified,
+                    color: Color(0xFF00C853), size: 40),
+              ),
+              const SizedBox(height: 24),
+
+              Text(
+                'You are on $planName',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              const Text(
+                'Your subscription is active.\nExplore all your premium features.',
+                style: TextStyle(
+                    color: Colors.white70, fontSize: 15, height: 1.55),
+              ),
+
+              if (sub.cancelAtPeriodEnd) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    sub.expiresAt != null
+                        ? 'Active until ${_formatDate(sub.expiresAt!)}. Renew below.'
+                        : 'Cancels at end of billing period.',
+                    style: const TextStyle(
+                        color: Colors.orange,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+
+              if (sub.error != null) ...[
+                const SizedBox(height: 12),
+                Text(sub.error!,
+                    style: const TextStyle(
+                        color: Colors.redAccent, fontSize: 13)),
+              ],
+
+              const SizedBox(height: 40),
+
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: () => context.push('/upgrade/features'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF5500),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(32)),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Explore Features',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton(
+                  onPressed: () => context.push('/upgrade/status'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white38),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(32)),
+                  ),
+                  child: const Text(
+                    'Manage Subscription',
+                    style: TextStyle(fontSize: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Cancel subscription — only shown if not already canceling
+              if (!sub.cancelAtPeriodEnd)
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: sub.isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                              color: Colors.redAccent, strokeWidth: 2))
+                      : OutlinedButton(
+                          onPressed: () =>
+                              _confirmCancel(context, ref),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            side:
+                                const BorderSide(color: Colors.redAccent),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(32)),
+                          ),
+                          child: const Text(
+                            'Cancel Subscription',
+                            style: TextStyle(fontSize: 15),
+                          ),
+                        ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmCancel(BuildContext context, WidgetRef ref) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: const Text(
+          'Cancel subscription?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'You will keep premium access until your current billing period ends.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Keep plan',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref
+                  .read(subscriptionProvider.notifier)
+                  .cancelSubscription();
+            },
+            child: const Text('Cancel plan',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDate(String iso) {
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+    } catch (_) {
+      return iso;
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _GlowCircle extends StatelessWidget {
   final double size;

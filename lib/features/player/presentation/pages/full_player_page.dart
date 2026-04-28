@@ -1,7 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/themes/app_theme.dart';
 import '../providers/follow_provider.dart';
@@ -10,6 +15,8 @@ import '../../../engagement/data/models/comment_model.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../premium/data/models/offline_downloaded_track.dart';
+import '../../../premium/data/services/offline_downloads_repository.dart';
 import '../../../premium/presentation/providers/subscription_provider.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
@@ -784,30 +791,112 @@ class _DownloadButtonState extends ConsumerState<_DownloadButton> {
   bool _isDownloading = false;
 
   Future<void> _onTap() async {
-    final isPremium = ref.read(subscriptionProvider).isPremium;
-    if (!isPremium) {
+    final sub = ref.read(subscriptionProvider);
+    if (!sub.isPremium) {
       _showUpgradeDialog();
       return;
     }
     if (widget.trackId == null || _isDownloading) return;
     setState(() => _isDownloading = true);
+
+    debugPrint(
+      '[Download] GET /tracks/${widget.trackId}/download '
+      '— isPremium: ${sub.isPremium}, plan: ${sub.planType}, trackId: ${widget.trackId}',
+    );
+
     try {
-      await ref.read(dioClientProvider).dio.get(
+      // API returns application/octet-stream binary data.
+      // ResponseType.bytes tells Dio to collect raw bytes instead of parsing JSON.
+      final response = await ref.read(dioClientProvider).dio.get(
         '/tracks/${widget.trackId}/download',
+        options: Options(responseType: ResponseType.bytes),
       );
+
+      debugPrint('[Download] status: ${response.statusCode}, responseType: bytes');
+
+      // Derive filename from Content-Disposition or fall back to trackId.
+      String filename = 'track_${widget.trackId}.mp3';
+      final cd = response.headers.value('content-disposition');
+      if (cd != null) {
+        final m = RegExp(r'filename="?([^";\n]+)"?').firstMatch(cd);
+        if (m != null) filename = m.group(1)!.trim();
+      }
+
+      // Save bytes to app-private downloads folder.
+      final dir = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory('${dir.path}/downloads');
+      await downloadsDir.create(recursive: true);
+      final file = File('${downloadsDir.path}/$filename');
+      await file.writeAsBytes(response.data as List<int>);
+
+      debugPrint('[Download] saved to ${file.path}');
+
+      // Persist track metadata locally so Offline Downloads page can list it.
+      final playerState = ref.read(playerProvider);
+      final offlineTrack = OfflineDownloadedTrack(
+        trackId: widget.trackId!,
+        title: playerState.currentTrackTitle ?? 'Unknown Track',
+        artistName: playerState.currentTrackArtist ?? '',
+        artworkUrl: playerState.currentTrackArtworkUrl,
+        downloadedAt: DateTime.now(),
+        localPath: file.path,
+        planType: sub.planType,
+      );
+      await ref
+          .read(offlineDownloadsRepositoryProvider)
+          .save(offlineTrack);
+      ref.invalidate(offlineDownloadsProvider);
+
+      debugPrint(
+        '[Download] metadata saved — trackId: ${widget.trackId}, '
+        'plan: ${sub.planType}, path: ${file.path}',
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Download started'),
+            content: Text('Track saved to Offline Downloads'),
             backgroundColor: Color(0xFF4CAF50),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        final msg = e.toString().contains('403')
-            ? 'Download limit reached. Upgrade for more.'
-            : 'Download failed. Try again.';
+        String msg;
+        if (e is DioException) {
+          final status = e.response?.statusCode;
+          final backendMsg = _extractErrorMessage(e.response?.data);
+          debugPrint(
+            '[Download] error — status: $status, '
+            'isPremium: ${sub.isPremium}, plan: ${sub.planType}, '
+            'backendMsg: $backendMsg',
+          );
+          if (status == 403) {
+            ref.read(subscriptionProvider.notifier).refreshFromProfile();
+            if (backendMsg.isNotEmpty) {
+              msg = backendMsg;
+            } else {
+              // Only show limit message if backend confirmed limit — not for all 403s.
+              msg = sub.isPremium
+                  ? 'Download unavailable for your current plan or limit reached.'
+                  : 'Offline downloads require Pro or Go+.';
+            }
+          } else if (status == 401) {
+            msg = 'Please log in again.';
+          } else if (status == 404) {
+            msg = 'Track not found.';
+          } else if (e.type == DioExceptionType.connectionError ||
+              e.type == DioExceptionType.connectionTimeout ||
+              e.type == DioExceptionType.receiveTimeout ||
+              e.type == DioExceptionType.sendTimeout) {
+            msg = 'Check your connection and try again.';
+          } else {
+            msg = backendMsg.isNotEmpty ? backendMsg : 'Download failed. Please try again.';
+          }
+        } else {
+          debugPrint('[Download] unexpected error: $e');
+          msg = 'Download failed. Please try again.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
         );
@@ -815,6 +904,23 @@ class _DownloadButtonState extends ConsumerState<_DownloadButton> {
     } finally {
       if (mounted) setState(() => _isDownloading = false);
     }
+  }
+
+  /// Tries to extract a user-facing message from a Dio error response body.
+  /// The body may be a Map (JSON parsed), List<int> (raw bytes), or String.
+  String _extractErrorMessage(dynamic data) {
+    try {
+      if (data is Map) return data['message'] as String? ?? '';
+      if (data is List<int>) {
+        final decoded = jsonDecode(utf8.decode(data));
+        return (decoded as Map?)?['message'] as String? ?? '';
+      }
+      if (data is String) {
+        final decoded = jsonDecode(data);
+        return (decoded as Map?)?['message'] as String? ?? '';
+      }
+    } catch (_) {}
+    return '';
   }
 
   void _showUpgradeDialog() {
@@ -827,7 +933,7 @@ class _DownloadButtonState extends ConsumerState<_DownloadButton> {
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'Upgrade to Artist Pro or Go+ to download tracks and listen offline.',
+          'Offline downloads require Pro or Go+. Upgrade to listen without internet.',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [

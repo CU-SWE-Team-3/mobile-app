@@ -128,18 +128,6 @@ class UploadNotifier extends StateNotifier<UploadState> {
       return;
     }
 
-    // Role pre-check: only Artist accounts can upload
-    final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('role') ?? '';
-    if (role.toLowerCase() != 'artist') {
-      state = state.copyWith(
-        isUploading: false,
-        needsRoleUpgrade: true,
-        error: 'Artist role required to upload tracks.',
-      );
-      return;
-    }
-
     state = state.copyWith(
       isUploading: true,
       uploadProgress: 0.0,

@@ -265,17 +265,7 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                               key: const ValueKey('upload_progress_upgrade_button'),
                               onPressed: uploadState.isLoading
                                   ? null
-                                  : () async {
-                                      await ref
-                                          .read(uploadProvider.notifier)
-                                          .upgradeToArtist();
-                                      final s = ref.read(uploadProvider);
-                                      if (s.error == null && !s.needsRoleUpgrade) {
-                                        // Role upgraded — let user retry upload
-                                        ref.read(uploadProvider.notifier).clearUploadStatus();
-                                        ref.read(uploadProvider.notifier).uploadTrack();
-                                      }
-                                    },
+                                  : () => context.push('/upgrade'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.orange,
                                 padding: const EdgeInsets.symmetric(vertical: 12),

@@ -217,6 +217,32 @@ class _StatusBody extends ConsumerWidget {
             const _PerkTile(Icons.attach_money, 'Revenue sharing'),
             const _PerkTile(Icons.push_pin_outlined, 'Pin favorite tracks'),
           ],
+
+          const SizedBox(height: 48),
+
+          // ── DEV reset ────────────────────────────────────────────────
+          const Divider(color: Color(0xFF2A2A2A)),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () async {
+              await ref
+                  .read(subscriptionProvider.notifier)
+                  .devReset();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                        'DEV: local premium state reset. Subscribe again to test.'),
+                    backgroundColor: Colors.blueGrey,
+                  ),
+                );
+              }
+            },
+            child: const Text(
+              'DEV: Reset premium state',
+              style: TextStyle(color: Colors.white24, fontSize: 12),
+            ),
+          ),
         ],
       ),
     );

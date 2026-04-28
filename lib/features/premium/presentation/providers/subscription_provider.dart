@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -87,22 +89,51 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       final response = await _dioClient.dio.get('/profile/$permalink');
       final user = response.data['data']['user'] as Map<String, dynamic>?;
       final isPremium = user?['isPremium'] as bool? ?? false;
+
+      // Try to read planType from various possible backend response structures
+      final subscription = user?['subscription'] as Map<String, dynamic>?;
+      final remotePlanType = subscription?['planType'] as String?
+          ?? user?['planType'] as String?;
+
       await prefs.setBool('isPremium', isPremium);
-      state = state.copyWith(isPremium: isPremium, isLoading: false);
+      if (remotePlanType != null) {
+        await prefs.setString('subscriptionPlanType', remotePlanType);
+      }
+
+      state = state.copyWith(
+        isPremium: isPremium,
+        isLoading: false,
+        planType: remotePlanType ?? state.planType,
+      );
     } catch (_) {
       state = state.copyWith(isLoading: false);
     }
   }
 
   Future<void> checkout(String planType) async {
-    if (state.isPremium) {
-      state = state.copyWith(error: 'You are already subscribed.');
+    // Already subscribed and not canceling — caller should navigate to management
+    // UI instead of calling checkout. Return silently; do not set an error.
+    if (state.isPremium && !state.cancelAtPeriodEnd) {
       return;
     }
-    state = state.copyWith(isLoading: true);
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('accessToken');
+    debugPrint('[Subscription] checkout — token exists: ${token != null && token.isNotEmpty}');
+    if (token == null || token.isEmpty) {
+      state = state.copyWith(error: 'Please log in again.');
+      return;
+    }
+    debugPrint('[Subscription] checkout — planType: $planType, endpoint: POST /subscriptions/checkout');
+    // Store plan type now so success page can display it even before API refresh
+    await prefs.setString('subscriptionPlanType', planType);
+    state = state.copyWith(isLoading: true, planType: planType);
     try {
       final service = SubscriptionService(_dioClient);
       final url = await service.checkout(planType);
+      if (url.isEmpty) {
+        state = state.copyWith(isLoading: false, error: 'Invalid checkout URL received.');
+        return;
+      }
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -111,8 +142,21 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         return;
       }
       state = state.copyWith(isLoading: false);
+      // Best-effort refresh after returning from the external browser.
+      Future.delayed(const Duration(seconds: 3), refreshFromProfile);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: _msg(e));
+      // Backend 400 "already subscribed/premium" means the user IS subscribed.
+      // Treat it as a subscribed state, not a failure: refresh and clear error.
+      if (e is DioException && e.response?.statusCode == 400) {
+        final body = e.response?.data;
+        final msg = body is Map ? (body['message'] as String? ?? '') : '';
+        if (msg.toLowerCase().contains('already')) {
+          state = state.copyWith(isLoading: false);
+          await refreshFromProfile();
+          return;
+        }
+      }
+      state = state.copyWith(isLoading: false, error: _mapError(e));
     }
   }
 
@@ -121,26 +165,114 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       state = state.copyWith(error: 'No active subscription to cancel.');
       return;
     }
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('accessToken');
+    debugPrint('[Subscription] cancel — token exists: ${token != null && token.isNotEmpty}, endpoint: POST /subscriptions/cancel');
+    if (token == null || token.isEmpty) {
+      state = state.copyWith(error: 'Please log in again.');
+      return;
+    }
     state = state.copyWith(isLoading: true);
     try {
       final service = SubscriptionService(_dioClient);
+      // No explicit token arg — DioClient global Bearer header handles auth
+      // (same mechanism as checkout(), which works correctly).
+      // Items [1–5] are logged inside SubscriptionService.cancel().
       final expiresAt = await service.cancel();
-      final prefs = await SharedPreferences.getInstance();
+
       if (expiresAt != null) {
         await prefs.setString('subscriptionExpiresAt', expiresAt);
       }
       await prefs.setBool('cancelAtPeriodEnd', true);
+
+      // [6] Final UI message — success path
+      final uiMsg = expiresAt != null
+          ? 'Your subscription will remain active until $expiresAt'
+          : 'Subscription cancelled. Access continues until your billing period ends.';
+      debugPrint('[Cancel] [6] final UI message: $uiMsg');
+
       state = state.copyWith(
         isLoading: false,
         expiresAt: expiresAt,
         cancelAtPeriodEnd: true,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: _msg(e));
+      final status = e is DioException ? e.response?.statusCode : null;
+      final body = e is DioException ? e.response?.data : null;
+      // Detect backend "route not found" (endpoint not deployed yet)
+      String errMsg = _mapError(e);
+      if (errMsg.toLowerCase().contains('route') && errMsg.toLowerCase().contains('not found')) {
+        errMsg = 'Cancellation is not available from backend yet.';
+      }
+
+      // [6] Final UI message — failure path
+      debugPrint(
+        '[Cancel] FAILED — status: $status, body: $body, '
+        'errorType: ${e.runtimeType}\n'
+        '[Cancel] [6] final UI message: $errMsg',
+      );
+
+      state = state.copyWith(isLoading: false, error: errMsg);
     }
   }
 
-  String _msg(Object e) => e.toString().replaceFirst('Exception: ', '');
+  /// DEV ONLY — resets all local premium state so the subscribe flow can be re-tested
+  /// without waiting for a real billing period to expire.
+  Future<void> devReset() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isPremium', false);
+    await prefs.remove('subscriptionPlanType');
+    await prefs.remove('subscriptionExpiresAt');
+    await prefs.setBool('cancelAtPeriodEnd', false);
+    debugPrint('[Subscription] devReset — local premium state cleared');
+    state = const SubscriptionState();
+  }
+
+  String _mapError(Object e) {
+    if (e is DioException) {
+      final status = e.response?.statusCode;
+      if (status == 401) return 'Session expired. Please log in again.';
+      if (status == 400) {
+        // "already subscribed" 400s are intercepted in checkout() before reaching here.
+        final msg = _bodyMessage(e.response?.data);
+        return msg.isNotEmpty ? msg : 'No active subscription found.';
+      }
+      if (status == 403) return 'This feature requires a premium plan.';
+      if (status == 404) return 'Cancellation is not available from backend yet.';
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        return 'Network error. Please try again.';
+      }
+      // Surface backend message for any other status before falling back.
+      final msg = _bodyMessage(e.response?.data);
+      if (msg.isNotEmpty) return msg;
+    }
+    return 'Something went wrong. Please try again.';
+  }
+
+  /// Extracts the `message` field from a Dio response body (Map or String).
+  String _bodyMessage(dynamic data) {
+    try {
+      if (data is Map) return (data['message'] as String?) ?? '';
+      if (data is String && data.isNotEmpty) {
+        // Avoid importing dart:convert — do a simple substring search.
+        final start = data.indexOf('"message"');
+        if (start != -1) {
+          final colon = data.indexOf(':', start);
+          if (colon != -1) {
+            final q1 = data.indexOf('"', colon + 1);
+            if (q1 != -1) {
+              final q2 = data.indexOf('"', q1 + 1);
+              if (q2 != -1) return data.substring(q1 + 1, q2);
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
 }
 
 final subscriptionProvider =

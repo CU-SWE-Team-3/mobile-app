@@ -20,6 +20,7 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
   }
 
   Future<void> _checkPaywall() async {
+    // Both Pro and Go+ unlock unlimited playlists.
     final isPremium = ref.read(subscriptionProvider).isPremium;
     if (isPremium) return;
 

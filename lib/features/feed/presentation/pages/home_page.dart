@@ -1,10 +1,15 @@
 import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
+import 'package:soundcloud_clone/features/library/presentation/providers/upload_provider.dart';
+import 'package:soundcloud_clone/features/premium/presentation/providers/subscription_provider.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
@@ -113,6 +118,73 @@ class _HomePageState extends ConsumerState<HomePage> {
     if (mounted) _showSuggestedDialog(context);
   }
 
+  Future<void> _pickAndUpload(BuildContext context) async {
+    final sub = ref.read(subscriptionProvider);
+    final unlockedUploads = sub.isPremium && sub.planType == 'Pro';
+    if (!unlockedUploads) {
+      final tracks = ref.read(myTracksProvider).valueOrNull ?? [];
+      if (tracks.length >= 3) {
+        if (context.mounted) {
+          showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF1C1C1E),
+              title: const Text('Upload limit reached',
+                  style: TextStyle(color: Colors.white)),
+              content: const Text(
+                'Free accounts can upload up to 3 tracks. Upgrade to Artist Pro for unlimited uploads.',
+                style: TextStyle(color: Colors.white70),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Not now',
+                      style: TextStyle(color: Colors.white54)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF5500)),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push('/upgrade');
+                  },
+                  child: const Text('Upgrade',
+                      style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+    }
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav'],
+        allowMultiple: false,
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final path = result.files.first.path;
+        if (path != null && context.mounted) {
+          await ref
+              .read(uploadProvider.notifier)
+              .initializeUpload(audioFilePath: path);
+          if (context.mounted) context.push('/upload');
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error picking file: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _fetchFeed() async {
     setState(() { _isLoading = true; _hasError = false; });
     try {
@@ -120,7 +192,8 @@ class _HomePageState extends ConsumerState<HomePage> {
       final userId = prefs.getString('userId') ?? '';
 
       final response = await dioClient.dio.get('/network/feed');
-      final List<dynamic> data = response.data['data'] as List<dynamic>;
+      final raw = response.data['data'];
+      final List<dynamic> data = raw is List ? raw : [];
       var tracks = data
           .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -194,7 +267,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Feed] _fetchFeed error: $e');
       if (mounted) setState(() { _isLoading = false; _hasError = true; });
     }
   }
@@ -318,7 +392,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         actions: [
           TextButton(
             key: const ValueKey('home_get_pro_button'),
-            onPressed: () {},
+            onPressed: () => context.push('/upgrade'),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               minimumSize: Size.zero,
@@ -340,7 +414,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
           IconButton(
             key: const ValueKey('home_upload_button'),
-            onPressed: () {},
+            onPressed: () => _pickAndUpload(context),
             icon: const Icon(Icons.upload_rounded, color: Colors.white, size: 22),
           ),
           IconButton(
@@ -382,7 +456,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               itemBuilder: (context, index) {
                 final isSelected = _selectedGenreIndex == index;
                 return GestureDetector(
-                  key: const ValueKey('home_genre_chip'),
+                  key: ValueKey('home_genre_chip_$index'),
                   onTap: () => setState(() => _selectedGenreIndex = index),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -441,7 +515,7 @@ class _TrackRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
-      key: const ValueKey('home_track_row'),
+      key: ValueKey('home_track_row_${track.id}'),
       onTap: () {
         if (track.hlsUrl.isEmpty) return;
         final queue = allTracks

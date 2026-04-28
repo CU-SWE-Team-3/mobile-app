@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/entities/upload_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
@@ -54,17 +53,12 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   }
 
   Future<void> _pickAndUpload(BuildContext context) async {
-    // Check Artist role before opening file picker — saves user from a failed upload attempt.
-    final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('role') ?? '';
-    if (role.toLowerCase() != 'artist') {
-      if (context.mounted) _showUpgradeRoleDialog(context);
-      return;
-    }
-
-    // Enforce upload limit for free users.
-    final isPremium = ref.read(subscriptionProvider).isPremium;
-    if (!isPremium && _allTracks.length >= 3) {
+    // Module 12: Free users can upload up to 3 tracks; Artist Pro is unlimited.
+    // The backend enforces its own auth/role rules — client only enforces the
+    // free-plan track count limit. No client-side role check is applied here.
+    final sub = ref.read(subscriptionProvider);
+    final unlockedUploads = sub.isPremium && sub.planType == 'Pro';
+    if (!unlockedUploads && _allTracks.length >= 3) {
       if (context.mounted) _showUploadLimitDialog(context);
       return;
     }
@@ -94,64 +88,6 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
         );
       }
     }
-  }
-
-  void _showUpgradeRoleDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
-        title: const Text(
-          'Artist Role Required',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Only Artist accounts can upload tracks. Upgrade your account to start sharing your music.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            key: const ValueKey('uploads_role_cancel_button'),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
-            key: const ValueKey('uploads_role_upgrade_button'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF5500),
-            ),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await ref.read(uploadProvider.notifier).upgradeToArtist();
-              if (!context.mounted) return;
-              final uploadState = ref.read(uploadProvider);
-              if (uploadState.error != null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(uploadState.error!),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Account upgraded! You can now upload tracks.'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-            },
-            child: const Text(
-              'Upgrade to Artist',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showUploadLimitDialog(BuildContext context) {
@@ -394,61 +330,91 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
           // Info pills section
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.flash_on,
-                            color: Color(0xFF9B3FFF), size: 16),
-                        SizedBox(width: 6),
-                        Text(
-                          'No Amplify credits',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+            child: Builder(builder: (context) {
+              final totalMs = _allTracks.fold<int>(
+                  0, (sum, t) => sum + (t.duration ?? 0));
+              final totalMins = (totalMs / 60000).floor();
+              return Row(
+                children: [
+                  // Upload arrow button
+                  GestureDetector(
+                    key: const ValueKey('uploads_new_upload_button'),
+                    onTap: () => _pickAndUpload(context),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Icon(
+                        Icons.upload_rounded,
+                        color: Colors.black,
+                        size: 18,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.cloud_upload,
-                            color: Color(0xFF5C8DFF), size: 16),
-                        SizedBox(width: 6),
-                        Text(
-                          '24/120 mins used',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.flash_on,
+                              color: Color(0xFF9B3FFF), size: 16),
+                          SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'No Amplify credits',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.cloud_upload,
+                              color: Color(0xFF5C8DFF), size: 16),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              '$totalMins/120 mins used',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }),
           ),
           // Tracks list (loading / error / populated)
           Expanded(
@@ -636,12 +602,6 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        key: const ValueKey('uploads_add_fab'),
-        onPressed: () => _pickAndUpload(context),
-        backgroundColor: const Color(0xFFFF5500),
-        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }

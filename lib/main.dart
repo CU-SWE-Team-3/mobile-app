@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/network/dio_client.dart';
 import 'core/router/app_router.dart';
 import 'core/themes/app_theme.dart';
+import 'features/premium/presentation/providers/subscription_provider.dart';
 import 'injection_container.dart';
 
 void main() async {
@@ -21,21 +22,30 @@ void main() async {
   );
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initDeepLinks();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh subscription when user returns from background (e.g., from Stripe browser)
+    if (state == AppLifecycleState.resumed) {
+      ref.read(subscriptionProvider.notifier).refreshFromProfile();
+    }
   }
 
   Future<void> _initDeepLinks() async {
@@ -50,6 +60,16 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _handleLink(Uri uri) async {
+    // Payment return paths — no token required
+    if (uri.path == '/payment-success') {
+      appRouter.go('/payment-success');
+      return;
+    }
+    if (uri.path == '/payment-cancel') {
+      appRouter.go('/upgrade');
+      return;
+    }
+
     final token = uri.queryParameters['token'];
     if (token == null || token.isEmpty) return;
 
@@ -69,6 +89,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
     super.dispose();
   }

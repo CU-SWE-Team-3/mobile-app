@@ -31,13 +31,17 @@ class LibraryPage extends ConsumerWidget {
 
                   const Spacer(),
 
-                  const Text(
-                    'GET PRO',
-                    style: TextStyle(
-                      color: Color(0xFFFF5500),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+                  GestureDetector(
+                    key: const ValueKey('library_get_pro_button'),
+                    onTap: () => context.push('/upgrade'),
+                    child: const Text(
+                      'GET PRO',
+                      style: TextStyle(
+                        color: Color(0xFFFF5500),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
 
