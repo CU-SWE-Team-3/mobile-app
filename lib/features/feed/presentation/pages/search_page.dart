@@ -28,6 +28,12 @@ class _SearchPageState extends State<SearchPage> {
     _Genre('R&B',           'assets/images/R&B.png',          Color(0xFF9B59B6), 495, 206),
     _Genre('Chill',         'assets/images/Chill.png',        Color(0xFF1AAD6E), 501, 212),
     _Genre('Party',         'assets/images/Party.png',        Color(0xFFDDAA1A), 500, 429),
+    _Genre('Workout',       'assets/images/Workout.png',      Color(0xFFE53935), 510, 489),
+    _Genre('Techno',        'assets/images/Techno.png',       Color(0xFF5C6BC0), 416, 600),
+    _Genre('House',         'assets/images/House.png',        Color(0xFF7B1FA2), 416, 600),
+    _Genre('Feel Good',     'assets/images/Feel_good.png',    Color(0xFF43A047), 548, 264),
+    _Genre('At Home',       'assets/images/At_home.png',      Color(0xFFFF8F00), 556, 274),
+    _Genre('Healing Era',   'assets/images/Healing_era.png',  Color(0xFF00897B), 511, 488),
   ];
 
   final _controller = TextEditingController();
@@ -77,7 +83,7 @@ class _SearchPageState extends State<SearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF1A1A1A),
       body: SafeArea(
         child: Column(
           children: [
@@ -111,7 +117,7 @@ class _SearchPageState extends State<SearchPage> {
                         )
                       : null,
                   filled: true,
-                  fillColor: const Color(0xFF1E1E1E),
+                  fillColor: const Color(0xFF343434),
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -270,14 +276,14 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildVibesGrid() {
-    const gap = 6.0;
+    const gap = 2.0;
+    const leftTopGap = 0.0;
 
-    // left column:  Hip Hop & Rap, Pop, Chill
-    // right column: Electronic, R&B, Party
-    final left  = [_genres[0], _genres[2], _genres[4]];
-    final right = [_genres[1], _genres[3], _genres[5]];
+    final left  = [for (int i = 0; i < _genres.length; i += 2) _genres[i]];
+    final right = [for (int i = 1; i < _genres.length; i += 2) _genres[i]];
 
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,7 +292,7 @@ class _SearchPageState extends State<SearchPage> {
             'Vibes',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -299,7 +305,8 @@ class _SearchPageState extends State<SearchPage> {
                   children: [
                     for (int i = 0; i < left.length; i++) ...[
                       _buildGenreCard(left[i]),
-                      if (i < left.length - 1) const SizedBox(height: gap),
+                      if (i < left.length - 1)
+                        SizedBox(height: i == 0 ? leftTopGap : gap),
                     ],
                   ],
                 ),
@@ -323,9 +330,12 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildGenreCard(_Genre genre) {
+    final route = genre.name == 'Hip Hop & Rap'
+        ? '/home/genre/hiphop'
+        : '/search/genre/${Uri.encodeComponent(genre.name)}';
+
     return GestureDetector(
-      onTap: () => context.push(
-          '/search/genre/${Uri.encodeComponent(genre.name)}'),
+      onTap: () => context.push(route),
       child: AspectRatio(
         aspectRatio: genre.imageWidth / genre.imageHeight,
         child: Container(
