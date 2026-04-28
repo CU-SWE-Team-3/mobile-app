@@ -148,34 +148,33 @@ class _DetailTrack {
       );
 }
 
-class HiphopPlaylistDetailPage extends ConsumerStatefulWidget {
+class RnbPlaylistDetailPage extends ConsumerStatefulWidget {
   final String playlistId;
   final bool useBuzzingPreset;
 
-  const HiphopPlaylistDetailPage({
+  const RnbPlaylistDetailPage({
     super.key,
     required this.playlistId,
     this.useBuzzingPreset = false,
   });
 
   @override
-  ConsumerState<HiphopPlaylistDetailPage> createState() =>
-      _HiphopPlaylistDetailPageState();
+  ConsumerState<RnbPlaylistDetailPage> createState() =>
+      _RnbPlaylistDetailPageState();
 }
 
-class _HiphopPlaylistDetailPageState
-    extends ConsumerState<HiphopPlaylistDetailPage> {
+class _RnbPlaylistDetailPageState extends ConsumerState<RnbPlaylistDetailPage> {
   _PlaylistMeta? _meta;
   List<_DetailTrack> _tracks = [];
   bool _isLoading = true;
   bool _hasError = false;
 
   bool get _isBuzzingPreset => widget.useBuzzingPreset;
-  static const _hiphopQuery = 'Hiphop & rap';
-  static const _buzzingLikeKey = 'buzzing_hiphop_rap_liked';
+  static const _rnbQuery = 'R&B';
+  static const _buzzingLikeKey = 'buzzing_rnb_liked';
 
   static const _buzzingDescription =
-      'Audio omakase based on what real Hip Hop fans are connecting with. '
+      'Audio omakase based on what real R&B fans are connecting with. '
       'A spot on Buzzing is determined by what listeners are replaying, '
       'sharing, and keeping in rotation right now.';
 
@@ -192,7 +191,7 @@ class _HiphopPlaylistDetailPageState
   }) {
     return _PlaylistMeta(
       id: widget.playlistId,
-      title: 'Buzzing Hip Hop & Rap',
+      title: 'Buzzing R&B',
       ownerName: 'New!',
       artworkUrl: _resolveBuzzingArtworkUrl(tracks),
       description: _buzzingDescription,
@@ -220,7 +219,7 @@ class _HiphopPlaylistDetailPageState
 
   Future<void> _fetchBuzzingGenreTracks() async {
     final responses = await Future.wait([
-      dioClient.dio.get('/discovery/genre/${Uri.encodeComponent(_hiphopQuery)}'),
+      dioClient.dio.get('/discovery/genre/${Uri.encodeComponent(_rnbQuery)}'),
       if (widget.playlistId.isNotEmpty)
         dioClient.dio.get('/playlists/${widget.playlistId}'),
     ]);
@@ -427,7 +426,7 @@ class _HiphopPlaylistDetailPageState
               ),
               const SizedBox(height: 4),
               const Text(
-                'Buzzing Hip Hop & Rap',
+                              'Buzzing R&B',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -973,7 +972,7 @@ class _HiphopPlaylistDetailPageState
               right: 0,
               bottom: 7,
               child: Text(
-                'Hip Hop & Rap',
+                          'R&B',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,

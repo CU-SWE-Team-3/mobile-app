@@ -8,6 +8,7 @@ import '../../../../core/utils/profile_navigation.dart';
 import '../providers/follow_provider.dart';
 import '../providers/player_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
+import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
@@ -550,10 +551,61 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                             : '',
                         onTap: engState.isLoadingLike || trackId == null
                             ? () {}
-                            : () => ref
-                                .read(
-                                    engagementProvider(engParams).notifier)
-                                .toggleLike(),
+                            : () async {
+                                final currentTrack = playerState.currentTrack;
+                                final wasLiked = engState.isLiked;
+                                void writeOverride({
+                                  required PlayerTrack track,
+                                  required bool liked,
+                                  required int likeCount,
+                                }) {
+                                  final current =
+                                      Map<String, TrackSummary>.from(
+                                    ref.read(likedTrackOverridesProvider),
+                                  );
+                                  if (liked) {
+                                    current[track.id] = TrackSummary(
+                                      id: track.id,
+                                      title: track.title,
+                                      artistName: track.artist,
+                                      artistId: track.artistId,
+                                      artistPermalink: track.artistPermalink,
+                                      artworkUrl: track.coverUrl,
+                                      audioUrl: track.audioUrl,
+                                      waveform: track.waveform,
+                                      likeCount: likeCount,
+                                    );
+                                  } else {
+                                    current.remove(track.id);
+                                  }
+                                  ref
+                                      .read(
+                                        likedTrackOverridesProvider.notifier,
+                                      )
+                                      .state = current;
+                                }
+
+                                if (currentTrack != null) {
+                                  writeOverride(
+                                    track: currentTrack,
+                                    liked: !wasLiked,
+                                    likeCount: wasLiked
+                                        ? engState.likeCount
+                                        : engState.likeCount + 1,
+                                  );
+                                }
+                                final success = await ref
+                                    .read(
+                                        engagementProvider(engParams).notifier)
+                                    .toggleLike();
+                                if (!success && currentTrack != null) {
+                                  writeOverride(
+                                    track: currentTrack,
+                                    liked: wasLiked,
+                                    likeCount: engState.likeCount,
+                                  );
+                                }
+                              },
                       ),
                       _ActionButton(
                         key: const ValueKey('player_repost_button'),

@@ -332,7 +332,13 @@ class _SearchPageState extends State<SearchPage> {
   Widget _buildGenreCard(_Genre genre) {
     final route = genre.name == 'Hip Hop & Rap'
         ? '/home/genre/hiphop'
-        : '/search/genre/${Uri.encodeComponent(genre.name)}';
+        : genre.name == 'Electronic'
+            ? '/home/genre/electronic'
+            : genre.name == 'Pop'
+                ? '/home/genre/pop'
+                : genre.name == 'R&B'
+                    ? '/home/genre/rnb'
+            : '/search/genre/${Uri.encodeComponent(genre.name)}';
 
     return GestureDetector(
       onTap: () => context.push(route),
@@ -362,3 +368,4 @@ class _SearchPageState extends State<SearchPage> {
         child: const Icon(Icons.music_note, color: Colors.white38, size: 24),
       );
 }
+

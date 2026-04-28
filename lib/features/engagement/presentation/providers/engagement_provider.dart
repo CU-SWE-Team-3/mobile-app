@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/sources/engagement_remote_data_source.dart';
 import '../../../../injection_container.dart';
@@ -70,6 +71,7 @@ class EngagementState {
 
 class EngagementNotifier extends StateNotifier<EngagementState> {
   final EngagementRemoteDataSource _dataSource;
+  final Ref _ref;
   final String trackId;
   /// True only after the user has actively toggled like or repost.
   /// seed() is a no-op once this is set so live toggle state is never
@@ -77,6 +79,7 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
   bool _userToggled = false;
 
   EngagementNotifier(
+    this._ref,
     this._dataSource,
     this.trackId, {
     required bool initialIsLiked,
@@ -89,6 +92,17 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
           likeCount: initialLikeCount,
           repostCount: initialRepostCount,
         ));
+
+  void _setLikeHidden(bool hidden) {
+    final current = _ref.read(hiddenLikedTrackIdsProvider);
+    final next = <String>{...current};
+    if (hidden) {
+      next.add(trackId);
+    } else {
+      next.remove(trackId);
+    }
+    _ref.read(hiddenLikedTrackIdsProvider.notifier).state = next;
+  }
 
   /// Overwrite state with authoritative values from an API response.
   /// Named params so callers only supply the fields they actually know —
@@ -105,8 +119,8 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
   }
 
 
-  Future<void> toggleLike() async {
-    if (state.isLoadingLike) return;
+  Future<bool> toggleLike() async {
+    if (state.isLoadingLike) return false;
     _userToggled = true;
     final wasLiked = state.isLiked;
     final prevCount = state.likeCount;
@@ -115,27 +129,56 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
       likeCount: wasLiked ? prevCount - 1 : prevCount + 1,
       isLoadingLike: true,
     );
+    _setLikeHidden(wasLiked);
     try {
       if (wasLiked) {
         await _dataSource.unlikeTrack(trackId);
       } else {
         await _dataSource.likeTrack(trackId);
       }
+      _ref.read(likesRefreshTickProvider.notifier).state++;
       state = state.copyWith(isLoadingLike: false);
+      return true;
     } catch (e) {
-      // Only rollback on true network failure (no response reached the server).
-      // If the server responded (even 4xx), the action was processed — keep
-      // the optimistic state and just clear the loading flag.
-      final noResponse = e is DioException && e.response == null;
-      if (noResponse) {
-        state = state.copyWith(
-          isLiked: wasLiked,
-          likeCount: prevCount,
-          isLoadingLike: false,
-        );
-      } else {
-        state = state.copyWith(isLoadingLike: false);
-      }
+      state = state.copyWith(
+        isLiked: wasLiked,
+        likeCount: prevCount,
+        isLoadingLike: false,
+      );
+      _setLikeHidden(!wasLiked);
+      return false;
+    }
+  }
+
+  Future<bool> removeLike() async {
+    if (state.isLoadingLike) return !state.isLiked;
+    if (!state.isLiked) {
+      _ref.read(likesRefreshTickProvider.notifier).state++;
+      return true;
+    }
+
+    _userToggled = true;
+    final prevCount = state.likeCount;
+    state = state.copyWith(
+      isLiked: false,
+      likeCount: prevCount > 0 ? prevCount - 1 : 0,
+      isLoadingLike: true,
+    );
+    _setLikeHidden(true);
+
+    try {
+      await _dataSource.unlikeTrack(trackId);
+      _ref.read(likesRefreshTickProvider.notifier).state++;
+      state = state.copyWith(isLoadingLike: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLiked: true,
+        likeCount: prevCount,
+        isLoadingLike: false,
+      );
+      _setLikeHidden(false);
+      return false;
     }
   }
 
@@ -176,6 +219,7 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
 final engagementProvider =
     StateNotifierProvider.family<EngagementNotifier, EngagementState, EngagementParams>(
   (ref, params) => EngagementNotifier(
+    ref,
     sl<EngagementRemoteDataSource>(),
     params.trackId,
     initialIsLiked: params.isLiked,
@@ -184,3 +228,31 @@ final engagementProvider =
     initialRepostCount: params.repostCount,
   ),
 );
+
+final likesRefreshTickProvider = StateProvider<int>((ref) => 0);
+final hiddenLikedTrackIdsProvider = StateProvider<Set<String>>((ref) => <String>{});
+final likedTrackOverridesProvider =
+    StateProvider<Map<String, TrackSummary>>((ref) => <String, TrackSummary>{});
+
+final backendUserLikesProvider =
+    FutureProvider.autoDispose<List<TrackSummary>>((ref) async {
+  ref.watch(likesRefreshTickProvider);
+  final prefs = await SharedPreferences.getInstance();
+  final userId = prefs.getString('userId') ?? '';
+  if (userId.isEmpty) return [];
+  return sl<EngagementRemoteDataSource>().getUserLikes(userId);
+});
+
+final mergedUserLikesProvider = Provider<AsyncValue<List<TrackSummary>>>((ref) {
+  final hiddenIds = ref.watch(hiddenLikedTrackIdsProvider);
+  final overrides = ref.watch(likedTrackOverridesProvider);
+  final backendAsync = ref.watch(backendUserLikesProvider);
+
+  return backendAsync.whenData((backendLikes) {
+    final merged = <TrackSummary>[
+      ...overrides.values,
+      ...backendLikes.where((track) => !overrides.containsKey(track.id)),
+    ];
+    return merged.where((track) => !hiddenIds.contains(track.id)).toList();
+  });
+});

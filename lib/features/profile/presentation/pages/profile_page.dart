@@ -184,7 +184,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   void _playFromLikes(int index) {
-    final playable = _likes
+    final mergedLikes = ref
+        .read(mergedUserLikesProvider)
+        .maybeWhen(data: (tracks) => tracks, orElse: () => _likes);
+    final playable = mergedLikes
         .where((t) => t.audioUrl != null && t.audioUrl!.isNotEmpty)
         .toList();
     if (playable.isEmpty) return;
@@ -472,6 +475,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     ref.listen<AsyncValue<List<UploadTrack>>>(myTracksProvider, (_, next) {
       next.whenData((tracks) => _cachedTracks = tracks);
     });
+    ref.listen<int>(likesRefreshTickProvider, (previous, next) {
+      if (previous != next) {
+        _fetchLikes();
+      }
+    });
 
     return Scaffold(
       backgroundColor: _bg,
@@ -545,13 +553,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                               _repostsList(),
                               _sectionHeader('Playlists'),
                               _playlistRow(context),
-                              _sectionHeader(
-                                'Likes',
-                                onSeeAll: () {
-                                  _playFromLikes(0);
-                                  context.push('/library/likes');
-                                },
-                              ),
+                                _sectionHeader(
+                                  'Likes',
+                                  onSeeAll: () => context.push('/profile/likes'),
+                                ),
                               _likesList(),
                               const SizedBox(height: 120),
                             ],
@@ -954,7 +959,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   // ── likes list ───────────────────────────────────────────────────────
   Widget _likesList() {
-    if (_likes.isEmpty) {
+    final mergedLikesAsync = ref.watch(mergedUserLikesProvider);
+    final visibleLikes = mergedLikesAsync.maybeWhen(
+      data: (tracks) => tracks,
+      orElse: () => _likes,
+    );
+    if (visibleLikes.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Text('No liked tracks yet',
@@ -962,7 +972,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       );
     }
     return Column(
-      children: _likes.take(3).toList().asMap().entries.map((e) {
+      children: visibleLikes.take(3).toList().asMap().entries.map((e) {
         final r = e.value;
         final sub = Colors.white.withOpacity(0.55);
         final hasArtwork = r.artworkUrl != null &&

@@ -24,8 +24,12 @@ import '../../features/feed/presentation/pages/search_results_users_page.dart';
 import '../../features/feed/presentation/pages/search_results_playlists_page.dart';
 import '../../features/feed/presentation/pages/electronic_genre_page.dart';
 import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
+import '../../features/feed/presentation/pages/electronic_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/pop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/pop_genre_page.dart';
+import '../../features/feed/presentation/pages/rnb_genre_page.dart';
+import '../../features/feed/presentation/pages/rnb_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/genre_results_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
@@ -178,6 +182,9 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'genre/pop',
                     builder: (_, __) => const PopGenrePage()),
+                GoRoute(
+                    path: 'genre/rnb',
+                    builder: (_, __) => const RnbGenrePage()),
               ],
             ),
           ],
@@ -216,6 +223,27 @@ final appRouter = GoRouter(
                                state.uri.queryParameters['playlistId'] ?? '',
                            useBuzzingPreset: true,
                          )),
+                GoRoute(
+                    path: 'electronic/introducing',
+                    builder: (_, state) => ElectronicPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
+                    path: 'pop/introducing',
+                    builder: (_, state) => PopPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
+                    path: 'rnb/introducing',
+                    builder: (_, state) => RnbPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
                 GoRoute(
                     path: 'genre/:genreName',
                     builder: (_, state) => GenreResultsPage(
@@ -312,6 +340,7 @@ final appRouter = GoRouter(
         GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
         GoRoute(
             path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
+        GoRoute(path: 'likes', builder: (_, __) => const LibraryLikesPage()),
         GoRoute(
             path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
         GoRoute(path: 'avatar', builder: (_, __) => const AvatarUploadPage()),
