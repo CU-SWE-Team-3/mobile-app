@@ -89,100 +89,108 @@ class LibraryPage extends ConsumerWidget {
                 color: const Color(0xFFFF5500),
                 backgroundColor: const Color(0xFF1A1A1A),
                 child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  _LibraryMenuItem(key: const ValueKey('library_likes_item'), title: 'Your likes', onTap: () => context.push('/likes')),
-                  _LibraryMenuItem(key: const ValueKey('library_playlists_item'), title: 'Playlists', onTap: () {}),
-                  _LibraryMenuItem(
-                    key: const ValueKey('library_albums_item'),
-                    title: 'Albums',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const LibraryAlbumsPage()),
+                  padding: EdgeInsets.zero,
+                  children: [
+                    _LibraryMenuItem(
+                        key: const ValueKey('library_likes_item'),
+                        title: 'Your likes',
+                        onTap: () => context.push('/library/likes')),
+                    _LibraryMenuItem(
+                        key: const ValueKey('library_playlists_item'),
+                        title: 'Playlists',
+                        onTap: () => context.push('/library/playlists')),
+                    _LibraryMenuItem(
+                      key: const ValueKey('library_albums_item'),
+                      title: 'Albums',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const LibraryAlbumsPage()),
+                      ),
                     ),
-                  ),
-                  _LibraryMenuItem(
-                    key: const ValueKey('library_following_item'),
-                    title: 'Following',
-                    onTap: () => context.push('/library/following'),
-                  ),
-                  _LibraryMenuItem(
-                    key: const ValueKey('library_stations_item'),
-                    title: 'Stations',
-                    onTap: () => context.push('/library/stations'),
-                  ),
-                  _LibraryMenuItem(
-                    key: const ValueKey('library_insights_item'),
-                    title: 'Your insights',
-                    onTap: () => context.push('/library/insights'),
-                  ),
-                  _LibraryMenuItem(
-                    key: const ValueKey('library_uploads_item'),
-                    title: 'Your uploads',
-                    onTap: () => context.push('/library/uploads'),
-                  ),
+                    _LibraryMenuItem(
+                      key: const ValueKey('library_following_item'),
+                      title: 'Following',
+                      onTap: () => context.push('/library/following'),
+                    ),
+                    _LibraryMenuItem(
+                      key: const ValueKey('library_stations_item'),
+                      title: 'Stations',
+                      onTap: () => context.push('/library/stations'),
+                    ),
+                    _LibraryMenuItem(
+                      key: const ValueKey('library_insights_item'),
+                      title: 'Your insights',
+                      onTap: () => context.push('/library/insights'),
+                    ),
+                    _LibraryMenuItem(
+                      key: const ValueKey('library_uploads_item'),
+                      title: 'Your uploads',
+                      onTap: () => context.push('/library/uploads'),
+                    ),
 
-                  const SizedBox(height: 32),
+                    const SizedBox(height: 32),
 
-                  // ── Recently played ───────────
-                  GestureDetector(
-                    onTap: () => context.push('/player/recent'),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Recently played',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                    // ── Recently played ───────────
+                    GestureDetector(
+                      onTap: () => context.push('/player/recent'),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Recently played',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () => context.push('/player/recent'),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Find all your recently played content here.',
-                        style: TextStyle(color: Color(0xFF999999), fontSize: 14),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // ── Listening history ─────────
-                  GestureDetector(
-                    onTap: () => context.push('/player/history'),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Listening history',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => context.push('/player/recent'),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Find all your recently played content here.',
+                          style:
+                              TextStyle(color: Color(0xFF999999), fontSize: 14),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () => context.push('/player/history'),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        "Find all the tracks you've listened to here.",
-                        style: TextStyle(color: Color(0xFF999999), fontSize: 14),
+
+                    const SizedBox(height: 32),
+
+                    // ── Listening history ─────────
+                    GestureDetector(
+                      onTap: () => context.push('/player/history'),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'Listening history',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => context.push('/player/history'),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          "Find all the tracks you've listened to here.",
+                          style:
+                              TextStyle(color: Color(0xFF999999), fontSize: 14),
+                        ),
+                      ),
+                    ),
 
-                  const SizedBox(height: 120),
-                ],
+                    const SizedBox(height: 120),
+                  ],
                 ),
               ),
             ),

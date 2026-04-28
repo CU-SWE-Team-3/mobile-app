@@ -44,7 +44,23 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Refresh subscription when user returns from background (e.g., from Stripe browser)
     if (state == AppLifecycleState.resumed) {
-      ref.read(subscriptionProvider.notifier).refreshFromProfile();
+      _onResume();
+    }
+  }
+
+  Future<void> _onResume() async {
+    try {
+      await ref.read(subscriptionProvider.notifier).refreshFromProfile();
+      final sub = ref.read(subscriptionProvider);
+      if (sub.isPremium) {
+        try {
+          appRouter.go('/payment-success');
+        } catch (_) {
+          // ignore navigation errors during resume
+        }
+      }
+    } catch (_) {
+      // Ignore errors during resume refresh
     }
   }
 

@@ -116,15 +116,15 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     if (state.isPremium && !state.cancelAtPeriodEnd) {
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('accessToken');
-    debugPrint('[Subscription] checkout — token exists: ${token != null && token.isNotEmpty}');
-    if (token == null || token.isEmpty) {
+    final hasAuth = (_dioClient.dio.options.headers['Authorization'] as String?)?.isNotEmpty ?? false;
+    debugPrint('[Subscription] checkout — token exists: $hasAuth');
+    if (!hasAuth) {
       state = state.copyWith(error: 'Please log in again.');
       return;
     }
     debugPrint('[Subscription] checkout — planType: $planType, endpoint: POST /subscriptions/checkout');
     // Store plan type now so success page can display it even before API refresh
+    final prefs = await SharedPreferences.getInstance();
     await prefs.setString('subscriptionPlanType', planType);
     state = state.copyWith(isLoading: true, planType: planType);
     try {
@@ -142,8 +142,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         return;
       }
       state = state.copyWith(isLoading: false);
-      // Best-effort refresh after returning from the external browser.
-      Future.delayed(const Duration(seconds: 3), refreshFromProfile);
+      // Profile refresh is handled on app resume (WidgetsBindingObserver in main).
     } catch (e) {
       // Backend 400 "already subscribed/premium" means the user IS subscribed.
       // Treat it as a subscribed state, not a failure: refresh and clear error.
@@ -165,10 +164,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       state = state.copyWith(error: 'No active subscription to cancel.');
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('accessToken');
-    debugPrint('[Subscription] cancel — token exists: ${token != null && token.isNotEmpty}, endpoint: POST /subscriptions/cancel');
-    if (token == null || token.isEmpty) {
+    final hasAuth = (_dioClient.dio.options.headers['Authorization'] as String?)?.isNotEmpty ?? false;
+    debugPrint('[Subscription] cancel — token exists: $hasAuth, endpoint: DELETE /subscriptions/cancel');
+    if (!hasAuth) {
       state = state.copyWith(error: 'Please log in again.');
       return;
     }
@@ -180,6 +178,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       // Items [1–5] are logged inside SubscriptionService.cancel().
       final expiresAt = await service.cancel();
 
+      final prefs = await SharedPreferences.getInstance();
       if (expiresAt != null) {
         await prefs.setString('subscriptionExpiresAt', expiresAt);
       }

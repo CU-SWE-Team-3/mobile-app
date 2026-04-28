@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 
 class FeedPage extends ConsumerStatefulWidget {
   const FeedPage({super.key});
@@ -91,7 +90,6 @@ class _FeedPageState extends ConsumerState<FeedPage> {
             ),
 
             // ── Mini player bar (Following tab only) ───────────────
-            if (_selectedTab == 'Following') const MiniPlayerWidget(),
           ],
         ),
       ),

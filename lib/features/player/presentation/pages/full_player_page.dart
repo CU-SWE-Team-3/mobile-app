@@ -1,23 +1,18 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
 
-import '../../../../core/themes/app_theme.dart';
+import '../../../../core/network/user_session.dart';
+import '../../../../core/utils/profile_navigation.dart';
 import '../providers/follow_provider.dart';
 import '../providers/player_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
+import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
-import '../../../../core/network/dio_client.dart';
-import '../../../premium/data/models/offline_downloaded_track.dart';
-import '../../../premium/data/services/offline_downloads_repository.dart';
-import '../../../premium/presentation/providers/subscription_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
+import '../../../../core/themes/app_theme.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
   const FullPlayerPage({super.key});
@@ -29,12 +24,16 @@ class FullPlayerPage extends ConsumerStatefulWidget {
 class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
   late final TextEditingController _commentController;
   late final FocusNode _commentFocus;
+  String? _myUserId;
 
   @override
   void initState() {
     super.initState();
     _commentController = TextEditingController();
     _commentFocus = FocusNode();
+    UserSession.getUserId().then((id) {
+      if (mounted) setState(() => _myUserId = id);
+    });
   }
 
   @override
@@ -154,68 +153,123 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 10),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _CircleButton(
-                        key: const ValueKey('player_back_button'),
-                        icon: Icons.keyboard_arrow_down,
-                        onTap: () => context.pop(),
-                      ),
-                      _CircleButton(
-                        key: const ValueKey('player_follow_button'),
-                        icon: followState.isFollowing
-                            ? Icons.person
-                            : Icons.person_add_outlined,
-                        onTap: artistId != null
-                            ? () => ref
-                                .read(followProvider(artistId).notifier)
-                                .toggle(artistId)
-                            : () {},
-                        loading: followState.isLoading,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ── Track title + artist ─────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        playerState.currentTrackTitle ?? 'Nothing playing',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        playerState.currentTrackArtist ?? '',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 15),
-                      ),
-                      const SizedBox(height: 10),
-                      GestureDetector(
-                        key: const ValueKey('player_behind_track_button'),
-                        onTap: () {},
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
+                      // Left: title/artist pill + behind-this-track pill
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.graphic_eq,
-                                color: Colors.white, size: 16),
-                            SizedBox(width: 6),
-                            Text(
-                              'Behind this track',
-                              style: TextStyle(
-                                  color: Colors.white, fontSize: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.45),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    playerState.currentTrackTitle ??
+                                        'Nothing playing',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    playerState.currentTrackArtist ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: Colors.white70, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            GestureDetector(
+                              key: const ValueKey(
+                                  'player_behind_track_button'),
+                              onTap: () {},
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.45),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.graphic_eq,
+                                        color: Colors.white, size: 14),
+                                    SizedBox(width: 5),
+                                    Text(
+                                      'Behind this track',
+                                      style: TextStyle(
+                                          color: Colors.white, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Right: collapse + follow + more buttons stacked
+                      Column(
+                        children: [
+                          _CircleButton(
+                            key: const ValueKey('player_back_button'),
+                            icon: Icons.keyboard_arrow_down,
+                            onTap: () => context.pop(),
+                          ),
+                          if (artistId != null &&
+                              artistId != _myUserId) ...[
+                            const SizedBox(height: 8),
+                            _CircleButton(
+                              key: const ValueKey('player_follow_button'),
+                              icon: followState.isFollowing
+                                  ? Icons.person
+                                  : Icons.person_add_outlined,
+                              iconColor: followState.isFollowing
+                                  ? AppTheme.primary
+                                  : Colors.white,
+                              onTap: (followState.isLoading || followState.isChecking)
+                                  ? null
+                                  : () => ref
+                                      .read(followProvider(artistId).notifier)
+                                      .toggle(artistId),
+                              loading: followState.isLoading || followState.isChecking,
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          _CircleButton(
+                            key: const ValueKey('player_more_button'),
+                            icon: Icons.more_vert,
+                            onTap: () {
+                              if (trackId == null) return;
+                              showModalBottomSheet(
+                                context: context,
+                                backgroundColor: const Color(0xFF1E1E1E),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(16)),
+                                ),
+                                builder: (_) =>
+                                    TrackOptionsSheet(trackId: trackId),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -419,13 +473,16 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               if (text.trim().isEmpty || trackId == null) {
                                 return;
                               }
-                              await ref
-                                  .read(commentsProvider(trackId).notifier)
-                                  .postComment(
-                                    content: text.trim(),
-                                    timestamp: currentSec,
-                                  );
-                                                          _commentController.clear();
+                              if (trackId != null) {
+                                await ref
+                                    .read(
+                                        commentsProvider(trackId).notifier)
+                                    .postComment(
+                                      content: text.trim(),
+                                      timestamp: currentSec,
+                                    );
+                              }
+                              _commentController.clear();
                               _commentFocus.unfocus();
                             },
                           ),
@@ -494,10 +551,61 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                             : '',
                         onTap: engState.isLoadingLike || trackId == null
                             ? () {}
-                            : () => ref
-                                .read(
-                                    engagementProvider(engParams).notifier)
-                                .toggleLike(),
+                            : () async {
+                                final currentTrack = playerState.currentTrack;
+                                final wasLiked = engState.isLiked;
+                                void writeOverride({
+                                  required PlayerTrack track,
+                                  required bool liked,
+                                  required int likeCount,
+                                }) {
+                                  final current =
+                                      Map<String, TrackSummary>.from(
+                                    ref.read(likedTrackOverridesProvider),
+                                  );
+                                  if (liked) {
+                                    current[track.id] = TrackSummary(
+                                      id: track.id,
+                                      title: track.title,
+                                      artistName: track.artist,
+                                      artistId: track.artistId,
+                                      artistPermalink: track.artistPermalink,
+                                      artworkUrl: track.coverUrl,
+                                      audioUrl: track.audioUrl,
+                                      waveform: track.waveform,
+                                      likeCount: likeCount,
+                                    );
+                                  } else {
+                                    current.remove(track.id);
+                                  }
+                                  ref
+                                      .read(
+                                        likedTrackOverridesProvider.notifier,
+                                      )
+                                      .state = current;
+                                }
+
+                                if (currentTrack != null) {
+                                  writeOverride(
+                                    track: currentTrack,
+                                    liked: !wasLiked,
+                                    likeCount: wasLiked
+                                        ? engState.likeCount
+                                        : engState.likeCount + 1,
+                                  );
+                                }
+                                final success = await ref
+                                    .read(
+                                        engagementProvider(engParams).notifier)
+                                    .toggleLike();
+                                if (!success && currentTrack != null) {
+                                  writeOverride(
+                                    track: currentTrack,
+                                    liked: wasLiked,
+                                    likeCount: engState.likeCount,
+                                  );
+                                }
+                              },
                       ),
                       _ActionButton(
                         key: const ValueKey('player_repost_button'),
@@ -537,7 +645,6 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         label: '',
                         onTap: () {},
                       ),
-                      _DownloadButton(trackId: trackId),
                       _ActionButton(
                         key: const ValueKey('player_queue_button'),
                         icon: Icons.queue_music,
@@ -689,10 +796,11 @@ String _formatSec(int seconds) {
 
 class _CircleButton extends StatelessWidget {
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool loading;
+  final Color iconColor;
   const _CircleButton(
-      {super.key, required this.icon, required this.onTap, this.loading = false});
+      {super.key, required this.icon, this.onTap, this.loading = false, this.iconColor = Colors.white});
 
   @override
   Widget build(BuildContext context) {
@@ -712,7 +820,7 @@ class _CircleButton extends StatelessWidget {
                       strokeWidth: 2, color: Colors.white),
                 ),
               )
-            : Icon(icon, color: Colors.white, size: 22),
+            : Icon(icon, color: iconColor, size: 22),
       ),
     );
   }
@@ -776,221 +884,6 @@ class _EmojiButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Download button — premium gated
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _DownloadButton extends ConsumerStatefulWidget {
-  final String? trackId;
-  const _DownloadButton({required this.trackId});
-
-  @override
-  ConsumerState<_DownloadButton> createState() => _DownloadButtonState();
-}
-
-class _DownloadButtonState extends ConsumerState<_DownloadButton> {
-  bool _isDownloading = false;
-
-  Future<void> _onTap() async {
-    final sub = ref.read(subscriptionProvider);
-    if (!sub.isPremium) {
-      _showUpgradeDialog();
-      return;
-    }
-    if (widget.trackId == null || _isDownloading) return;
-    setState(() => _isDownloading = true);
-
-    debugPrint(
-      '[Download] GET /tracks/${widget.trackId}/download '
-      '— isPremium: ${sub.isPremium}, plan: ${sub.planType}, trackId: ${widget.trackId}',
-    );
-
-    try {
-      // API returns application/octet-stream binary data.
-      // ResponseType.bytes tells Dio to collect raw bytes instead of parsing JSON.
-      final response = await ref.read(dioClientProvider).dio.get(
-        '/tracks/${widget.trackId}/download',
-        options: Options(responseType: ResponseType.bytes),
-      );
-
-      debugPrint('[Download] status: ${response.statusCode}, responseType: bytes');
-
-      // Derive filename from Content-Disposition or fall back to trackId.
-      String filename = 'track_${widget.trackId}.mp3';
-      final cd = response.headers.value('content-disposition');
-      if (cd != null) {
-        final m = RegExp(r'filename="?([^";\n]+)"?').firstMatch(cd);
-        if (m != null) filename = m.group(1)!.trim();
-      }
-
-      // Save bytes to app-private downloads folder.
-      final dir = await getApplicationDocumentsDirectory();
-      final downloadsDir = Directory('${dir.path}/downloads');
-      await downloadsDir.create(recursive: true);
-      final file = File('${downloadsDir.path}/$filename');
-      await file.writeAsBytes(response.data as List<int>);
-
-      debugPrint('[Download] saved to ${file.path}');
-
-      // Persist track metadata locally so Offline Downloads page can list it.
-      final playerState = ref.read(playerProvider);
-      final offlineTrack = OfflineDownloadedTrack(
-        trackId: widget.trackId!,
-        title: playerState.currentTrackTitle ?? 'Unknown Track',
-        artistName: playerState.currentTrackArtist ?? '',
-        artworkUrl: playerState.currentTrackArtworkUrl,
-        downloadedAt: DateTime.now(),
-        localPath: file.path,
-        planType: sub.planType,
-      );
-      await ref
-          .read(offlineDownloadsRepositoryProvider)
-          .save(offlineTrack);
-      ref.invalidate(offlineDownloadsProvider);
-
-      debugPrint(
-        '[Download] metadata saved — trackId: ${widget.trackId}, '
-        'plan: ${sub.planType}, path: ${file.path}',
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Track saved to Offline Downloads'),
-            backgroundColor: Color(0xFF4CAF50),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        String msg;
-        if (e is DioException) {
-          final status = e.response?.statusCode;
-          final backendMsg = _extractErrorMessage(e.response?.data);
-          debugPrint(
-            '[Download] error — status: $status, '
-            'isPremium: ${sub.isPremium}, plan: ${sub.planType}, '
-            'backendMsg: $backendMsg',
-          );
-          if (status == 403) {
-            ref.read(subscriptionProvider.notifier).refreshFromProfile();
-            if (backendMsg.isNotEmpty) {
-              msg = backendMsg;
-            } else {
-              // Only show limit message if backend confirmed limit — not for all 403s.
-              msg = sub.isPremium
-                  ? 'Download unavailable for your current plan or limit reached.'
-                  : 'Offline downloads require Pro or Go+.';
-            }
-          } else if (status == 401) {
-            msg = 'Please log in again.';
-          } else if (status == 404) {
-            msg = 'Track not found.';
-          } else if (e.type == DioExceptionType.connectionError ||
-              e.type == DioExceptionType.connectionTimeout ||
-              e.type == DioExceptionType.receiveTimeout ||
-              e.type == DioExceptionType.sendTimeout) {
-            msg = 'Check your connection and try again.';
-          } else {
-            msg = backendMsg.isNotEmpty ? backendMsg : 'Download failed. Please try again.';
-          }
-        } else {
-          debugPrint('[Download] unexpected error: $e');
-          msg = 'Download failed. Please try again.';
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isDownloading = false);
-    }
-  }
-
-  /// Tries to extract a user-facing message from a Dio error response body.
-  /// The body may be a Map (JSON parsed), List<int> (raw bytes), or String.
-  String _extractErrorMessage(dynamic data) {
-    try {
-      if (data is Map) return data['message'] as String? ?? '';
-      if (data is List<int>) {
-        final decoded = jsonDecode(utf8.decode(data));
-        return (decoded as Map?)?['message'] as String? ?? '';
-      }
-      if (data is String) {
-        final decoded = jsonDecode(data);
-        return (decoded as Map?)?['message'] as String? ?? '';
-      }
-    } catch (_) {}
-    return '';
-  }
-
-  void _showUpgradeDialog() {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
-        title: const Text(
-          'Premium feature',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          'Offline downloads require Pro or Go+. Upgrade to listen without internet.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Not now',
-                style: TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF5500),
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              context.go('/upgrade');
-            },
-            child: const Text('Upgrade',
-                style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isPremium = ref.watch(subscriptionProvider).isPremium;
-
-    return GestureDetector(
-      key: const ValueKey('player_download_button'),
-      onTap: _onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _isDownloading
-              ? const SizedBox(
-                  width: 26,
-                  height: 26,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Icon(
-                  isPremium
-                      ? Icons.download_outlined
-                      : Icons.download_outlined,
-                  color: isPremium ? Colors.white : Colors.white30,
-                  size: 26,
-                ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Waveform CustomPainter
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -999,22 +892,12 @@ class _WaveformPainter extends CustomPainter {
   final List<int>? waveform;
   final bool isPlaying;
 
-  static const _fallbackHeights = [
-    0.30, 0.50, 0.70, 0.40, 0.90, 0.60, 0.80, 0.50, 0.30, 0.70,
-    0.40, 0.60, 0.80, 0.50, 0.30, 0.90, 0.70, 0.40, 0.60, 0.50,
-    0.80, 0.30, 0.70, 0.50, 0.40, 0.90, 0.60, 0.30, 0.80, 0.50,
-    0.40, 0.70, 0.30, 0.60, 0.90, 0.50, 0.80, 0.40, 0.70, 0.30,
-    0.50, 0.80, 0.60, 0.40, 0.70, 0.30, 0.90, 0.50, 0.60, 0.40,
-    0.80, 0.30, 0.70, 0.50, 0.40, 0.60, 0.90, 0.30, 0.50, 0.70,
-    0.40, 0.80, 0.60, 0.30, 0.90, 0.50, 0.70, 0.40, 0.60, 0.30,
-  ];
-
   _WaveformPainter(
       {required this.progress, this.waveform, required this.isPlaying});
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (!isPlaying) {
+    if (waveform == null || waveform!.isEmpty) {
       const strokeWidth = 2.0;
       final playedPaint = Paint()
         ..color = AppTheme.primary
@@ -1031,12 +914,7 @@ class _WaveformPainter extends CustomPainter {
       return;
     }
 
-    final List<double> heights;
-    if (waveform != null && waveform!.isNotEmpty) {
-      heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
-    } else {
-      heights = _fallbackHeights;
-    }
+    final heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
 
     final barCount = heights.length;
     const spacing = 2.0;
@@ -1064,5 +942,7 @@ class _WaveformPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_WaveformPainter old) =>
-      old.progress != progress || old.isPlaying != isPlaying;
+      old.progress != progress ||
+      old.isPlaying != isPlaying ||
+      old.waveform != waveform;
 }

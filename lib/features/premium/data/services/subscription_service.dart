@@ -16,7 +16,7 @@ class SubscriptionService {
   // Returns expiresAt ISO string, or null if backend omits it.
   // Auth uses the DioClient global Bearer header — same as checkout(), which works.
   Future<String?> cancel() async {
-    const endpoint = 'POST /subscriptions/cancel';
+    const endpoint = 'DELETE /subscriptions/cancel';
 
     // [1] Endpoint + full constructed URL
     final fullUrl = '${_client.dio.options.baseUrl}/subscriptions/cancel';
@@ -27,7 +27,7 @@ class SubscriptionService {
     final hasAuth = authHeader != null && authHeader.isNotEmpty;
     debugPrint('[Cancel] Authorization header exists: $hasAuth');
 
-    final response = await _client.dio.post('/subscriptions/cancel');
+    final response = await _client.dio.delete('/subscriptions/cancel');
 
     // [3] Status code
     debugPrint('[Cancel] status code: ${response.statusCode}');

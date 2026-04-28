@@ -15,6 +15,7 @@ import '../../features/auth/presentation/pages/login_screen.dart';
 import '../../features/auth/presentation/pages/register_screen.dart';
 
 import '../../features/feed/presentation/pages/home_page.dart';
+import '../../features/feed/presentation/pages/recommended_tracks_page.dart';
 import '../../features/feed/presentation/pages/search_page.dart';
 import '../../features/feed/presentation/pages/discover_page.dart';
 import '../../features/feed/presentation/pages/feed_page.dart';
@@ -23,7 +24,14 @@ import '../../features/feed/presentation/pages/search_results_users_page.dart';
 import '../../features/feed/presentation/pages/search_results_playlists_page.dart';
 import '../../features/feed/presentation/pages/electronic_genre_page.dart';
 import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
+import '../../features/feed/presentation/pages/electronic_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/chill_genre_page.dart';
+import '../../features/feed/presentation/pages/pop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/pop_genre_page.dart';
+import '../../features/feed/presentation/pages/rnb_genre_page.dart';
+import '../../features/feed/presentation/pages/rnb_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/genre_results_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
 
@@ -68,9 +76,11 @@ import '../../features/playlist/presentation/pages/create_playlist_page.dart';
 import '../../features/playlist/presentation/pages/edit_playlist_page.dart';
 import '../../features/playlist/presentation/pages/playlist_privacy_page.dart';
 import '../../features/playlist/presentation/pages/share_playlist_page.dart';
+import '../../features/playlist/presentation/pages/add_to_playlist_page.dart';
 
 import '../../features/messaging/presentation/pages/chat_inbox_page.dart';
 import '../../features/messaging/presentation/pages/chat_room_page.dart';
+import '../../features/messaging/presentation/pages/new_message_page.dart';
 
 import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/notifications/presentation/pages/push_notification_settings_page.dart';
@@ -162,6 +172,9 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'trending',
                     builder: (_, __) => const TrendingChartsPage()),
+                GoRoute(
+                    path: 'recommended',
+                    builder: (_, __) => const RecommendedTracksPage()),
                 GoRoute(path: 'cast', builder: (_, __) => const CastPage()),
                 GoRoute(
                     path: 'genre/electronic',
@@ -172,6 +185,12 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'genre/pop',
                     builder: (_, __) => const PopGenrePage()),
+                GoRoute(
+                    path: 'genre/rnb',
+                    builder: (_, __) => const RnbGenrePage()),
+                GoRoute(
+                    path: 'genre/chill',
+                    builder: (_, __) => const ChillGenrePage()),
               ],
             ),
           ],
@@ -203,6 +222,39 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'playlists',
                     builder: (_, __) => const SearchResultsPlaylistsPage()),
+                 GoRoute(
+                     path: 'hiphop/introducing',
+                     builder: (_, state) => HiphopPlaylistDetailPage(
+                           playlistId:
+                               state.uri.queryParameters['playlistId'] ?? '',
+                           useBuzzingPreset: true,
+                         )),
+                GoRoute(
+                    path: 'electronic/introducing',
+                    builder: (_, state) => ElectronicPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
+                    path: 'pop/introducing',
+                    builder: (_, state) => PopPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
+                    path: 'rnb/introducing',
+                    builder: (_, state) => RnbPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
+                    path: 'genre/:genreName',
+                    builder: (_, state) => GenreResultsPage(
+                          genreName: state.pathParameters['genreName']!,
+                        )),
               ],
             ),
           ],
@@ -303,6 +355,7 @@ final appRouter = GoRouter(
         GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
         GoRoute(
             path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
+        GoRoute(path: 'likes', builder: (_, __) => const LibraryLikesPage()),
         GoRoute(
             path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
         GoRoute(path: 'avatar', builder: (_, __) => const AvatarUploadPage()),
@@ -367,7 +420,7 @@ final appRouter = GoRouter(
     // ── LIKES (global — accessible from profile and other global routes) ─
     GoRoute(
       path: '/likes',
-      builder: (_, __) => const LibraryLikesPage(),
+      redirect: (_, __) => '/library/likes',
     ),
 
     // ── ENGAGEMENT ────────────────────────────────────────────────────
@@ -402,13 +455,26 @@ final appRouter = GoRouter(
     // ── PLAYLISTS ─────────────────────────────────────────────────────
     GoRoute(
       path: '/playlist',
-      builder: (_, __) => const PlaylistDetailsPage(),
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return PlaylistDetailsPage(
+          playlistId: extra['playlistId'] as String?,
+        );
+      },
       routes: [
         GoRoute(path: 'create', builder: (_, __) => const CreatePlaylistPage()),
         GoRoute(path: 'edit', builder: (_, __) => const EditPlaylistPage()),
         GoRoute(
             path: 'privacy', builder: (_, __) => const PlaylistPrivacyPage()),
         GoRoute(path: 'share', builder: (_, __) => const SharePlaylistPage()),
+        GoRoute(
+          path: 'add-track',
+          builder: (_, state) => AddToPlaylistPage(
+            trackId:
+                (state.extra as Map<String, dynamic>?)?['trackId'] as String? ??
+                    '',
+          ),
+        ),
       ],
     ),
 
@@ -417,7 +483,16 @@ final appRouter = GoRouter(
       path: '/messages',
       builder: (_, __) => const ChatInboxPage(),
       routes: [
-        GoRoute(path: 'chat', builder: (_, __) => const ChatRoomPage()),
+        GoRoute(
+          path: 'new',
+          builder: (_, __) => const NewMessagePage(),
+        ),
+        GoRoute(
+          path: 'chat/:conversationId',
+          builder: (_, state) => ChatRoomPage(
+            conversationId: state.pathParameters['conversationId']!,
+          ),
+        ),
       ],
     ),
 

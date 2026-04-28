@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:soundcloud_clone/core/network/dio_client.dart';
-import 'package:soundcloud_clone/core/network/user_session.dart';
+import 'package:soundcloud_clone/core/providers/session_provider.dart';
+import 'package:soundcloud_clone/features/auth/presentation/providers/auth_provider.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/basic_settings_page.dart';
 import 'package:soundcloud_clone/features/settings/presentation/pages/legal_page.dart';
+import 'package:soundcloud_clone/features/settings/presentation/pages/notifications_settings_page.dart';
 
 class SettingsMainPage extends ConsumerWidget {
   const SettingsMainPage({super.key});
@@ -74,7 +75,13 @@ class SettingsMainPage extends ConsumerWidget {
             onTap: () => context.push('/settings/privacy'),
           ),
           _SettingsMenuItem(title: 'Inbox', onTap: () {}),
-          _SettingsMenuItem(title: 'Notifications', onTap: () {}),
+          _SettingsMenuItem(
+            title: 'Notifications',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationsSettingsPage()),
+            ),
+          ),
           _SettingsMenuItem(title: 'Add widgets', onTap: () {}),
           _SettingsMenuItem(title: 'Analytics', onTap: () {}),
           _SettingsMenuItem(title: 'Communications', onTap: () {}),
@@ -94,7 +101,7 @@ class SettingsMainPage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: GestureDetector(
-              onTap: () => _showSignOutDialog(context),
+              onTap: () => _showSignOutDialog(context, ref),
               child: Container(
                 height: 52,
                 decoration: BoxDecoration(
@@ -149,7 +156,7 @@ class SettingsMainPage extends ConsumerWidget {
   }
 
   // ── Sign out dialog ───────────────────────────────────────────────────────
-  void _showSignOutDialog(BuildContext context) {
+  void _showSignOutDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       barrierDismissible: true,
@@ -170,7 +177,7 @@ class SettingsMainPage extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            // ✅ uses dialogContext — only closes dialog, stays on settings
+            // uses dialogContext — only closes dialog, stays on settings
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text(
               'Cancel',
@@ -183,12 +190,10 @@ class SettingsMainPage extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              try {
-                await dioClient.dio.post('/auth/logout');
-              } catch (_) {}
-              await UserSession.clear();
-              dioClient.dio.options.headers.remove('Authorization');
-              if (context.mounted) context.go('/start');
+              await ref.read(authProvider.notifier).logout();
+              if (!context.mounted) return;
+              context.go('/start');
+              ref.read(sessionUserIdProvider.notifier).state = '';
             },
             child: const Text(
               'OK',
