@@ -8,8 +8,10 @@ import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
+import 'package:soundcloud_clone/features/library/presentation/pages/library_playlists_page.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
 import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
+import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 import 'package:soundcloud_clone/injection_container.dart';
@@ -475,100 +477,103 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     ref.listen<AsyncValue<List<UploadTrack>>>(myTracksProvider, (_, next) {
       next.whenData((tracks) => _cachedTracks = tracks);
     });
-    ref.listen<int>(likesRefreshTickProvider, (previous, next) {
-      if (previous != next) {
-        _fetchLikes();
+
+    // When a playlist is deleted via playlistsProvider (library or details page),
+    // mirror the removal into _playlists so the profile section updates immediately.
+    ref.listen<List<Playlist>>(playlistsProvider, (previous, current) {
+      if (previous == null || previous.length <= current.length) return;
+      final removedIds = previous
+          .map((p) => p.id)
+          .toSet()
+          .difference(current.map((p) => p.id).toSet());
+      if (removedIds.isNotEmpty && mounted) {
+        setState(() {
+          _playlists =
+              _playlists.where((p) => !removedIds.contains(p.id)).toList();
+        });
       }
     });
 
     return Scaffold(
       backgroundColor: _bg,
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: SafeArea(
-              child: Column(
-                children: [
-                  _topBar(context),
-                  if (_isLoading)
-                    const Expanded(
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFFFF5500),
-                        ),
+          SafeArea(
+            child: Column(
+              children: [
+                _topBar(context),
+                if (_isLoading)
+                  const Expanded(
+                    child: Center(
+                      child:
+                          CircularProgressIndicator(color: Color(0xFFFF5500)),
+                    ),
+                  )
+                else if (_hasError)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Couldn\'t load profile',
+                              style:
+                                  TextStyle(color: Colors.white, fontSize: 15)),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            key: const ValueKey('profile_retry_button'),
+                            onPressed: _fetchProfile,
+                            child: const Text('Retry',
+                                style: TextStyle(color: Color(0xFFFF5500))),
+                          ),
+                        ],
                       ),
-                    )
-                  else if (_hasError)
-                    Expanded(
-                      child: Center(
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: _fetchProfile,
+                      color: const Color(0xFFFF5500),
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
                         child: Column(
-                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Couldn\'t load profile',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextButton(
-                              key: const ValueKey('profile_retry_button'),
-                              onPressed: _fetchProfile,
-                              child: const Text(
-                                'Retry',
-                                style: TextStyle(color: Color(0xFFFF5500)),
-                              ),
-                            ),
+                            _heroSection(context),
+                            _bioSection(),
+                            _insightsRow(context),
+                            _spotlight(),
+                            _sectionHeader('Tracks',
+                                onSeeAll: () =>
+                                    context.push('/profile/tracks')),
+                            _tracksSection(myTracksAsync),
+                            _sectionHeader('Reposts', onSeeAll: () {
+                              _playFromReposts(0);
+                              context.push('/profile/reposts');
+                            }),
+                            _repostsList(),
+                            _sectionHeader('Playlists'),
+                            _playlistRow(context),
+                            _sectionHeader('Likes', onSeeAll: () {
+                              _playFromLikes(0);
+                              context.push('/likes');
+                            }),
+                            _likesList(),
+                            const SizedBox(height: 120),
                           ],
                         ),
                       ),
-                    )
-                  else
-                    Expanded(
-                      child: RefreshIndicator(
-                        onRefresh: _fetchProfile,
-                        color: const Color(0xFFFF5500),
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _heroSection(context),
-                              _bioSection(),
-                              _insightsRow(context),
-                              _spotlight(),
-                              _sectionHeader(
-                                'Tracks',
-                                onSeeAll: () => context.push('/profile/tracks'),
-                              ),
-                              _tracksSection(myTracksAsync),
-                              _sectionHeader(
-                                'Reposts',
-                                onSeeAll: () {
-                                  _playFromReposts(0);
-                                  context.push('/profile/reposts');
-                                },
-                              ),
-                              _repostsList(),
-                              _sectionHeader('Playlists'),
-                              _playlistRow(context),
-                                _sectionHeader(
-                                  'Likes',
-                                  onSeeAll: () => context.push('/profile/likes'),
-                                ),
-                              _likesList(),
-                              const SizedBox(height: 120),
-                            ],
-                          ),
-                        ),
-                      ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
-          const MiniPlayerWidget(),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: MiniPlayerWidget(),
+          ),
         ],
       ),
     );
@@ -1073,9 +1078,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         itemCount: _playlists.length,
         itemBuilder: (_, i) {
           final p = _playlists[i];
+          // Artwork chain: own HTTPS artwork → first track HTTPS artwork → placeholder
+          final cardArtwork = () {
+            final own = p.artworkUrl;
+            if (own != null &&
+                own.startsWith('https://') &&
+                !own.contains('default')) {
+              return own;
+            }
+            return p.firstTrackArtworkUrl;
+          }();
           return GestureDetector(
             key: ValueKey('profile_playlist_tile_$i'),
-            onTap: () => context.push('/playlist', extra: {'playlistId': p.id}),
+            onTap: () async {
+              await context.push('/playlist', extra: {'playlistId': p.id});
+              if (mounted) _fetchPlaylists();
+            },
             child: Padding(
               padding: const EdgeInsets.only(right: 14),
               child: SizedBox(
@@ -1089,9 +1107,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       child: SizedBox(
                         width: 160,
                         height: 160,
-                        child: p.artworkUrl != null && p.artworkUrl!.isNotEmpty
+                        child: cardArtwork != null
                             ? CachedNetworkImage(
-                                imageUrl: p.artworkUrl!,
+                                imageUrl: cardArtwork,
                                 fit: BoxFit.cover,
                                 placeholder: (_, __) => Container(
                                   color: Colors.grey[850],
@@ -1218,21 +1236,41 @@ class _ProfilePlaylist {
   final String id;
   final String title;
   final String? artworkUrl;
+  final String? firstTrackArtworkUrl;
   final String ownerName;
 
   const _ProfilePlaylist({
     required this.id,
     required this.title,
     this.artworkUrl,
+    this.firstTrackArtworkUrl,
     required this.ownerName,
   });
 
   factory _ProfilePlaylist.fromJson(Map<String, dynamic> json) {
     final creator = json['creator'] as Map<String, dynamic>?;
+
+    // If the list response includes a populated tracks array, extract the first
+    // track's artwork URL as a fallback for playlists without an explicit artwork.
+    String? firstTrackArtwork;
+    final tracks = json['tracks'] as List?;
+    if (tracks != null && tracks.isNotEmpty) {
+      final first = tracks.first;
+      if (first is Map<String, dynamic>) {
+        final url = first['artworkUrl'] as String?;
+        if (url != null &&
+            url.startsWith('https://') &&
+            !url.contains('default')) {
+          firstTrackArtwork = url;
+        }
+      }
+    }
+
     return _ProfilePlaylist(
       id: (json['_id'] as String?) ?? (json['id'] as String?) ?? '',
       title: json['title'] as String? ?? '',
       artworkUrl: json['artworkUrl'] as String?,
+      firstTrackArtworkUrl: firstTrackArtwork,
       ownerName: (json['ownerName'] as String?) ??
           (creator?['displayName'] as String?) ??
           '',

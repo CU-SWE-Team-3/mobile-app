@@ -32,7 +32,7 @@ class FollowNotifier extends StateNotifier<FollowState> {
       if (myUserId == null) return;
       final response = await dioClient.dio.get(
         '/network/$myUserId/following',
-        queryParameters: {'limit': 1000},
+        queryParameters: {'limit': 100},
       );
       final data = response.data['data'];
       if (data is List && mounted) {

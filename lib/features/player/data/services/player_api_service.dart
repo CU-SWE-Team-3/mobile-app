@@ -24,7 +24,7 @@ class PlayerApiService {
       final body = response.data;
       final inner = body is Map ? (body['data'] ?? body) : null;
       if (inner is Map) {
-        final url = inner['streamUrl'] ?? inner['url'];
+        final url = inner['streamUrl'] ?? inner['url'] ?? inner['hlsUrl'];
         if (url is String && url.isNotEmpty) return url;
       }
       return null;
@@ -110,18 +110,22 @@ class PlayerApiService {
   // ── Heartbeat ─────────────────────────────────────────────────────────────
 
   /// PUT /player/state — fire-and-forget position heartbeat every few seconds.
+  /// Field names match the API spec: currentTrack, currentTime, isPlaying.
+  /// queueContext / contextId are included only when provided.
   Future<void> syncPlayerState({
     required String trackId,
     required double position,
     required bool isPlaying,
-    required double volume,
+    String? queueContext,
+    String? contextId,
   }) async {
     try {
       await _dio.put('/player/state', data: {
-        'trackId': trackId,
-        'position': position,
+        'currentTrack': trackId,
+        'currentTime': position,
         'isPlaying': isPlaying,
-        'volume': volume,
+        if (queueContext != null) 'queueContext': queueContext,
+        if (contextId != null) 'contextId': contextId,
       });
     } catch (_) {}
   }

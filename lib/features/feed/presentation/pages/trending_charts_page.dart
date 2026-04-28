@@ -28,7 +28,7 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
     });
     try {
       final response =
-          await dioClient.dio.get('/tracks/trending?page=1&limit=20');
+          await dioClient.dio.get('/discovery/trending?page=1&limit=20');
       final data = response.data['data'] as List;
       setState(() {
         _tracks = data.cast<Map<String, dynamic>>();

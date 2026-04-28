@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../router/app_router.dart';
 
 class DioClient {
   static final DioClient _instance = DioClient._internal();
@@ -18,7 +17,8 @@ class DioClient {
       baseUrl: 'https://biobeats.duckdns.org/api',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
-      validateStatus: (status) => status != null && status >= 200 && status < 300,
+      validateStatus: (status) =>
+          status != null && status >= 200 && status < 300,
     ));
   }
 
@@ -39,12 +39,23 @@ class DioClient {
         onError: (error, handler) async {
           final status = error.response?.statusCode;
           if (status == 401) {
+            // Guard: never retry a request that has already been retried once.
+            if (error.requestOptions.extra.containsKey('_retry')) {
+              return handler.next(error);
+            }
+
             if (_isRefreshing) {
               final newToken = await _refreshCompleter!.future;
               if (newToken != null) {
                 final opts = error.requestOptions;
                 opts.headers['Authorization'] = 'Bearer $newToken';
-                return handler.resolve(await dio.fetch(opts));
+                opts.extra['_retry'] = true;
+                opts.headers.remove('cookie');
+                try {
+                  return handler.resolve(await dio.fetch(opts));
+                } catch (_) {
+                  return handler.next(error);
+                }
               }
               return handler.next(error);
             }
@@ -52,11 +63,13 @@ class DioClient {
             _isRefreshing = true;
             _refreshCompleter = Completer<String?>();
 
+            String? newToken;
             try {
               final refreshPrefs = await SharedPreferences.getInstance();
               final refreshToken = refreshPrefs.getString('refreshToken');
               if (refreshToken == null) {
                 _refreshCompleter!.complete(null);
+                _refreshCompleter = null;
                 _isRefreshing = false;
                 return handler.next(error);
               }
@@ -66,19 +79,18 @@ class DioClient {
                 data: {'refreshToken': refreshToken},
               );
 
-              String? newToken;
               String? newRefreshToken;
 
               final body = refreshResponse.data;
               if (body is Map<String, dynamic>) {
                 final bodyData = body['data'] as Map<String, dynamic>?;
                 final userData = bodyData?['user'] as Map<String, dynamic>?;
-                newToken = bodyData?['token'] as String?
-                    ?? bodyData?['accessToken'] as String?
-                    ?? userData?['token'] as String?
-                    ?? userData?['accessToken'] as String?;
-                newRefreshToken = bodyData?['refreshToken'] as String?
-                    ?? userData?['refreshToken'] as String?;
+                newToken = bodyData?['token'] as String? ??
+                    bodyData?['accessToken'] as String? ??
+                    userData?['token'] as String? ??
+                    userData?['accessToken'] as String?;
+                newRefreshToken = bodyData?['refreshToken'] as String? ??
+                    userData?['refreshToken'] as String?;
               }
 
               if (newToken == null) {
@@ -102,22 +114,31 @@ class DioClient {
               if (newRefreshToken != null) {
                 await refreshPrefs.setString('refreshToken', newRefreshToken);
               }
-
-              _refreshCompleter!.complete(newToken);
-              _isRefreshing = false;
-
-              final opts = error.requestOptions;
-              opts.headers['Authorization'] = dio.options.headers['Authorization'];
-              return handler.resolve(await dio.fetch(opts));
             } catch (e) {
               debugPrint('[DioClient] Token refresh failed: $e');
               if (e is DioException) {
-                debugPrint('[DioClient] Refresh response data: ${e.response?.data}');
+                debugPrint(
+                    '[DioClient] Refresh response data: ${e.response?.data}');
               }
-              _refreshCompleter!.complete(null);
+            } finally {
+              _refreshCompleter!.complete(newToken);
+              _refreshCompleter = null;
               _isRefreshing = false;
-              return handler.next(error);
             }
+
+            if (newToken != null) {
+              final opts = error.requestOptions;
+              opts.headers['Authorization'] =
+                  dio.options.headers['Authorization'];
+              opts.extra['_retry'] = true;
+              opts.headers.remove('cookie');
+              try {
+                return handler.resolve(await dio.fetch(opts));
+              } catch (_) {
+                return handler.next(error);
+              }
+            }
+            return handler.next(error);
           }
           return handler.next(error);
         },
