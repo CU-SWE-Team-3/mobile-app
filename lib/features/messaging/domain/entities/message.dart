@@ -32,13 +32,14 @@ class Message {
     String? content,
     bool? isEdited,
     bool? isDeleted,
+    Attachment? attachment,
   }) =>
       Message(
         id: id,
         conversationId: conversationId,
         senderId: senderId,
         content: content ?? this.content,
-        attachment: attachment,
+        attachment: attachment ?? this.attachment,
         status: status ?? this.status,
         isEdited: isEdited ?? this.isEdited,
         isDeleted: isDeleted ?? this.isDeleted,

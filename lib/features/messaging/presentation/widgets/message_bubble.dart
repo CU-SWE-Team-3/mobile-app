@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/utils/relative_time.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/participant.dart';
+import 'attachment_card.dart';
 import 'participant_avatar.dart';
 
 class MessageBubble extends StatelessWidget {
@@ -141,11 +142,12 @@ class _BubbleBody extends StatelessWidget {
         ),
       );
     } else if (message.attachment != null) {
+      // AttachmentCard is a ConsumerWidget and handles its own provider watches.
       content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _AttachmentPill(type: message.attachment!.type),
+          AttachmentCard(attachment: message.attachment!),
           if (message.content.isNotEmpty) ...[
             const SizedBox(height: 6),
             _MessageText(
@@ -203,40 +205,6 @@ class _MessageText extends StatelessWidget {
           const TextSpan(
             text: ' (edited)',
             style: TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AttachmentPill extends StatelessWidget {
-  final String type;
-
-  const _AttachmentPill({required this.type});
-
-  @override
-  Widget build(BuildContext context) {
-    final isTrack = type == 'track';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFF333333),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF555555)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isTrack ? Icons.music_note : Icons.queue_music,
-            size: 14,
-            color: Colors.white54,
-          ),
-          const SizedBox(width: 5),
-          Text(
-            isTrack ? 'Track' : 'Playlist',
-            style: const TextStyle(color: Colors.white54, fontSize: 13),
           ),
         ],
       ),

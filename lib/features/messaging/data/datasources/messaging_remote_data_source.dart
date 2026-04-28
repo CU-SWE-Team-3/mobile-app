@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../../domain/entities/attachment.dart';
+import '../../domain/entities/attachment_picker_item.dart';
 import '../../domain/entities/conversation.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/participant.dart';
@@ -43,11 +45,15 @@ class MessagingRemoteDataSource {
   Future<Message> sendMessage({
     required String receiverId,
     required String content,
+    Attachment? attachment,
   }) async {
-    final response = await _dio.post(
-      '/messages',
-      data: {'receiverId': receiverId, 'content': content},
-    );
+    final body = <String, dynamic>{'receiverId': receiverId};
+    if (content.isNotEmpty) body['content'] = content;
+    if (attachment != null) {
+      body['attachmentType'] = attachment.type;
+      body['attachmentId'] = attachment.referenceId;
+    }
+    final response = await _dio.post('/messages', data: body);
     final data = response.data['data'] as Map<String, dynamic>;
     return Message.fromJson(data['message'] as Map<String, dynamic>);
   }
@@ -61,6 +67,54 @@ class MessagingRemoteDataSource {
     final raw = data['users'] as List<dynamic>? ?? [];
     return raw
         .map((u) => Participant.fromJson(u as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<AttachmentPickerItem>> searchTracks(String query) async {
+    final response = await _dio.get(
+      '/tracks/search',
+      queryParameters: {'q': query, 'type': 'tracks'},
+    );
+    final raw = _extractList(response.data['data'], 'tracks');
+    return raw
+        .map((t) {
+          final m = t as Map<String, dynamic>;
+          final user = m['user'] as Map<String, dynamic>? ?? {};
+          return AttachmentPickerItem(
+            id: m['_id'] as String? ?? '',
+            type: 'track',
+            title: m['title'] as String? ?? '',
+            subtitle: user['displayName'] as String? ?? '',
+            artworkUrl: m['artworkUrl'] as String?,
+          );
+        })
+        .where((item) => item.id.isNotEmpty)
+        .toList();
+  }
+
+  Future<List<AttachmentPickerItem>> searchPlaylists(String query) async {
+    final response = await _dio.get(
+      '/tracks/search',
+      queryParameters: {'q': query, 'type': 'playlists'},
+    );
+    final raw = _extractList(response.data['data'], 'playlists');
+    return raw
+        .map((p) {
+          final m = p as Map<String, dynamic>;
+          final creator = m['creator'] as Map<String, dynamic>? ??
+              m['user'] as Map<String, dynamic>? ??
+              {};
+          return AttachmentPickerItem(
+            id: m['_id'] as String? ?? '',
+            type: 'playlist',
+            title: m['title'] as String? ?? '',
+            subtitle: (m['ownerName'] as String?) ??
+                (creator['displayName'] as String?) ??
+                '',
+            artworkUrl: m['artworkUrl'] as String?,
+          );
+        })
+        .where((item) => item.id.isNotEmpty)
         .toList();
   }
 
@@ -87,5 +141,16 @@ class MessagingRemoteDataSource {
 
   Future<void> deleteMessageForEveryone(String messageId) async {
     await _dio.delete('/messages/$messageId/everyone');
+  }
+
+  /// Handles two response shapes from the search endpoint:
+  /// - `data` is a List directly (default/no-type behaviour seen in search_page)
+  /// - `data` is a Map keyed by the type name (e.g. {'tracks': [...]} or {'playlists': [...]})
+  List<dynamic> _extractList(dynamic data, String key) {
+    if (data is List) return data;
+    if (data is Map<String, dynamic>) {
+      return data[key] as List<dynamic>? ?? [];
+    }
+    return [];
   }
 }

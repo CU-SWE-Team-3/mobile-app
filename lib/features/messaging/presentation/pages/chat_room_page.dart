@@ -1,14 +1,18 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/providers/session_provider.dart';
 import '../../../../core/socket/socket_service.dart';
+import '../../domain/entities/attachment.dart';
+import '../../domain/entities/attachment_picker_item.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/participant.dart';
 import '../providers/messaging_providers.dart';
+import '../widgets/attachment_picker.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/participant_avatar.dart';
 
@@ -59,6 +63,9 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
 
   // Edit mode: non-null = currently editing that message id
   String? _editingMessageId;
+
+  // Phase 7.2: staged attachment — null until user picks one
+  AttachmentPickerItem? _stagedAttachment;
 
   @override
   void initState() {
@@ -294,6 +301,100 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     }
   }
 
+  // ── Attachment picker ──────────────────────────────────────────────────────
+
+  Future<void> _openAttachmentPicker() async {
+    final result = await showModalBottomSheet<AttachmentPickerItem>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const AttachmentPickerSheet(),
+    );
+    if (result != null && mounted) {
+      setState(() => _stagedAttachment = result);
+    }
+  }
+
+  // ── Send ───────────────────────────────────────────────────────────────────
+
+  Future<void> _sendMessage({
+    required String currentUserId,
+    required String receiverId,
+  }) async {
+    final text = _textController.text.trim();
+    final staged = _stagedAttachment;
+
+    if (text.isEmpty && staged == null) return;
+
+    _textController.clear();
+    if (staged != null) setState(() => _stagedAttachment = null);
+
+    _stopTypingIfNeeded(receiverId);
+
+    final attachment = staged != null
+        ? Attachment(
+            type: staged.type,
+            referenceId: staged.id,
+            title: staged.title,
+            artworkUrl: staged.artworkUrl,
+            subtitle: staged.subtitle,
+          )
+        : null;
+
+    final optimisticId = 'pending_${DateTime.now().millisecondsSinceEpoch}';
+    final optimistic = Message(
+      id: optimisticId,
+      conversationId: widget.conversationId,
+      senderId: currentUserId,
+      content: text,
+      attachment: attachment,
+      createdAt: DateTime.now(),
+    );
+
+    setState(() => _localMessages!.add(optimistic));
+    _scrollToBottom(force: true);
+
+    try {
+      final sent = await ref
+          .read(messagingRepositoryProvider)
+          .sendMessage(
+            receiverId: receiverId,
+            content: text,
+            attachment: attachment,
+          );
+
+      if (!mounted) return;
+      setState(() {
+        final idx = _localMessages!.indexWhere((m) => m.id == optimisticId);
+        if (idx >= 0) {
+          // If the server didn't echo back attachment metadata, carry the
+          // snapshot from the optimistic message so the card doesn't flicker.
+          final serverAttachment = sent.attachment;
+          final confirmedAttachment = (serverAttachment != null &&
+                  serverAttachment.title == null &&
+                  attachment != null)
+              ? serverAttachment.copyWith(
+                  title: attachment.title,
+                  artworkUrl: attachment.artworkUrl,
+                  subtitle: attachment.subtitle,
+                )
+              : serverAttachment;
+          _localMessages![idx] = confirmedAttachment == serverAttachment
+              ? sent
+              : sent.copyWith(attachment: confirmedAttachment);
+        }
+      });
+      ref.invalidate(conversationsProvider);
+    } catch (_) {
+      if (!mounted) return;
+      setState(
+          () => _localMessages!.removeWhere((m) => m.id == optimisticId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to send message')),
+      );
+    }
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
@@ -342,50 +443,6 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
           .firstWhere((p) => p.id != currentUserId);
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<void> _sendMessage({
-    required String currentUserId,
-    required String receiverId,
-  }) async {
-    final text = _textController.text.trim();
-    if (text.isEmpty) return;
-    _textController.clear();
-
-    // Stop typing indicator immediately on send.
-    _stopTypingIfNeeded(receiverId);
-
-    final optimisticId = 'pending_${DateTime.now().millisecondsSinceEpoch}';
-    final optimistic = Message(
-      id: optimisticId,
-      conversationId: widget.conversationId,
-      senderId: currentUserId,
-      content: text,
-      createdAt: DateTime.now(),
-    );
-
-    setState(() => _localMessages!.add(optimistic));
-    _scrollToBottom(force: true);
-
-    try {
-      final sent = await ref
-          .read(messagingRepositoryProvider)
-          .sendMessage(receiverId: receiverId, content: text);
-
-      if (!mounted) return;
-      setState(() {
-        final idx = _localMessages!.indexWhere((m) => m.id == optimisticId);
-        if (idx >= 0) _localMessages![idx] = sent;
-      });
-      ref.invalidate(conversationsProvider);
-    } catch (_) {
-      if (!mounted) return;
-      setState(
-          () => _localMessages!.removeWhere((m) => m.id == optimisticId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to send message')),
-      );
     }
   }
 
@@ -549,6 +606,10 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
             focusNode: _textFocusNode,
             isEditMode: isEditing,
             onCancelEdit: isEditing ? _cancelEditMode : null,
+            stagedAttachment: _stagedAttachment,
+            onAttach: isEditing ? null : _openAttachmentPicker,
+            onClearAttachment: () =>
+                setState(() => _stagedAttachment = null),
             onSend: isEditing
                 ? () => _confirmEdit()
                 : (otherParticipant == null
@@ -643,6 +704,9 @@ class _MessageInputBar extends StatelessWidget {
   final VoidCallback? onSend;
   final bool isEditMode;
   final VoidCallback? onCancelEdit;
+  final AttachmentPickerItem? stagedAttachment;
+  final VoidCallback? onAttach;
+  final VoidCallback? onClearAttachment;
 
   const _MessageInputBar({
     required this.controller,
@@ -650,6 +714,9 @@ class _MessageInputBar extends StatelessWidget {
     required this.onSend,
     this.isEditMode = false,
     this.onCancelEdit,
+    this.stagedAttachment,
+    this.onAttach,
+    this.onClearAttachment,
   });
 
   @override
@@ -695,11 +762,29 @@ class _MessageInputBar extends StatelessWidget {
                   ],
                 ),
               ),
+            // Staged attachment preview
+            if (stagedAttachment != null)
+              _StagedPreview(
+                item: stagedAttachment!,
+                onClear: onClearAttachment,
+              ),
             Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
+                  // Attach button — hidden while in edit mode
+                  if (!isEditMode) ...[
+                    IconButton(
+                      onPressed: onAttach,
+                      icon: const Icon(Icons.attach_file_rounded),
+                      color: Colors.white54,
+                      iconSize: 22,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   Expanded(
                     child: TextField(
                       controller: controller,
@@ -730,17 +815,27 @@ class _MessageInputBar extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  IconButton(
-                    onPressed: onSend,
-                    icon: Icon(
-                      isEditMode
-                          ? Icons.check_rounded
-                          : Icons.send_rounded,
-                    ),
-                    color: onSend != null
-                        ? const Color(0xFFFF5500)
-                        : Colors.white24,
-                    iconSize: 26,
+                  // Send button — reactive to text content and attachment state
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: controller,
+                    builder: (_, textValue, __) {
+                      final canSend =
+                          textValue.text.trim().isNotEmpty ||
+                              stagedAttachment != null;
+                      final isEnabled = onSend != null && canSend;
+                      return IconButton(
+                        onPressed: isEnabled ? onSend : null,
+                        icon: Icon(
+                          isEditMode
+                              ? Icons.check_rounded
+                              : Icons.send_rounded,
+                        ),
+                        color: isEnabled
+                            ? const Color(0xFFFF5500)
+                            : Colors.white24,
+                        iconSize: 26,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -750,4 +845,72 @@ class _MessageInputBar extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Staged attachment preview strip ──────────────────────────────────────────
+
+class _StagedPreview extends StatelessWidget {
+  final AttachmentPickerItem item;
+  final VoidCallback? onClear;
+
+  const _StagedPreview({required this.item, this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasArtwork = item.artworkUrl != null &&
+        item.artworkUrl!.isNotEmpty &&
+        !item.artworkUrl!.contains('default-artwork');
+    final icon = item.type == 'track'
+        ? Icons.music_note_rounded
+        : Icons.queue_music_rounded;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+      child: Row(
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFFFF5500)),
+          const SizedBox(width: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: hasArtwork
+                ? CachedNetworkImage(
+                    imageUrl: item.artworkUrl!,
+                    width: 26,
+                    height: 26,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => _miniPlaceholder(icon),
+                  )
+                : _miniPlaceholder(icon),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              item.title,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 12,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          GestureDetector(
+            onTap: onClear,
+            child: const Icon(
+              Icons.close,
+              size: 16,
+              color: Colors.white38,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniPlaceholder(IconData icon) => Container(
+        width: 26,
+        height: 26,
+        color: const Color(0xFF444444),
+        child: Icon(icon, color: Colors.white24, size: 12),
+      );
 }
