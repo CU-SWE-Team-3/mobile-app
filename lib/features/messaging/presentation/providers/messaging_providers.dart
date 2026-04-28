@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/session_provider.dart';
@@ -25,6 +27,25 @@ final socketLifecycleProvider = Provider.autoDispose<void>((ref) {
   } else {
     service.disconnect();
   }
+});
+
+/// Keeps conversation lists fresh when messages arrive outside an open chat.
+final socketMessageLifecycleProvider = Provider.autoDispose<void>((ref) {
+  final userId = ref.watch(sessionUserIdProvider);
+  final service = ref.watch(socketServiceProvider);
+  StreamSubscription<Map<String, dynamic>>? sub;
+
+  if (userId.isNotEmpty) {
+    sub = service.newMessages.listen((data) {
+      final conversationId = data['conversationId']?.toString() ?? '';
+      ref.invalidate(conversationsProvider);
+      if (conversationId.isNotEmpty) {
+        ref.invalidate(messagesProvider(conversationId));
+      }
+    });
+  }
+
+  ref.onDispose(() => sub?.cancel());
 });
 
 // ── Repository ────────────────────────────────────────────────────────────────

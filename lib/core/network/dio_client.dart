@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,9 +45,16 @@ class DioClient {
         return null;
       }
 
-      final refreshResponse = await Dio().post(
+      final refreshResponse = await Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 8),
+        sendTimeout: const Duration(seconds: 8),
+        receiveTimeout: const Duration(seconds: 8),
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 300,
+      )).post(
         'https://biobeats.duckdns.org/api/auth/refresh',
         data: {'refreshToken': refreshToken},
+        options: Options(headers: {'Cookie': 'refreshToken=$refreshToken'}),
       );
 
       String? newToken;
@@ -66,20 +74,18 @@ class DioClient {
 
       final cookies = refreshResponse.headers['set-cookie'];
       if (cookies != null) {
-        for (final cookie in cookies) {
-          if (cookie.startsWith('accessToken=')) {
-            newToken = cookie.split(';')[0].split('=')[1];
-          } else if (cookie.startsWith('refreshToken=')) {
-            newRefreshToken = cookie.split(';')[0].split('=')[1];
-          }
-        }
+        newToken = _cookieValue(cookies, 'accessToken') ?? newToken;
+        newRefreshToken =
+            _cookieValue(cookies, 'refreshToken') ?? newRefreshToken;
       }
 
       if (newToken != null && newToken.isNotEmpty) {
         setAuthToken(newToken);
         await refreshPrefs.setString('accessToken', newToken);
         _tokenRefreshController.add(newToken);
-        debugPrint('[DioClient] Token refreshed successfully');
+        debugPrint(
+          '[DioClient] Token refreshed successfully ${_jwtSummary(newToken)}',
+        );
       }
       if (newRefreshToken != null && newRefreshToken.isNotEmpty) {
         await refreshPrefs.setString('refreshToken', newRefreshToken);
@@ -96,6 +102,31 @@ class DioClient {
       return null;
     } finally {
       _isRefreshing = false;
+    }
+  }
+
+  static String? _cookieValue(List<String> cookies, String name) {
+    final pattern = RegExp('(?:^|[,\\s])$name=([^;]+)');
+    for (final cookie in cookies) {
+      final match = pattern.firstMatch(cookie);
+      if (match != null) return match.group(1);
+    }
+    return null;
+  }
+
+  static String _jwtSummary(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return '';
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      ) as Map<String, dynamic>;
+      final id = payload['id'] ?? payload['sub'] ?? payload['userId'];
+      final iat = payload['iat'];
+      final exp = payload['exp'];
+      return '(id=$id iat=$iat exp=$exp)';
+    } catch (_) {
+      return '';
     }
   }
 

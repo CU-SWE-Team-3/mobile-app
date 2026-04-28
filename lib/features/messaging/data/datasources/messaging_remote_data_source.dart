@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../domain/entities/conversation.dart';
 import '../../domain/entities/message.dart';
@@ -35,21 +36,34 @@ class MessagingRemoteDataSource {
     );
     final data = response.data['data'] as Map<String, dynamic>;
     final raw = data['messages'] as List<dynamic>? ?? [];
-    return raw
-        .map((m) => Message.fromJson(m as Map<String, dynamic>))
-        .toList();
+    return raw.map((m) => Message.fromJson(m as Map<String, dynamic>)).toList();
   }
 
   Future<Message> sendMessage({
     required String receiverId,
     required String content,
   }) async {
-    final response = await _dio.post(
-      '/messages',
-      data: {'receiverId': receiverId, 'content': content},
-    );
-    final data = response.data['data'] as Map<String, dynamic>;
-    return Message.fromJson(data['message'] as Map<String, dynamic>);
+    final stopwatch = Stopwatch()..start();
+    try {
+      final response = await _dio.post(
+        '/messages',
+        data: {'receiverId': receiverId, 'content': content},
+        options: Options(
+          sendTimeout: const Duration(seconds: 8),
+          receiveTimeout: const Duration(seconds: 8),
+        ),
+      );
+      debugPrint(
+        '[Messaging] sendMessage completed in ${stopwatch.elapsedMilliseconds}ms',
+      );
+      final data = response.data['data'] as Map<String, dynamic>;
+      return Message.fromJson(data['message'] as Map<String, dynamic>);
+    } catch (e) {
+      debugPrint(
+        '[Messaging] sendMessage failed after ${stopwatch.elapsedMilliseconds}ms: $e',
+      );
+      rethrow;
+    }
   }
 
   Future<List<Participant>> searchUsers(String query) async {

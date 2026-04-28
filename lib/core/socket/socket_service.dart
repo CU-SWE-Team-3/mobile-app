@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -6,6 +7,7 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../constants/app_constants.dart';
 import '../network/dio_client.dart';
 import '../network/user_session.dart';
+import '../services/local_notification_service.dart';
 
 class SocketService {
   static String get _socketUrl => AppConstants.socketBaseUrl;
@@ -13,7 +15,12 @@ class SocketService {
   io.Socket? _socket;
   StreamSubscription<String>? _tokenRefreshSub;
   String? _currentToken;
+  bool _isConnecting = false;
   bool _isRecoveringAuthError = false;
+  bool _authBlocked = false;
+  int _authRecoveryAttempts = 0;
+  String? _lastRecoveredTokenFingerprint;
+  String? _blockedTokenFingerprint;
   final Set<String> _activeConversationIds = {};
 
   final _newMessageController =
@@ -41,21 +48,56 @@ class SocketService {
   }
 
   Future<void> connect({String? token}) async {
-    final resolvedToken = token ?? await UserSession.getAccessToken();
+    var resolvedToken = token ?? await UserSession.getAccessToken();
     if (resolvedToken == null || resolvedToken.isEmpty) {
       debugPrint('[SocketService] connect skipped - no token');
       return;
     }
-    if ((_socket?.connected ?? false) && _currentToken == resolvedToken) return;
+    if (_expiresWithin(resolvedToken, const Duration(minutes: 1))) {
+      debugPrint(
+        '[SocketService] Saved token is expired/stale - refreshing before connect',
+      );
+      final refreshedToken = await dioClient.refreshAccessToken();
+      if (refreshedToken == null || refreshedToken.isEmpty) {
+        debugPrint('[SocketService] connect skipped - token refresh failed');
+        return;
+      }
+      resolvedToken = refreshedToken;
+    }
+    if (_authBlocked) {
+      final fingerprint = _tokenFingerprint(resolvedToken);
+      if (fingerprint == _blockedTokenFingerprint) {
+        debugPrint('[SocketService] connect skipped - socket auth is blocked');
+        return;
+      }
+      _authBlocked = false;
+      _blockedTokenFingerprint = null;
+      _resetAuthRecovery();
+    }
+    if (_socket != null &&
+        _currentToken == resolvedToken &&
+        (_isConnecting || (_socket?.connected ?? false))) {
+      return;
+    }
     _initSocket(resolvedToken);
   }
 
-  void disconnect() {
-    if (_socket == null) return;
+  void disconnect({bool clearRooms = true}) {
+    if (_socket == null) {
+      if (clearRooms) {
+        _activeConversationIds.clear();
+      }
+      return;
+    }
     _socket!.disconnect();
     _socket!.dispose();
     _socket = null;
     _currentToken = null;
+    _isConnecting = false;
+    if (clearRooms) {
+      _activeConversationIds.clear();
+    }
+    _resetAuthRecovery();
     debugPrint('[SocketService] Disconnected');
   }
 
@@ -77,11 +119,18 @@ class SocketService {
   }
 
   void reconnectWithNewToken() {
-    disconnect();
+    disconnect(clearRooms: false);
     connect();
   }
 
   void reconnectWithToken(String token) {
+    if (_authBlocked && token != _currentToken) {
+      final fingerprint = _tokenFingerprint(token);
+      if (fingerprint == _blockedTokenFingerprint) return;
+      _authBlocked = false;
+      _blockedTokenFingerprint = null;
+      _resetAuthRecovery();
+    }
     if (token.isEmpty || token == _currentToken) return;
     debugPrint('[SocketService] Token refreshed - reconnecting');
     _initSocket(token);
@@ -91,6 +140,7 @@ class SocketService {
     _socket?.disconnect();
     _socket?.dispose();
     _currentToken = token;
+    _isConnecting = true;
 
     _socket = io.io(
       _socketUrl,
@@ -108,19 +158,26 @@ class SocketService {
 
     _registerListeners();
     _socket!.connect();
-    debugPrint('[SocketService] Connecting to $_socketUrl');
+    debugPrint(
+      '[SocketService] Connecting to $_socketUrl ${_jwtSummary(token)}',
+    );
   }
 
   void _registerListeners() {
     _socket!
       ..onConnect((_) {
         debugPrint('[SocketService] Connected');
+        _isConnecting = false;
+        _resetAuthRecovery();
         for (final conversationId in _activeConversationIds) {
           _socket?.emit('join_chat', {'conversationId': conversationId});
         }
       })
       ..onDisconnect(
-        (reason) => debugPrint('[SocketService] Disconnected: $reason'),
+        (reason) {
+          _isConnecting = false;
+          debugPrint('[SocketService] Disconnected: $reason');
+        },
       )
       ..onConnectError(_onConnectError)
       ..on('receive_message', _onReceiveMessage)
@@ -147,10 +204,29 @@ class SocketService {
   }) async {
     final message = _socketErrorMessage(err);
     debugPrint('[SocketService] $logPrefix: $message');
+    _isConnecting = false;
 
     if (_isRecoveringAuthError || !_isAuthError(message)) return;
 
+    final fingerprint = _tokenFingerprint(_currentToken);
+    final isExpired = message.toLowerCase().contains('expired');
+    if ((!isExpired && _authRecoveryAttempts >= 1) ||
+        fingerprint == _lastRecoveredTokenFingerprint) {
+      debugPrint(
+        '[SocketService] Auth recovery stopped. '
+        'Refresh succeeded but socket still rejects the token. '
+        'Please log in again; if it repeats, backend socket JWT verification '
+        'does not match REST token refresh.',
+      );
+      _authBlocked = true;
+      _blockedTokenFingerprint = fingerprint;
+      disconnect();
+      return;
+    }
+
     _isRecoveringAuthError = true;
+    _authRecoveryAttempts += 1;
+    _lastRecoveredTokenFingerprint = fingerprint;
     try {
       final token = await dioClient.refreshAccessToken();
       if (token != null && token.isNotEmpty) {
@@ -171,16 +247,89 @@ class SocketService {
   bool _isAuthError(String message) {
     final lower = message.toLowerCase();
     return lower.contains('invalid token') ||
+        lower.contains('jwt expired') ||
+        lower.contains('expired token') ||
+        lower.contains('expired') ||
         lower.contains('authentication error') ||
         lower.contains('unauthorized');
   }
 
+  void _resetAuthRecovery() {
+    _isRecoveringAuthError = false;
+    _authRecoveryAttempts = 0;
+    _lastRecoveredTokenFingerprint = null;
+  }
+
+  String? _tokenFingerprint(String? token) {
+    if (token == null || token.length < 12) return token;
+    return '${token.substring(0, 6)}...${token.substring(token.length - 6)}';
+  }
+
+  String _jwtSummary(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return '';
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      ) as Map<String, dynamic>;
+      final id = payload['id'] ?? payload['sub'] ?? payload['userId'];
+      final iat = payload['iat'];
+      final exp = payload['exp'];
+      return '(id=$id iat=$iat exp=$exp)';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  bool _expiresWithin(String token, Duration threshold) {
+    final expiresAt = _jwtExpiresAt(token);
+    if (expiresAt == null) return false;
+    return expiresAt.isBefore(DateTime.now().add(threshold));
+  }
+
+  DateTime? _jwtExpiresAt(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      ) as Map<String, dynamic>;
+      final exp = payload['exp'];
+      if (exp is num) {
+        return DateTime.fromMillisecondsSinceEpoch(
+          exp.toInt() * 1000,
+          isUtc: true,
+        ).toLocal();
+      }
+    } catch (_) {}
+    return null;
+  }
+
   void _onReceiveMessage(dynamic data) {
     try {
-      _newMessageController.add(Map<String, dynamic>.from(data as Map));
+      final message = Map<String, dynamic>.from(data as Map);
+      _newMessageController.add(message);
+      _showMessageNotificationIfNeeded(message);
     } catch (e) {
       debugPrint('[SocketService] receive_message parse error: $e');
     }
+  }
+
+  void _showMessageNotificationIfNeeded(Map<String, dynamic> message) {
+    final conversationId = message['conversationId']?.toString() ?? '';
+    if (conversationId.isEmpty ||
+        _activeConversationIds.contains(conversationId)) {
+      return;
+    }
+
+    final content = message['content']?.toString().trim();
+    unawaited(
+      LocalNotificationService.showNotification(
+        title: 'New message',
+        body: content == null || content.isEmpty ? 'Tap to open chat' : content,
+        payload: '/messages/chat/$conversationId',
+      ),
+    );
   }
 
   void _onMessageDelivered(dynamic data) {
@@ -201,10 +350,77 @@ class SocketService {
 
   void _onNewNotification(dynamic data) {
     try {
-      onNewNotification?.call(Map<String, dynamic>.from(data as Map));
+      final notification = Map<String, dynamic>.from(data as Map);
+      onNewNotification?.call(notification);
+      if ((notification['type']?.toString().toUpperCase() ?? '') == 'MESSAGE') {
+        return;
+      }
+      unawaited(
+        LocalNotificationService.showNotification(
+          title: _notificationTitle(notification),
+          body: _notificationBody(notification),
+          payload:
+              notification['_id']?.toString() ?? notification['id']?.toString(),
+        ),
+      );
     } catch (e) {
       debugPrint('[SocketService] new_notification parse error: $e');
     }
+  }
+
+  String _notificationTitle(Map<String, dynamic> json) {
+    final actor = _notificationActor(json);
+    switch ((json['type'] as String? ?? '').toUpperCase()) {
+      case 'FOLLOW':
+        return '$actor started following you';
+      case 'LIKE':
+        return '$actor liked your track';
+      case 'REPOST':
+        return '$actor reposted your track';
+      case 'COMMENT':
+        return '$actor commented on your track';
+      case 'MESSAGE':
+        return 'New message from $actor';
+      case 'NEW_TRACK':
+        return '$actor posted a new track';
+      case 'NEW_PLAYLIST':
+        return '$actor posted a new playlist';
+      case 'MENTION':
+        return '$actor mentioned you';
+      default:
+        return 'BioBeats notification';
+    }
+  }
+
+  String _notificationBody(Map<String, dynamic> json) {
+    final target = json['target'];
+    final targetMap =
+        target is Map ? Map<String, dynamic>.from(target) : <String, dynamic>{};
+    final trackTitle = targetMap['title']?.toString();
+    final snippet = json['contentSnippet']?.toString();
+
+    if (snippet != null && snippet.trim().isNotEmpty) return snippet;
+    if (trackTitle != null && trackTitle.trim().isNotEmpty) return trackTitle;
+    return 'Tap to open BioBeats';
+  }
+
+  String _notificationActor(Map<String, dynamic> json) {
+    final actors = json['actors'];
+    if (actors is! List || actors.isEmpty) return 'Someone';
+
+    final first = actors.first;
+    final firstMap =
+        first is Map ? Map<String, dynamic>.from(first) : <String, dynamic>{};
+    final name = firstMap['displayName']?.toString();
+    final actorName = (name == null || name.trim().isEmpty) ? 'Someone' : name;
+    final actorCount = json['actorCount'] is int
+        ? json['actorCount'] as int
+        : int.tryParse(json['actorCount']?.toString() ?? '') ?? actors.length;
+
+    if (actorCount > 1) {
+      return '$actorName and ${actorCount - 1} other${actorCount == 2 ? '' : 's'}';
+    }
+    return actorName;
   }
 
   void _onNotificationRead(dynamic data) {

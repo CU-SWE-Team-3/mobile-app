@@ -34,17 +34,28 @@ class TrackSummary {
   });
 
   factory TrackSummary.fromJson(Map<String, dynamic> json) {
-    final artist = json['artist'] as Map<String, dynamic>? ?? {};
-    final id = json['_id'] as String? ?? '';
+    final artist = _asStringMap(
+      json['artist'] ?? json['creator'] ?? json['user'],
+    );
+    final audio = _asStringMap(json['audio']);
+    final id = json['_id'] as String? ?? json['id'] as String? ?? '';
     return TrackSummary(
       id: id,
       title: json['title'] as String? ?? '',
-      artistName: artist['displayName'] as String? ?? '',
-      artistId: artist['_id'] as String?,
+      artistName: artist['displayName'] as String? ??
+          artist['username'] as String? ??
+          artist['name'] as String? ??
+          '',
+      artistId: artist['_id'] as String? ?? artist['id'] as String?,
       artistPermalink: artist['permalink'] as String?,
-      artworkUrl: json['artworkUrl'] as String?,
+      artworkUrl: json['artworkUrl'] as String? ??
+          json['coverUrl'] as String? ??
+          json['imageUrl'] as String?,
       audioUrl: json['audioUrl'] as String? ??
           json['streamUrl'] as String? ??
+          json['hlsUrl'] as String? ??
+          audio['hlsUrl'] as String? ??
+          audio['url'] as String? ??
           (id.isNotEmpty
               ? 'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/$id/playlist.m3u8'
               : null),
@@ -52,10 +63,17 @@ class TrackSummary {
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
       waveform: (json['waveform'] as List<dynamic>?)
-          ?.map((e) => (e as num).toInt())
+          ?.whereType<num>()
+          .map((e) => e.toInt())
           .toList(),
     );
   }
+}
+
+Map<String, dynamic> _asStringMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return const {};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,24 +189,42 @@ class EngagementRemoteDataSource {
   // GET /profile/{userId}/likes
   // Response: { data: { likedTracks: [{ likeDate, target: {...} }], pagination } }
   // ('target' is the current key; falls back to 'track' for backward compat)
- Future<List<TrackSummary>> getUserLikes(String userId) async {
+  Future<List<TrackSummary>> getUserLikes(String userId) async {
     final response = await _dio.get('/profile/$userId/likes');
-    debugPrint('=== LIKES RAW: ${response.data}');
-    final data = response.data['data'] as Map<String, dynamic>? ?? {};
-    // Nested shape: { likedTracks: [{ likeDate, track: {...} }] }
-    final rawNested = data['likedTracks'] as List<dynamic>?;
-    if (rawNested != null) {
-      return rawNested.map((item) {
-        final map = item as Map<String, dynamic>;
-        final track = (map['target'] ?? map['track']) as Map<String, dynamic>? ?? map;
-        return TrackSummary.fromJson(track);
-      }).toList();
+    final root = _asStringMap(response.data);
+    final data = _asStringMap(root['data']);
+
+    final rawItems = data['likedTracks'] ??
+        data['tracks'] ??
+        root['likedTracks'] ??
+        root['tracks'] ??
+        (root['data'] is List ? root['data'] : null);
+
+    if (rawItems is! List) {
+      debugPrint('[Likes] Unexpected response shape: ${response.data}');
+      return const [];
     }
-    // Fallback flat shape: { tracks: [...] }
-    final rawFlat = (data['tracks'] as List<dynamic>?) ?? [];
-    return rawFlat
-        .map((e) => TrackSummary.fromJson(e as Map<String, dynamic>))
-        .toList();
+
+    final tracks = <TrackSummary>[];
+    for (final item in rawItems) {
+      final itemMap = _asStringMap(item);
+      if (itemMap.isEmpty) continue;
+
+      final targetModel = itemMap['targetModel'] as String?;
+      if (targetModel != null && targetModel.toLowerCase() != 'track') {
+        continue;
+      }
+
+      final track = _asStringMap(
+        itemMap['target'] ?? itemMap['track'] ?? itemMap['item'] ?? itemMap,
+      );
+      if (track.isEmpty) continue;
+
+      final summary = TrackSummary.fromJson(track);
+      if (summary.id.isNotEmpty) tracks.add(summary);
+    }
+
+    return tracks;
   }
 
   // ── Current user's reposted tracks ───────────────────────────────────────

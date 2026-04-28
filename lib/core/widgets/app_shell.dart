@@ -1,27 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/messaging/presentation/providers/messaging_providers.dart';
-import '../../features/notifications/presentation/providers/notification_provider.dart';
 import '../../features/player/presentation/widgets/mini_player_widget.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends StatelessWidget {
   final StatefulNavigationShell navigationShell;
 
   const AppShell({super.key, required this.navigationShell});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     const navColor = Color(0xFF2C2C2C);
-    final socketSvc = ref.watch(socketServiceProvider);
-    final notifier = ref.read(notificationProvider.notifier);
-    socketSvc.onNewNotification = notifier.socketAddNotification;
-    socketSvc.onNotificationRead = notifier.socketMarkNotificationRead;
-    socketSvc.onAllNotificationsRead = notifier.socketMarkAllRead;
-    socketSvc.onNotificationDeleted = notifier.socketRemoveNotification;
-    ref.watch(socketLifecycleProvider);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
+import '../../../../core/services/fcm_service.dart';
 import '../../../../core/socket/socket_service.dart';
 import '../../../../injection_container.dart';
 import '../../data/datasources/auth_mock_datasource.dart';
@@ -69,7 +70,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // prevent the remaining cleanup steps from running.
   Future<void> logout() async {
     try {
-      await _dioClient.dio.delete('/notifications/fcm-token');
+      await FcmService.unregisterCurrentToken();
     } catch (e) {
       debugPrint('[Auth] FCM token unregister failed: $e');
     }

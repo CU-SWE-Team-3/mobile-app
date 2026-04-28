@@ -27,6 +27,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
 
   // Local copy of messages; initialized on first data load, mutated for optimistic updates.
   List<Message>? _localMessages;
+  final List<Map<String, dynamic>> _pendingSocketMessages = [];
   bool _hasScrolledToBottom = false;
 
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
@@ -88,9 +89,17 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     final convId = data['conversationId'] as String?;
     if (convId != widget.conversationId) return;
 
-    // Drop if local list hasn't been seeded yet (REST still loading).
-    if (_localMessages == null) return;
+    // If REST is still loading, keep the socket event and force a refetch.
+    if (_localMessages == null) {
+      _pendingSocketMessages.add(data);
+      ref.invalidate(messagesProvider(widget.conversationId));
+      return;
+    }
 
+    _appendIncomingMessage(data);
+  }
+
+  void _appendIncomingMessage(Map<String, dynamic> data) {
     final incoming = Message.fromJson(data);
 
     // Deduplication: skip if the same message id is already present.
@@ -99,6 +108,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     if (_localMessages!.any((m) => m.id == incoming.id)) return;
 
     setState(() => _localMessages!.add(incoming));
+    _emitReceipts();
     _scrollToBottom(force: true);
   }
 
@@ -132,8 +142,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     try {
       final conversation =
           conversations.firstWhere((c) => c.id == widget.conversationId);
-      return conversation.participants
-          .firstWhere((p) => p.id != currentUserId);
+      return conversation.participants.firstWhere((p) => p.id != currentUserId);
     } catch (_) {
       return null;
     }
@@ -156,7 +165,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
       createdAt: DateTime.now(),
     );
 
-    setState(() => _localMessages!.add(optimistic));
+    setState(() => (_localMessages ??= []).add(optimistic));
     _scrollToBottom(force: true);
 
     try {
@@ -166,8 +175,9 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
 
       if (!mounted) return;
       setState(() {
-        final idx = _localMessages!.indexWhere((m) => m.id == optimisticId);
-        if (idx >= 0) _localMessages![idx] = sent;
+        final messages = _localMessages ??= [];
+        final idx = messages.indexWhere((m) => m.id == optimisticId);
+        if (idx >= 0) messages[idx] = sent;
       });
       ref.invalidate(conversationsProvider);
     } catch (_) {
@@ -253,6 +263,18 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                 // Seed local list on first load; ignore subsequent provider rebuilds
                 // so optimistic messages aren't overwritten.
                 _localMessages ??= List.of(loaded);
+                if (_pendingSocketMessages.isNotEmpty) {
+                  final pending = List<Map<String, dynamic>>.from(
+                    _pendingSocketMessages,
+                  );
+                  _pendingSocketMessages.clear();
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!mounted) return;
+                    for (final message in pending) {
+                      _appendIncomingMessage(message);
+                    }
+                  });
+                }
 
                 // Emit delivery + read receipts once, after messages are available.
                 if (!_hasEmittedReceipts) {
@@ -365,9 +387,7 @@ class _MessageInputBar extends StatelessWidget {
             IconButton(
               onPressed: onSend,
               icon: const Icon(Icons.send_rounded),
-              color: onSend != null
-                  ? const Color(0xFFFF5500)
-                  : Colors.white24,
+              color: onSend != null ? const Color(0xFFFF5500) : Colors.white24,
               iconSize: 26,
             ),
           ],
