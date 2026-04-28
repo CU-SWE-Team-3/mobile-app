@@ -369,7 +369,7 @@ class _HiphopPlaylistDetailPageState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Align(
-                alignment: Alignment.topRight,
+                alignment: Alignment.topLeft,
                 child: IconButton(
                   onPressed: () => Navigator.of(sheetContext).pop(),
                   icon: const Icon(Icons.close, color: Colors.white, size: 24),
@@ -710,7 +710,7 @@ class _HiphopPlaylistDetailPageState
         children: [
           Text(
             desc,
-            maxLines: 3,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
@@ -743,7 +743,7 @@ class _HiphopPlaylistDetailPageState
     return GestureDetector(
       onTap: () => _playFrom(i),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+        padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

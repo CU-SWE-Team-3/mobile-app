@@ -726,7 +726,9 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     final selectedPlaylist = _playlists.firstWhere(
       (playlist) {
         final title = playlist.title.toLowerCase();
-        return title.contains('buzzing') || title.contains('introducing');
+        return title.contains('buzzing hip hop') ||
+            title.contains('buzzing hiphop') ||
+            title.contains('buzzing');
       },
       orElse: () => _playlists.first,
     );
@@ -828,15 +830,16 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                           const SizedBox(height: 14),
                           Row(
                             children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xCC111111),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: GestureDetector(
-                                  onTap: _toggleBuzzingLike,
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: _toggleBuzzingLike,
+                                child: Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xCC111111),
+                                    shape: BoxShape.circle,
+                                  ),
                                   child: Icon(
                                     _isRecentCollectionLiked
                                         ? Icons.favorite
@@ -848,6 +851,7 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                               ),
                               const SizedBox(width: 12),
                               GestureDetector(
+                                behavior: HitTestBehavior.opaque,
                                 onTap: hasPlayablePlaylistTrack
                                     ? _playBuzzingPlaylist
                                     : null,
@@ -1222,10 +1226,10 @@ class _PlaylistInfo {
   });
 
   factory _PlaylistInfo.fromJson(dynamic json) => _PlaylistInfo(
-        id: json['id']?.toString() ?? '',
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
         title: json['title'] ?? '',
-        artworkUrl: (json['artwork_url'] ?? '').replaceAll('large', 't500x500'),
-        ownerName: json['user']?['username'] ?? '',
-        trackCount: json['track_count'] ?? 0,
+        artworkUrl: (json['artwork_url'] ?? json['artworkUrl'] ?? '').replaceAll('large', 't500x500'),
+        ownerName: json['user']?['username'] ?? json['creator']?['displayName'] ?? '',
+        trackCount: json['track_count'] ?? json['trackCount'] ?? 0,
       );
 }
