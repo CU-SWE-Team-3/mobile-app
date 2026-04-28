@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../constants/app_constants.dart';
@@ -29,12 +29,30 @@ class SocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _readReceiptController =
       StreamController<Map<String, dynamic>>.broadcast();
+  // ── NEW ──────────────────────────────────────────────────────────────────
+  final _typingController = StreamController<Map<String, dynamic>>.broadcast();
+  final _stoppedTypingController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _messageEditedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _messageDeletedEveryoneController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  // ─────────────────────────────────────────────────────────────────────────
 
   Stream<Map<String, dynamic>> get newMessages => _newMessageController.stream;
   Stream<Map<String, dynamic>> get deliveryReceipts =>
       _deliveryReceiptController.stream;
   Stream<Map<String, dynamic>> get readReceipts =>
       _readReceiptController.stream;
+  // ── NEW ──────────────────────────────────────────────────────────────────
+  Stream<Map<String, dynamic>> get userTyping => _typingController.stream;
+  Stream<Map<String, dynamic>> get userStoppedTyping =>
+      _stoppedTypingController.stream;
+  Stream<Map<String, dynamic>> get messageEdited =>
+      _messageEditedController.stream;
+  Stream<Map<String, dynamic>> get messageDeletedEveryone =>
+      _messageDeletedEveryoneController.stream;
+  // ─────────────────────────────────────────────────────────────────────────
 
   void Function(Map<String, dynamic>)? onNewNotification;
   void Function(String id)? onNotificationRead;
@@ -118,6 +136,16 @@ class SocketService {
     debugPrint('[SocketService] leave_chat: $conversationId');
   }
 
+  // ── NEW ──────────────────────────────────────────────────────────────────
+  void sendTyping(String conversationId) {
+    _socket?.emit('typing', {'conversationId': conversationId});
+  }
+
+  void sendStoppedTyping(String conversationId) {
+    _socket?.emit('stop_typing', {'conversationId': conversationId});
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   void reconnectWithNewToken() {
     disconnect(clearRooms: false);
     connect();
@@ -181,10 +209,13 @@ class SocketService {
       )
       ..onConnectError(_onConnectError)
       ..on('receive_message', _onReceiveMessage)
-      ..on('message_edited', _onReceiveMessage)
-      ..on('message_deleted_everyone', _onReceiveMessage)
+      ..on('message_edited', _onMessageEdited) // ← NEW dedicated handler
+      ..on('message_deleted_everyone',
+          _onMessageDeletedEveryone) // ← NEW dedicated handler
       ..on('messages_delivered', _onMessageDelivered)
       ..on('messages_read', _onMessageRead)
+      ..on('user_typing', _onTyping) // ← NEW
+      ..on('user_stopped_typing', _onStoppedTyping) // ← NEW
       ..on('new_notification', _onNewNotification)
       ..on('notification_read', _onNotificationRead)
       ..on('all_notifications_read', (_) => onAllNotificationsRead?.call())
@@ -308,6 +339,16 @@ class SocketService {
   void _onReceiveMessage(dynamic data) {
     try {
       final message = Map<String, dynamic>.from(data as Map);
+      final conversationId = _conversationIdFrom(message);
+      if (conversationId.isNotEmpty) {
+        message['conversationId'] = conversationId;
+      }
+      final messageId = message['_id']?.toString() ?? message['id']?.toString();
+      final senderId = _senderIdFrom(message);
+      debugPrint(
+        '[SocketService] receive_message: '
+        'conversationId=$conversationId messageId=$messageId senderId=$senderId',
+      );
       _newMessageController.add(message);
       _showMessageNotificationIfNeeded(message);
     } catch (e) {
@@ -315,18 +356,64 @@ class SocketService {
     }
   }
 
+  // ── NEW ──────────────────────────────────────────────────────────────────
+  void _onMessageEdited(dynamic data) {
+    try {
+      final message = Map<String, dynamic>.from(data as Map);
+      _messageEditedController.add(message);
+      _newMessageController.add(message); // keep existing listeners working
+    } catch (e) {
+      debugPrint('[SocketService] message_edited parse error: $e');
+    }
+  }
+
+  void _onMessageDeletedEveryone(dynamic data) {
+    try {
+      final message = Map<String, dynamic>.from(data as Map);
+      _messageDeletedEveryoneController.add(message);
+      _newMessageController.add(message); // keep existing listeners working
+    } catch (e) {
+      debugPrint('[SocketService] message_deleted_everyone parse error: $e');
+    }
+  }
+
+  void _onTyping(dynamic data) {
+    try {
+      _typingController.add(Map<String, dynamic>.from(data as Map));
+    } catch (e) {
+      debugPrint('[SocketService] user_typing parse error: $e');
+    }
+  }
+
+  void _onStoppedTyping(dynamic data) {
+    try {
+      _stoppedTypingController.add(Map<String, dynamic>.from(data as Map));
+    } catch (e) {
+      debugPrint('[SocketService] user_stopped_typing parse error: $e');
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   void _showMessageNotificationIfNeeded(Map<String, dynamic> message) {
-    final conversationId = message['conversationId']?.toString() ?? '';
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    final conversationId = _conversationIdFrom(message);
     if (conversationId.isEmpty ||
         _activeConversationIds.contains(conversationId)) {
       return;
     }
 
     final content = message['content']?.toString().trim();
+    final body =
+        (content == null || content.isEmpty || _looksLikeObjectId(content))
+            ? 'Tap to open chat'
+            : content;
     unawaited(
       LocalNotificationService.showNotification(
         title: 'New message',
-        body: content == null || content.isEmpty ? 'Tap to open chat' : content,
+        body: body,
         payload: '/messages/chat/$conversationId',
       ),
     );
@@ -421,6 +508,38 @@ class SocketService {
       return '$actorName and ${actorCount - 1} other${actorCount == 2 ? '' : 's'}';
     }
     return actorName;
+  }
+
+  bool _looksLikeObjectId(String value) {
+    return RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(value);
+  }
+
+  String _conversationIdFrom(Map<String, dynamic> message) {
+    final direct = message['conversationId'] ?? message['chatId'];
+    final directValue = _idValue(direct);
+    if (directValue.isNotEmpty) return directValue;
+
+    final conversation = message['conversation'];
+    final conversationValue = _idValue(conversation);
+    if (conversationValue.isNotEmpty) return conversationValue;
+
+    return '';
+  }
+
+  String _senderIdFrom(Map<String, dynamic> message) {
+    return _idValue(message['senderId']).isNotEmpty
+        ? _idValue(message['senderId'])
+        : _idValue(message['sender']);
+  }
+
+  String _idValue(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      return (map['_id'] ?? map['id'] ?? '').toString();
+    }
+    return value.toString();
   }
 
   void _onNotificationRead(dynamic data) {

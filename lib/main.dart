@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/network/dio_client.dart';
+import 'core/providers/session_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/services/audio_handler_service.dart';
 import 'core/services/fcm_service.dart';
@@ -38,6 +39,7 @@ class MyApp extends ConsumerStatefulWidget {
 class _MyAppState extends ConsumerState<MyApp> {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
+  StreamSubscription<void>? _authInvalidatedSub;
 
   @override
   void initState() {
@@ -45,6 +47,11 @@ class _MyAppState extends ConsumerState<MyApp> {
     unawaited(LocalNotificationService.initialize());
     unawaited(FcmService.initialize());
     unawaited(FcmService.handleInitialMessageAfterFirstFrame());
+    _authInvalidatedSub = dioClient.authInvalidated.listen((_) {
+      if (!mounted) return;
+      ref.read(sessionUserIdProvider.notifier).state = '';
+      appRouter.go('/login-screen');
+    });
     _initDeepLinks();
   }
 
@@ -80,6 +87,7 @@ class _MyAppState extends ConsumerState<MyApp> {
   @override
   void dispose() {
     _linkSub?.cancel();
+    _authInvalidatedSub?.cancel();
     super.dispose();
   }
 

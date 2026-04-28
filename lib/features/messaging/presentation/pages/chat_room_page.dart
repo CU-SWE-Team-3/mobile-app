@@ -47,9 +47,6 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   late final SocketService _socketService;
   bool _hasEmittedReceipts = false;
 
-  // Receiver ID cached from build() so the text-change listener can use it.
-  String? _receiverId;
-
   // Typing emit state
   bool _isTypingEmitted = false;
   Timer? _typingStopTimer;
@@ -71,18 +68,14 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   void _joinAndSubscribe() {
     _socketService = ref.read(socketServiceProvider);
     _socketService.joinChat(widget.conversationId);
-    _messageSubscription =
-        _socketService.newMessages.listen(_onSocketMessage);
+    _messageSubscription = _socketService.newMessages.listen(_onSocketMessage);
     _deliverySubscription =
         _socketService.deliveryReceipts.listen(_onDeliveryReceipt);
-    _readSubscription =
-        _socketService.readReceipts.listen(_onReadReceipt);
-    _typingSubscription =
-        _socketService.userTyping.listen(_onUserTyping);
+    _readSubscription = _socketService.readReceipts.listen(_onReadReceipt);
+    _typingSubscription = _socketService.userTyping.listen(_onUserTyping);
     _stoppedTypingSubscription =
         _socketService.userStoppedTyping.listen(_onUserStoppedTyping);
-    _editedSubscription =
-        _socketService.messageEdited.listen(_onMessageEdited);
+    _editedSubscription = _socketService.messageEdited.listen(_onMessageEdited);
     _deletedSubscription =
         _socketService.messageDeletedEveryone.listen(_onMessageDeletedEveryone);
   }
@@ -127,11 +120,18 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
 
   void _onSocketMessage(Map<String, dynamic> data) {
     // Filter: only handle messages belonging to this conversation.
-    final convId = data['conversationId'] as String?;
-    if (convId != widget.conversationId) return;
+    final convId = _conversationIdFrom(data);
+    if (convId != widget.conversationId) {
+      debugPrint(
+        '[ChatRoom] ignored socket message: '
+        'current=${widget.conversationId} incoming=$convId',
+      );
+      return;
+    }
 
     // If REST is still loading, keep the socket event and force a refetch.
     if (_localMessages == null) {
+      debugPrint('[ChatRoom] queued socket message while loading: $convId');
       _pendingSocketMessages.add(data);
       ref.invalidate(messagesProvider(widget.conversationId));
       return;
@@ -141,14 +141,42 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   }
 
   void _appendIncomingMessage(Map<String, dynamic> data) {
-    final incoming = Message.fromJson(data);
+    final normalized = Map<String, dynamic>.from(data)
+      ..['conversationId'] = _conversationIdFrom(data);
+    final incoming = Message.fromJson(normalized);
 
     // Deduplication: skip if the same message id is already present.
-    if (_localMessages!.any((m) => m.id == incoming.id)) return;
+    if (_localMessages!.any((m) => m.id == incoming.id)) {
+      debugPrint('[ChatRoom] skipped duplicate socket message: ${incoming.id}');
+      return;
+    }
 
+    debugPrint('[ChatRoom] appended socket message: ${incoming.id}');
     setState(() => _localMessages!.add(incoming));
     _emitReceipts();
     _scrollToBottom(force: true);
+  }
+
+  String _conversationIdFrom(Map<String, dynamic> message) {
+    final direct = message['conversationId'] ?? message['chatId'];
+    final directValue = _idValue(direct);
+    if (directValue.isNotEmpty) return directValue;
+
+    final conversation = message['conversation'];
+    final conversationValue = _idValue(conversation);
+    if (conversationValue.isNotEmpty) return conversationValue;
+
+    return '';
+  }
+
+  String _idValue(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      return (map['_id'] ?? map['id'] ?? '').toString();
+    }
+    return value.toString();
   }
 
   // ── Typing indicator (incoming) ────────────────────────────────────────────
@@ -183,8 +211,8 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     setState(() {
       final idx = _localMessages!.indexWhere((m) => m.id == messageId);
       if (idx >= 0) {
-        _localMessages![idx] = _localMessages![idx]
-            .copyWith(content: newContent, isEdited: true);
+        _localMessages![idx] =
+            _localMessages![idx].copyWith(content: newContent, isEdited: true);
       }
     });
   }
@@ -209,32 +237,31 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   // ── Typing emit logic ──────────────────────────────────────────────────────
 
   void _onTextChanged() {
-    final receiverId = _receiverId;
-    if (receiverId == null) return;
+    final convId = widget.conversationId;
 
     if (_textController.text.isEmpty) {
-      _stopTypingIfNeeded(receiverId);
+      _stopTypingIfNeeded(convId);
       return;
     }
 
-    // Emit only on first keystroke of each typing burst.
     if (!_isTypingEmitted) {
       _isTypingEmitted = true;
-      _socketService.sendTyping(receiverId);
+      _socketService.sendTyping(convId);
     }
-    // Reset the 2-second inactivity timer on every keystroke.
+
     _typingStopTimer?.cancel();
     _typingStopTimer = Timer(const Duration(seconds: 2), () {
       _isTypingEmitted = false;
-      _socketService.stopTyping(receiverId);
+      _socketService.sendStoppedTyping(convId);
     });
   }
 
-  void _stopTypingIfNeeded(String receiverId) {
+  void _stopTypingIfNeeded(String convId) {
     if (!_isTypingEmitted) return;
+
     _isTypingEmitted = false;
     _typingStopTimer?.cancel();
-    _socketService.stopTyping(receiverId);
+    _socketService.sendStoppedTyping(convId);
   }
 
   // ── Edit mode ──────────────────────────────────────────────────────────────
@@ -319,8 +346,8 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     _typingStopTimer?.cancel();
     _typingHideTimer?.cancel();
     // Emit stop_typing if disposed while mid-typing.
-    if (_isTypingEmitted && _receiverId != null) {
-      _socketService.stopTyping(_receiverId!);
+    if (_isTypingEmitted) {
+      _socketService.sendStoppedTyping(widget.conversationId);
     }
     _socketService.leaveChat(widget.conversationId);
     _scrollController.dispose();
@@ -354,16 +381,46 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     }
   }
 
+  Participant? _fallbackParticipantFromMessages(
+    String currentUserId,
+    List<Message>? loadedMessages,
+  ) {
+    final messages = _localMessages ?? loadedMessages;
+    if (messages == null) return null;
+
+    for (final message in messages) {
+      if (message.senderId == currentUserId) continue;
+      final displayName = message.senderDisplayName?.trim();
+      if (displayName == null || displayName.isEmpty) continue;
+      return Participant(
+        id: message.senderId,
+        displayName: displayName,
+        avatarUrl: message.senderAvatarUrl,
+        permalink: '',
+      );
+    }
+
+    return null;
+  }
+
+  void _goBack() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/messages');
+    }
+  }
+
   Future<void> _sendMessage({
     required String currentUserId,
     required String receiverId,
   }) async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-    _textController.clear();
 
     // Stop typing indicator immediately on send.
-    _stopTypingIfNeeded(receiverId);
+    _stopTypingIfNeeded(widget.conversationId);
+    _textController.clear();
 
     final optimisticId = 'pending_${DateTime.now().millisecondsSinceEpoch}';
     final optimistic = Message(
@@ -378,11 +435,19 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     _scrollToBottom(force: true);
 
     try {
-      final sent = await ref
-          .read(messagingRepositoryProvider)
-          .sendMessage(receiverId: receiverId, content: text);
+      final sent = await ref.read(messagingRepositoryProvider).sendMessage(
+            receiverId: receiverId,
+            content: text,
+            conversationId: widget.conversationId,
+          );
 
       if (!mounted) return;
+      if (sent.conversationId != widget.conversationId) {
+        debugPrint(
+          '[ChatRoom] sendMessage returned different conversationId: '
+          'current=${widget.conversationId} returned=${sent.conversationId}',
+        );
+      }
       setState(() {
         final messages = _localMessages ??= [];
         final idx = messages.indexWhere((m) => m.id == optimisticId);
@@ -391,8 +456,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
       ref.invalidate(conversationsProvider);
     } catch (_) {
       if (!mounted) return;
-      setState(
-          () => _localMessages!.removeWhere((m) => m.id == optimisticId));
+      setState(() => _localMessages!.removeWhere((m) => m.id == optimisticId));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to send message')),
       );
@@ -405,10 +469,16 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   Widget build(BuildContext context) {
     final currentUserId = ref.watch(sessionUserIdProvider);
     final messagesAsync = ref.watch(messagesProvider(widget.conversationId));
-    final otherParticipant = _resolveOtherParticipant(currentUserId);
-
-    // Cache for the text-change listener (runs outside build).
-    _receiverId = otherParticipant?.id;
+    final conversationsAsync = ref.watch(conversationsProvider);
+    final otherParticipant = _resolveOtherParticipant(currentUserId) ??
+        _fallbackParticipantFromMessages(
+          currentUserId,
+          messagesAsync.valueOrNull,
+        );
+    final conversations = conversationsAsync.valueOrNull ?? const [];
+    final conversationLookupComplete = conversationsAsync.hasValue;
+    final conversationExists =
+        conversations.any((c) => c.id == widget.conversationId);
 
     final isEditing = _editingMessageId != null;
 
@@ -419,7 +489,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.pop(),
+          onPressed: _goBack,
         ),
         title: otherParticipant != null
             ? Row(
@@ -453,8 +523,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
           Expanded(
             child: messagesAsync.when(
               loading: () => const Center(
-                child:
-                    CircularProgressIndicator(color: Color(0xFFFF5500)),
+                child: CircularProgressIndicator(color: Color(0xFFFF5500)),
               ),
               error: (_, __) => Center(
                 child: Column(
@@ -503,11 +572,15 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                 }
 
                 if (_localMessages!.isEmpty) {
+                  if (conversationLookupComplete && !conversationExists) {
+                    return _UnknownConversationFallback(
+                      onOpenInbox: () => context.go('/messages'),
+                    );
+                  }
                   return const Center(
                     child: Text(
                       'No messages yet',
-                      style:
-                          TextStyle(color: Colors.white54, fontSize: 16),
+                      style: TextStyle(color: Colors.white54, fontSize: 16),
                     ),
                   );
                 }
@@ -520,8 +593,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                   onRefresh: () async {
                     _hasScrolledToBottom = false;
                     setState(() => _localMessages = null);
-                    ref.invalidate(
-                        messagesProvider(widget.conversationId));
+                    ref.invalidate(messagesProvider(widget.conversationId));
                   },
                   child: ListView.builder(
                     controller: _scrollController,
@@ -537,24 +609,18 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                       final withinWindow =
                           DateTime.now().difference(msg.createdAt).inMinutes <
                               15;
-                      final canEditDelete = isOwn &&
-                          !msg.isDeleted &&
-                          !isPending &&
-                          withinWindow;
-
+                      final canEditDelete =
+                          isOwn && !msg.isDeleted && !isPending && withinWindow;
                       return Opacity(
                         opacity: isPending ? 0.6 : 1.0,
                         child: MessageBubble(
                           message: msg,
                           isOwn: isOwn,
-                          otherParticipant:
-                              isOwn ? null : otherParticipant,
-                          onEdit: canEditDelete
-                              ? () => _enterEditMode(msg)
-                              : null,
-                          onDelete: canEditDelete
-                              ? () => _deleteMessage(msg)
-                              : null,
+                          otherParticipant: isOwn ? null : otherParticipant,
+                          onEdit:
+                              canEditDelete ? () => _enterEditMode(msg) : null,
+                          onDelete:
+                              canEditDelete ? () => _deleteMessage(msg) : null,
                         ),
                       );
                     },
@@ -581,6 +647,45 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                         )),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _UnknownConversationFallback extends StatelessWidget {
+  final VoidCallback onOpenInbox;
+
+  const _UnknownConversationFallback({required this.onOpenInbox});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Could not open this chat',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'The notification did not include a valid conversation.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white38, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: onOpenInbox,
+              child: const Text(
+                'Open inbox',
+                style: TextStyle(color: Color(0xFFFF5500)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -629,8 +734,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
           ),
           const SizedBox(width: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: const Color(0xFF1F1F1F),
               borderRadius: BorderRadius.circular(18),
@@ -638,8 +742,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
             child: AnimatedBuilder(
               animation: _controller,
               builder: (_, __) {
-                final dotCount =
-                    (_controller.value * 3).floor().clamp(1, 3);
+                final dotCount = (_controller.value * 3).floor().clamp(1, 3);
                 return Text(
                   '.' * dotCount,
                   style: const TextStyle(
@@ -718,16 +821,14 @@ class _MessageInputBar extends StatelessWidget {
                 ),
               ),
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
                   Expanded(
                     child: TextField(
                       controller: controller,
                       focusNode: focusNode,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 15),
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
                       maxLines: 4,
                       minLines: 1,
                       textCapitalization: TextCapitalization.sentences,
@@ -735,8 +836,7 @@ class _MessageInputBar extends StatelessWidget {
                         hintText: isEditMode
                             ? 'Edit message...'
                             : 'Write a message...',
-                        hintStyle:
-                            const TextStyle(color: Colors.white38),
+                        hintStyle: const TextStyle(color: Colors.white38),
                         filled: true,
                         fillColor: const Color(0xFF2A2A2A),
                         contentPadding: const EdgeInsets.symmetric(
@@ -755,9 +855,7 @@ class _MessageInputBar extends StatelessWidget {
                   IconButton(
                     onPressed: onSend,
                     icon: Icon(
-                      isEditMode
-                          ? Icons.check_rounded
-                          : Icons.send_rounded,
+                      isEditMode ? Icons.check_rounded : Icons.send_rounded,
                     ),
                     color: onSend != null
                         ? const Color(0xFFFF5500)

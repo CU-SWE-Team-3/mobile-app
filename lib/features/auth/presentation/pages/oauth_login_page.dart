@@ -51,7 +51,6 @@ class _OAuthLoginPageState extends ConsumerState<OAuthLoginPage> {
         '/auth/google/mobile',
         data: {'idToken': idToken},
       );
-      debugPrint('[Login] full response: ${response.data}');
 
       // Tokens come as HttpOnly cookies — extract from Set-Cookie header
       String token = '';
@@ -68,9 +67,10 @@ class _OAuthLoginPageState extends ConsumerState<OAuthLoginPage> {
       }
       final user = response.data['data']['user'] as Map<String, dynamic>? ?? {};
       final prefs = await SharedPreferences.getInstance();
-      debugPrint('[Login] cookies: ${response.headers['set-cookie']}');
-      debugPrint('[Login] token extracted: $token');
-      debugPrint('[Login] refreshToken extracted: $refreshToken');
+      debugPrint(
+        '[Login] tokens extracted: access=${token.isNotEmpty} '
+        'refresh=${refreshToken.isNotEmpty}',
+      );
 
       await prefs.setString('accessToken', token);
       await prefs.setString('refreshToken', refreshToken);

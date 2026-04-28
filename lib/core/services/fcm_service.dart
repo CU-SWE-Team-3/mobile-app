@@ -197,8 +197,16 @@ class FcmService {
 
     debugPrint('[FCM] notification tap: type=$type data=$data');
 
-    if (type.toUpperCase() == 'MESSAGE' && conversationId.isNotEmpty) {
-      appRouter.go('/messages/chat/$conversationId');
+    if (type.toUpperCase() == 'MESSAGE') {
+      if (conversationId.isNotEmpty) {
+        appRouter.go('/messages/chat/$conversationId');
+      } else {
+        debugPrint(
+          '[FCM] MESSAGE tap missing conversationId. '
+          'Opening inbox instead of trusting actionLink=$actionLink',
+        );
+        appRouter.go('/messages');
+      }
       return;
     }
 
@@ -232,13 +240,6 @@ class FcmService {
       final value = data[key]?.toString() ?? '';
       if (value.isNotEmpty) return value;
     }
-
-    final actionLink = data['actionLink']?.toString() ?? '';
-    final actionUri = Uri.tryParse(actionLink);
-    final actionPath = actionUri?.path ?? '';
-    final actionMatch =
-        RegExp(r'^/messages/chat/([^/?#]+)').firstMatch(actionPath);
-    if (actionMatch != null) return actionMatch.group(1) ?? '';
 
     final target = data['target'];
     if (target is Map) {

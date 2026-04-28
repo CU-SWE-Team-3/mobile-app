@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/deep_link_state.dart';
+import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 import '../../../../core/providers/session_provider.dart';
 import '../../../../core/services/fcm_service.dart';
@@ -33,18 +34,25 @@ class _SplashPageState extends ConsumerState<SplashPage> {
     debugPrint('[Splash] deepLinkHandled=$deepLinkHandled');
     if (!mounted || deepLinkHandled) return;
 
-    final accessToken = await UserSession.getAccessToken();
+    var accessToken = await UserSession.getAccessToken();
     final userId = await UserSession.getUserId();
+    final savedUserId = userId ?? '';
     debugPrint('[Splash] token=${_jwtSummary(accessToken)} userId=$userId');
-    final hasSession = accessToken != null &&
-        accessToken.isNotEmpty &&
-        userId != null &&
-        userId.isNotEmpty;
+    var hasSession =
+        accessToken != null && accessToken.isNotEmpty && savedUserId.isNotEmpty;
+
+    if (hasSession && _isExpiredOrStale(accessToken)) {
+      debugPrint('[Splash] saved token is expired/stale - refreshing');
+      accessToken = await dioClient.refreshAccessToken();
+      hasSession = accessToken != null &&
+          accessToken.isNotEmpty &&
+          savedUserId.isNotEmpty;
+    }
 
     if (mounted) {
       if (hasSession) {
         final notifier = ref.read(notificationProvider.notifier);
-        ref.read(sessionUserIdProvider.notifier).state = userId;
+        ref.read(sessionUserIdProvider.notifier).state = savedUserId;
         context.go('/home');
         await Future.delayed(const Duration(milliseconds: 500));
         notifier.fetchUnreadCount();
@@ -82,6 +90,27 @@ class _SplashPageState extends ConsumerState<SplashPage> {
       return '(id=$id iat=$iat exp=$exp)';
     } catch (_) {
       return 'present';
+    }
+  }
+
+  bool _isExpiredOrStale(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return false;
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      ) as Map<String, dynamic>;
+      final exp = payload['exp'];
+      if (exp is! num) return false;
+      final expiresAt = DateTime.fromMillisecondsSinceEpoch(
+        exp.toInt() * 1000,
+        isUtc: true,
+      );
+      return expiresAt.isBefore(DateTime.now().toUtc().add(
+            const Duration(minutes: 1),
+          ));
+    } catch (_) {
+      return false;
     }
   }
 }

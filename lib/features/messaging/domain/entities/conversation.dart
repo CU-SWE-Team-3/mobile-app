@@ -18,15 +18,37 @@ class Conversation {
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
     final rawParticipants = json['participants'] as List<dynamic>? ?? [];
-    final lastMsgJson = json['lastMessage'] as Map<String, dynamic>?;
+    final lastMsgRaw = json['lastMessage'] ?? json['latestMessage'];
+    final lastMsgJson =
+        lastMsgRaw is Map ? Map<String, dynamic>.from(lastMsgRaw) : null;
+    final updatedAtRaw =
+        json['updatedAt'] ?? json['lastMessageAt'] ?? json['createdAt'];
     return Conversation(
-      id: json['_id'] as String? ?? '',
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       participants: rawParticipants
-          .map((p) => Participant.fromJson(p as Map<String, dynamic>))
+          .map(_participantFromRaw)
+          .where((p) => p.id.isNotEmpty)
           .toList(),
       lastMessage: lastMsgJson != null ? Message.fromJson(lastMsgJson) : null,
       unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      updatedAt: DateTime.tryParse(updatedAtRaw?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
     );
+  }
+
+  static Participant _participantFromRaw(dynamic raw) {
+    if (raw is String) {
+      return Participant(id: raw, displayName: '', permalink: '');
+    }
+    if (raw is! Map) {
+      return const Participant(id: '', displayName: '', permalink: '');
+    }
+
+    final map = Map<String, dynamic>.from(raw);
+    final nested = map['user'] ?? map['userId'] ?? map['participant'];
+    if (nested is Map) {
+      return Participant.fromJson(Map<String, dynamic>.from(nested));
+    }
+    return Participant.fromJson(map);
   }
 }

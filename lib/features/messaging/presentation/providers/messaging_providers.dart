@@ -18,15 +18,24 @@ final socketServiceProvider = Provider<SocketService>(
 
 /// Watches sessionUserIdProvider and drives the socket lifecycle.
 /// Connect on login, disconnect on logout. Activated by AppShell watching it.
-final socketLifecycleProvider = Provider.autoDispose<void>((ref) {
-  final userId = ref.watch(sessionUserIdProvider);
+final socketLifecycleProvider = Provider<void>((ref) {
   final service = ref.watch(socketServiceProvider);
-  if (userId.isNotEmpty) {
-    service.connect();
-    ref.onDispose(service.disconnect);
-  } else {
-    service.disconnect();
-  }
+
+  ref.listen<String>(
+    sessionUserIdProvider,
+    (previousUserId, nextUserId) {
+      if (nextUserId.isEmpty) {
+        service.disconnect();
+        return;
+      }
+
+      if (previousUserId != nextUserId) {
+        service.disconnect();
+        unawaited(service.connect());
+      }
+    },
+    fireImmediately: true,
+  );
 });
 
 /// Keeps conversation lists fresh when messages arrive outside an open chat.

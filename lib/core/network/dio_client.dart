@@ -14,8 +14,11 @@ class DioClient {
   Completer<String?>? _refreshCompleter;
   final StreamController<String> _tokenRefreshController =
       StreamController<String>.broadcast();
+  final StreamController<void> _authInvalidatedController =
+      StreamController<void>.broadcast();
 
   Stream<String> get tokenRefreshes => _tokenRefreshController.stream;
+  Stream<void> get authInvalidated => _authInvalidatedController.stream;
 
   DioClient._internal() {
     dio = Dio(BaseOptions(
@@ -36,9 +39,10 @@ class DioClient {
 
     _isRefreshing = true;
     _refreshCompleter = Completer<String?>();
+    SharedPreferences? refreshPrefs;
 
     try {
-      final refreshPrefs = await SharedPreferences.getInstance();
+      refreshPrefs = await SharedPreferences.getInstance();
       final refreshToken = refreshPrefs.getString('refreshToken');
       if (refreshToken == null || refreshToken.isEmpty) {
         _refreshCompleter!.complete(null);
@@ -97,6 +101,9 @@ class DioClient {
       debugPrint('[DioClient] Token refresh failed: $e');
       if (e is DioException) {
         debugPrint('[DioClient] Refresh response data: ${e.response?.data}');
+        if (e.response?.statusCode == 401 && refreshPrefs != null) {
+          await _clearStoredAuth(refreshPrefs);
+        }
       }
       _refreshCompleter!.complete(null);
       return null;
@@ -112,6 +119,15 @@ class DioClient {
       if (match != null) return match.group(1);
     }
     return null;
+  }
+
+  Future<void> _clearStoredAuth(SharedPreferences prefs) async {
+    dio.options.headers.remove('Authorization');
+    await prefs.remove('accessToken');
+    await prefs.remove('refreshToken');
+    await prefs.remove('userId');
+    _authInvalidatedController.add(null);
+    debugPrint('[DioClient] Cleared expired session after refresh rejection');
   }
 
   static String _jwtSummary(String token) {
