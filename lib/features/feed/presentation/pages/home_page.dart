@@ -1357,6 +1357,18 @@ class _TrackMenuSheet extends ConsumerWidget {
       router.push('/reposters', extra: {'trackId': track.id});
     }
 
+    void goToLikes() {
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      router.push('/likes');
+    }
+
+    void goToReposts() {
+      final router = GoRouter.of(context);
+      Navigator.pop(context);
+      router.push('/profile/reposts');
+    }
+
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1527,6 +1539,16 @@ class _TrackMenuSheet extends ConsumerWidget {
             icon: Icons.repeat,
             label: 'Who reposted this',
             onTap: viewReposters,
+          ),
+          _MenuTile(
+            icon: Icons.favorite,
+            label: 'Your Likes',
+            onTap: goToLikes,
+          ),
+          _MenuTile(
+            icon: Icons.repeat_one,
+            label: 'Your Reposts',
+            onTap: goToReposts,
           ),
           _MenuTile(
             icon: Icons.info_outline,

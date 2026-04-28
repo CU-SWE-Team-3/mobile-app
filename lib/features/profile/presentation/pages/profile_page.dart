@@ -8,8 +8,10 @@ import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
+import 'package:soundcloud_clone/features/library/presentation/pages/library_playlists_page.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
 import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
+import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 import 'package:soundcloud_clone/injection_container.dart';
@@ -447,6 +449,19 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     // Keep _cachedTracks in sync so hero-section shuffle/play buttons work.
     ref.listen<AsyncValue<List<UploadTrack>>>(myTracksProvider, (_, next) {
       next.whenData((tracks) => _cachedTracks = tracks);
+    });
+
+    // When a playlist is deleted via playlistsProvider (library or details page),
+    // mirror the removal into _playlists so the profile section updates immediately.
+    ref.listen<List<Playlist>>(playlistsProvider, (previous, current) {
+      if (previous == null || previous.length <= current.length) return;
+      final removedIds = previous.map((p) => p.id).toSet()
+          .difference(current.map((p) => p.id).toSet());
+      if (removedIds.isNotEmpty && mounted) {
+        setState(() {
+          _playlists = _playlists.where((p) => !removedIds.contains(p.id)).toList();
+        });
+      }
     });
 
     return Scaffold(
@@ -1021,9 +1036,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           itemCount: _playlists.length,
           itemBuilder: (_, i) {
             final p = _playlists[i];
+            // Artwork chain: own HTTPS artwork → first track HTTPS artwork → placeholder
+            final _cardArtwork = () {
+              final own = p.artworkUrl;
+              if (own != null && own.startsWith('https://') && !own.contains('default')) {
+                return own;
+              }
+              return p.firstTrackArtworkUrl;
+            }();
             return GestureDetector(
               key: ValueKey('profile_playlist_tile_$i'),
-              onTap: () => context.push('/playlist', extra: {'playlistId': p.id}),
+              onTap: () async {
+                await context.push('/playlist', extra: {'playlistId': p.id});
+                if (mounted) _fetchPlaylists();
+              },
               child: Padding(
                 padding: const EdgeInsets.only(right: 14),
                 child: SizedBox(
@@ -1037,9 +1063,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         child: SizedBox(
                           width: 160,
                           height: 160,
-                          child: p.artworkUrl != null && p.artworkUrl!.isNotEmpty
+                          child: _cardArtwork != null
                               ? CachedNetworkImage(
-                                  imageUrl: p.artworkUrl!,
+                                  imageUrl: _cardArtwork,
                                   fit: BoxFit.cover,
                                   placeholder: (_, __) => Container(
                                     color: Colors.grey[850],
@@ -1166,21 +1192,39 @@ class _ProfilePlaylist {
   final String id;
   final String title;
   final String? artworkUrl;
+  final String? firstTrackArtworkUrl;
   final String ownerName;
 
   const _ProfilePlaylist({
     required this.id,
     required this.title,
     this.artworkUrl,
+    this.firstTrackArtworkUrl,
     required this.ownerName,
   });
 
   factory _ProfilePlaylist.fromJson(Map<String, dynamic> json) {
     final creator = json['creator'] as Map<String, dynamic>?;
+
+    // If the list response includes a populated tracks array, extract the first
+    // track's artwork URL as a fallback for playlists without an explicit artwork.
+    String? firstTrackArtwork;
+    final tracks = json['tracks'] as List?;
+    if (tracks != null && tracks.isNotEmpty) {
+      final first = tracks.first;
+      if (first is Map<String, dynamic>) {
+        final url = first['artworkUrl'] as String?;
+        if (url != null && url.startsWith('https://') && !url.contains('default')) {
+          firstTrackArtwork = url;
+        }
+      }
+    }
+
     return _ProfilePlaylist(
       id: (json['_id'] as String?) ?? (json['id'] as String?) ?? '',
       title: json['title'] as String? ?? '',
       artworkUrl: json['artworkUrl'] as String?,
+      firstTrackArtworkUrl: firstTrackArtwork,
       ownerName: (json['ownerName'] as String?) ??
           (creator?['displayName'] as String?) ??
           '',

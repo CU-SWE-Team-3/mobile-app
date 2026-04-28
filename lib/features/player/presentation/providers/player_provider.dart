@@ -23,6 +23,9 @@ class PlayerState {
   final bool isLoading;
   final String? error;
   final double volume;
+  // PUT /player/state context fields (API: queueContext enum + contextId ObjectId).
+  final String queueContext;
+  final String? contextId;
 
   const PlayerState({
     this.currentTrack,
@@ -35,6 +38,8 @@ class PlayerState {
     this.isLoading = false,
     this.error,
     this.volume = 0.7,
+    this.queueContext = 'none',
+    this.contextId,
   });
 
   // Backward-compat getters used by existing UI
@@ -56,6 +61,9 @@ class PlayerState {
     String? error,
     bool clearError = false,
     double? volume,
+    String? queueContext,
+    String? contextId,
+    bool clearContextId = false,
   }) {
     return PlayerState(
       currentTrack:
@@ -69,6 +77,8 @@ class PlayerState {
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
       volume: volume ?? this.volume,
+      queueContext: queueContext ?? this.queueContext,
+      contextId: clearContextId ? null : (contextId ?? this.contextId),
     );
   }
 }
@@ -133,10 +143,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
           trackId: track.id,
           position: state.position.inSeconds.toDouble(),
           isPlaying: state.isPlaying,
-          volume: state.volume,
+          queueContext: state.queueContext,
+          contextId: state.contextId,
         );
       }
     });
+  }
+
+  /// Records the playback context so the heartbeat can include it in
+  /// PUT /player/state.  Call immediately after playQueue / playTrack.
+  void setQueueContext(String context, {String? contextId}) {
+    state = state.copyWith(queueContext: context, contextId: contextId);
   }
 
   // -------------------------------------------------------------------------
@@ -164,14 +181,31 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
       state = state.copyWith(currentTrack: track);
 
-      // Resolve the server-authorized HLS URL; fall back to track.audioUrl
-      // if the API is unreachable (e.g. offline or unauthenticated).
-      final streamUrl = await _api.getStreamUrl(track.id) ?? track.audioUrl;
+      // Resolve the server-authorized HLS URL.
+      // If the stream endpoint fails, fall back to track.audioUrl only when
+      // it is a valid remote URL — never pass an empty or local path to
+      // ExoPlayer (setFilePath("") throws FileNotFoundException: ENOENT).
+      final streamUrl = await _api.getStreamUrl(track.id);
+      final fallback = track.audioUrl;
+      final bool fallbackIsRemote =
+          fallback.startsWith('http://') || fallback.startsWith('https://');
 
-      if (streamUrl.startsWith('http://') || streamUrl.startsWith('https://')) {
-        await _audioPlayer.setUrl(streamUrl);
+      final String? resolvedUrl = (streamUrl != null && streamUrl.isNotEmpty)
+          ? streamUrl
+          : (fallbackIsRemote ? fallback : null);
+
+      if (resolvedUrl == null) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Track audio is unavailable',
+        );
+        return;
+      }
+
+      if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
+        await _audioPlayer.setUrl(resolvedUrl);
       } else {
-        await _audioPlayer.setFilePath(streamUrl);
+        await _audioPlayer.setFilePath(resolvedUrl);
       }
 
       await _audioPlayer.play();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Cookie;
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
@@ -55,12 +56,23 @@ class DioClient {
         onError: (error, handler) async {
           final status = error.response?.statusCode;
           if (status == 401) {
+            // Guard: never retry a request that has already been retried once.
+            if (error.requestOptions.extra.containsKey('_retry')) {
+              return handler.next(error);
+            }
+
             if (_isRefreshing) {
               final newToken = await _refreshCompleter!.future;
               if (newToken != null) {
                 final opts = error.requestOptions;
                 opts.headers['Authorization'] = 'Bearer $newToken';
-                return handler.resolve(await dio.fetch(opts));
+                opts.extra['_retry'] = true;
+                opts.headers.remove('cookie');
+                try {
+                  return handler.resolve(await dio.fetch(opts));
+                } catch (_) {
+                  return handler.next(error);
+                }
               }
               return handler.next(error);
             }
@@ -68,11 +80,13 @@ class DioClient {
             _isRefreshing = true;
             _refreshCompleter = Completer<String?>();
 
+            String? newToken;
             try {
               final refreshPrefs = await SharedPreferences.getInstance();
               final refreshToken = refreshPrefs.getString('refreshToken');
               if (refreshToken == null) {
                 _refreshCompleter!.complete(null);
+                _refreshCompleter = null;
                 _isRefreshing = false;
                 return handler.next(error);
               }
@@ -82,7 +96,6 @@ class DioClient {
                 data: {'refreshToken': refreshToken},
               );
 
-              String? newToken;
               String? newRefreshToken;
 
               final body = refreshResponse.data;
@@ -113,27 +126,42 @@ class DioClient {
               if (newToken != null) {
                 setAuthToken(newToken);
                 await refreshPrefs.setString('accessToken', newToken);
+                // Replace the stale accessToken cookie in the jar so that
+                // CookieManager injects the new value on the retry request —
+                // not the original expired one that the jar still holds.
+                final freshCookie = Cookie('accessToken', newToken)..path = '/';
+                await cookieJar.saveFromResponse(
+                  Uri.parse('https://biobeats.duckdns.org'),
+                  [freshCookie],
+                );
                 debugPrint('[DioClient] Token refreshed successfully');
               }
               if (newRefreshToken != null) {
                 await refreshPrefs.setString('refreshToken', newRefreshToken);
               }
-
-              _refreshCompleter!.complete(newToken);
-              _isRefreshing = false;
-
-              final opts = error.requestOptions;
-              opts.headers['Authorization'] = dio.options.headers['Authorization'];
-              return handler.resolve(await dio.fetch(opts));
             } catch (e) {
               debugPrint('[DioClient] Token refresh failed: $e');
               if (e is DioException) {
                 debugPrint('[DioClient] Refresh response data: ${e.response?.data}');
               }
-              _refreshCompleter!.complete(null);
+            } finally {
+              _refreshCompleter!.complete(newToken);
+              _refreshCompleter = null;
               _isRefreshing = false;
-              return handler.next(error);
             }
+
+            if (newToken != null) {
+              final opts = error.requestOptions;
+              opts.headers['Authorization'] = dio.options.headers['Authorization'];
+              opts.extra['_retry'] = true;
+              opts.headers.remove('cookie');
+              try {
+                return handler.resolve(await dio.fetch(opts));
+              } catch (_) {
+                return handler.next(error);
+              }
+            }
+            return handler.next(error);
           }
           return handler.next(error);
         },

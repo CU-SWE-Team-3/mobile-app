@@ -151,9 +151,11 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     );
 
     // Resolve artwork image: playlist artwork → first track artwork → user avatar
-    final hasArtwork = p.artworkUrl != null && p.artworkUrl!.isNotEmpty;
-    final hasFirstTrack =
-        _firstTrackArtworkUrl != null && _firstTrackArtworkUrl!.isNotEmpty;
+    // Only treat a URL as valid if it's a real HTTPS URL (not a default/relative path).
+    bool _isValidArtwork(String? url) =>
+        url != null && url.startsWith('https://') && !url.contains('default');
+    final hasArtwork = _isValidArtwork(p.artworkUrl);
+    final hasFirstTrack = _isValidArtwork(_firstTrackArtworkUrl);
     final hasValidAvatar = resolvedAvatarUrl.isNotEmpty &&
         !resolvedAvatarUrl.contains('default-avatar');
 
@@ -189,8 +191,10 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
       artworkWidget = const _ArtworkPlaceholder();
     }
 
-    final canPlay = !_isLoadingTracks &&
-        _tracks.any((t) => t.hlsUrl != null && t.hlsUrl!.isNotEmpty);
+    // A track is playable as long as it has a valid ID — the player resolves the
+    // actual stream URL via getStreamUrl(id), so a missing pre-known hlsUrl
+    // does NOT mean the track cannot be played.
+    final canPlay = !_isLoadingTracks && _tracks.any((t) => t.id.isNotEmpty);
 
     return Scaffold(
       backgroundColor: _bg,
@@ -382,7 +386,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                 playCount: _formatPlayCount(t.playCount),
                 duration: _formatDuration(t.durationSeconds),
                 artworkUrl: t.artworkUrl,
-                onTap: t.hlsUrl != null ? () => _playFrom(i) : null,
+                onTap: t.id.isNotEmpty ? () => _playFrom(i) : null,
               );
             }),
         ],
@@ -393,7 +397,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
   void _shufflePlay() {
     final playableIndices = [
       for (var i = 0; i < _tracks.length; i++)
-        if (_tracks[i].hlsUrl != null && _tracks[i].hlsUrl!.isNotEmpty) i,
+        if (_tracks[i].id.isNotEmpty) i,
     ];
     if (playableIndices.isEmpty) return;
     final randomIdx = playableIndices[Random().nextInt(playableIndices.length)];
@@ -402,13 +406,15 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
 
   void _playFrom(int tappedIndex) {
     final tappedId = _tracks[tappedIndex].id;
+    // Include all tracks with a valid ID. audioUrl may be empty — the player
+    // resolves the actual HLS URL via getStreamUrl(id) before playback starts.
     final queue = _tracks
-        .where((t) => t.hlsUrl != null && t.hlsUrl!.isNotEmpty)
+        .where((t) => t.id.isNotEmpty)
         .map((t) => PlayerTrack(
               id: t.id,
               title: t.title,
               artist: t.artistName,
-              audioUrl: t.hlsUrl!,
+              audioUrl: t.hlsUrl ?? '',
               coverUrl: t.artworkUrl,
               duration: t.durationSeconds != null
                   ? Duration(seconds: t.durationSeconds!)
@@ -419,6 +425,15 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     final queueIndex =
         queue.indexWhere((t) => t.id == tappedId).clamp(0, queue.length - 1);
     ref.read(playerProvider.notifier).playQueue(queue, startIndex: queueIndex);
+    // Tell the heartbeat this is a playlist context so PUT /player/state sends
+    // queueContext: "playlist" and contextId: <playlist._id>.
+    final playlistId =
+        widget.playlistId ?? widget.playlist?.id ?? _fetchedPlaylist?.id;
+    if (playlistId != null && playlistId.isNotEmpty) {
+      ref
+          .read(playerProvider.notifier)
+          .setQueueContext('playlist', contextId: playlistId);
+    }
   }
 
   Widget _buildOwnerAvatar(String url) {
@@ -548,9 +563,17 @@ class _PlaylistOptionsSheet extends ConsumerWidget {
               label: 'Delete',
               onTap: () {
                 final nav = Navigator.of(context);
-                nav.pop();
-                ref.read(playlistsProvider.notifier).remove(playlist.id);
-                nav.maybePop();
+                final messenger = ScaffoldMessenger.of(context);
+                nav.pop(); // close the sheet; user returns to details page
+                ref.read(playlistsProvider.notifier).remove(playlist.id).then((_) {
+                  nav.maybePop(); // go back only after confirmed 204
+                }).catchError((_) {
+                  messenger.showSnackBar(const SnackBar(
+                    content: Text('Could not delete playlist. Please try again.'),
+                    backgroundColor: Color(0xFF3A1A1A),
+                    behavior: SnackBarBehavior.floating,
+                  ));
+                });
               },
             ),
             _optionRow(
