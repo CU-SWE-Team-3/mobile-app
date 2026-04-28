@@ -5,24 +5,6 @@ class HiphopGenrePage extends ConsumerWidget {
   const HiphopGenrePage({super.key});
 
   @override
-<<<<<<< HEAD
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF111111),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF111111),
-        elevation: 0,
-        title: const Text(
-          'Hip Hop',
-          style: TextStyle(color: Colors.white),
-        ),
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: const Center(
-        child: Text(
-          'Hip Hop',
-          style: TextStyle(color: Colors.white54, fontSize: 18),
-=======
   ConsumerState<HiphopGenrePage> createState() => _HiphopGenrePageState();
 }
 
@@ -380,13 +362,10 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
               _buildAlbumsTab(),
             ],
           ),
->>>>>>> 47a16a0 (Buzzing playlist)
         ),
       ),
     );
   }
-<<<<<<< HEAD
-=======
 
   Widget _buildAllTab() {
     final previewTracks = _previewTrendingTracks;
@@ -1177,5 +1156,4 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
           size: size * 0.4,
         ),
       );
->>>>>>> 47a16a0 (Buzzing playlist)
 }
