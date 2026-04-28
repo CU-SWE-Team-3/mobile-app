@@ -12,6 +12,8 @@ import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
+// ─── Page ──────────────────────────────────────────────────────────────────────
+
 final _userLikesProvider =
     FutureProvider.autoDispose<List<TrackSummary>>((ref) async {
   final prefs = await SharedPreferences.getInstance();
@@ -19,8 +21,6 @@ final _userLikesProvider =
   if (userId.isEmpty) return [];
   return sl<EngagementRemoteDataSource>().getUserLikes(userId);
 });
-
-// ─── Page ──────────────────────────────────────────────────────────────────────
 
 class LibraryLikesPage extends ConsumerStatefulWidget {
   const LibraryLikesPage({super.key});
@@ -43,8 +43,13 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
     super.dispose();
   }
 
-  List<TrackSummary> _applyFiltersAndSort(List<TrackSummary> tracks) {
-    var result = tracks.where((t) => !_removedIds.contains(t.id)).toList();
+  List<TrackSummary> _applyFiltersAndSort(
+    List<TrackSummary> tracks,
+    Set<String> hiddenIds,
+  ) {
+    var result = tracks
+        .where((t) => !_removedIds.contains(t.id) && !hiddenIds.contains(t.id))
+        .toList();
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       result = result
@@ -85,6 +90,14 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
           ))
       .toList();
 
+  bool _sameQueue(List<PlayerTrack> a, List<PlayerTrack> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) return false;
+    }
+    return true;
+  }
+
   void _showSortSheet() {
     showModalBottomSheet(
       context: context,
@@ -104,7 +117,8 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(_userLikesProvider);
+    final playerState = ref.watch(playerProvider);
+    final async = ref.watch(mergedUserLikesProvider);
 
     return Scaffold(
       backgroundColor: _bg,
@@ -173,7 +187,8 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                       const SizedBox(height: 12),
                       TextButton(
                         key: const ValueKey('library_likes_retry_button'),
-                        onPressed: () => ref.invalidate(_userLikesProvider),
+                        onPressed: () =>
+                            ref.invalidate(backendUserLikesProvider),
                         child: const Text('Retry',
                             style: TextStyle(color: Color(0xFFFF5500))),
                       ),
@@ -181,10 +196,20 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                   ),
                 ),
                 data: (allTracks) {
-                  final totalCount = allTracks
+                  final tracks = _applyFiltersAndSort(allTracks, const <String>{});
+                  final playableTracks =
+                      tracks.where((t) => t.audioUrl != null).toList();
+                  final playableQueue = _toPlayerTracks(playableTracks);
+                  final currentTrackId = playerState.currentTrack?.id;
+                  final queueMatchesPage =
+                      _sameQueue(playerState.queue, playableQueue);
+                  final isFromThisPage = currentTrackId != null &&
+                      queueMatchesPage &&
+                      playableTracks.any((track) => track.id == currentTrackId);
+                  final showPause = isFromThisPage && playerState.isPlaying;
+                  final visibleTotalCount = allTracks
                       .where((t) => !_removedIds.contains(t.id))
                       .length;
-                  final tracks = _applyFiltersAndSort(allTracks);
 
                   return Column(
                     children: [
@@ -206,7 +231,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                       color: Colors.white, fontSize: 14),
                                   decoration: InputDecoration(
                                     hintText:
-                                        'Search $totalCount track${totalCount == 1 ? '' : 's'}',
+                                        'Search $visibleTotalCount track${visibleTotalCount == 1 ? '' : 's'}',
                                     hintStyle: TextStyle(
                                       color:
                                           Colors.white.withValues(alpha: 0.4),
@@ -299,9 +324,16 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                             // Play all
                             GestureDetector(
                               onTap: () {
-                                final pt = _toPlayerTracks(tracks);
-                                if (pt.isEmpty) return;
-                                ref.read(playerProvider.notifier).playQueue(pt);
+                                if (isFromThisPage) {
+                                  ref
+                                      .read(playerProvider.notifier)
+                                      .togglePlayPause();
+                                  return;
+                                }
+                                if (playableQueue.isEmpty) return;
+                                ref
+                                    .read(playerProvider.notifier)
+                                    .playQueue(playableQueue);
                               },
                               child: Container(
                                 width: 52,
@@ -310,10 +342,12 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                   color: Colors.white,
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(
-                                  Icons.play_arrow_rounded,
+                                child: Icon(
+                                  showPause
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
                                   color: Colors.black,
-                                  size: 32,
+                                  size: showPause ? 28 : 32,
                                 ),
                               ),
                             ),
@@ -634,10 +668,14 @@ class _LikeTile extends ConsumerWidget {
                   color: Colors.white70),
               title: const Text('Remove from likes',
                   style: TextStyle(color: Colors.white)),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(ctx);
-                ref.read(engagementProvider(params).notifier).toggleLike();
-                onRemove();
+                final removed = await ref
+                    .read(engagementProvider(params).notifier)
+                    .removeLike();
+                if (removed && context.mounted) {
+                  onRemove();
+                }
               },
             ),
             const SizedBox(height: 8),

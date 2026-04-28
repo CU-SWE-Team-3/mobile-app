@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/network/user_session.dart';
 import '../../domain/entities/player_track.dart';
 import '../repositories/history_repository.dart';
 
@@ -64,11 +65,31 @@ class PlayerApiService {
       final artistRaw = rawTrack['artist'] ?? rawTrack['user'];
       final artist = artistRaw is Map<String, dynamic> ? artistRaw : const {};
       final durationRaw = rawTrack['duration'];
+      final currentUserId = await UserSession.getUserId();
+      final currentDisplayName = await UserSession.getDisplayName();
+      final artistId =
+          artist['_id'] as String? ?? artist['id'] as String?;
+      final backendArtistName =
+          (artist['displayName'] ??
+                  artist['username'] ??
+                  artist['name'] ??
+                  rawTrack['artistName'] ??
+                  '')
+              .toString();
+      final currentArtistName = (currentDisplayName?.isNotEmpty ?? false)
+          ? currentDisplayName!
+          : ((artist['username'] ?? '').toString());
+      final artistName = currentUserId != null &&
+              currentUserId.isNotEmpty &&
+              artistId == currentUserId &&
+              currentArtistName.isNotEmpty
+          ? currentArtistName
+          : backendArtistName;
 
       return PlayerTrack(
         id: (rawTrack['_id'] ?? rawTrack['id'] ?? trackRef).toString(),
         title: (rawTrack['title'] ?? '').toString(),
-        artist: (artist['displayName'] ?? artist['username'] ?? '').toString(),
+        artist: artistName,
         audioUrl: (rawTrack['hlsUrl'] ?? rawTrack['audioUrl'] ?? '').toString(),
         coverUrl: (rawTrack['artworkUrl'] ?? rawTrack['coverUrl']) as String?,
         duration: durationRaw is num
@@ -77,7 +98,7 @@ class PlayerApiService {
         waveform: (rawTrack['waveform'] as List<dynamic>?)
             ?.map((e) => (e as num).toInt())
             .toList(),
-        artistId: artist['_id'] as String? ?? artist['id'] as String?,
+        artistId: artistId,
         artistPermalink: artist['permalink'] as String?,
         trackPermalink: rawTrack['permalink'] as String?,
       );
