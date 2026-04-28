@@ -362,9 +362,9 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     return chunks;
   }
 
-  void _playRecentTracks(List<_Track> tracks) {
-    if (tracks.isEmpty) return;
-    _playFrom(tracks, 0);
+  void _playBuzzingPlaylist() {
+    if (_tracks.isEmpty) return;
+    _playFrom(_tracks, 0);
   }
 
   @override
@@ -873,14 +873,13 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
   }
 
   Widget _buildRecentTracksCard(List<_Track> recentTracks) {
-    final playableTracks =
-        recentTracks.where((track) => track.hlsUrl.isNotEmpty).toList();
     final previewTracks = recentTracks.take(2).toList();
     final heroTrack = previewTracks.isNotEmpty ? previewTracks.first : recentTracks.first;
     const heroArtworkSize = 152.0;
     final hasArtwork = heroTrack.artworkUrl != null &&
         heroTrack.artworkUrl!.isNotEmpty &&
         !heroTrack.artworkUrl!.contains('default-artwork');
+    final hasPlayablePlaylistTrack = _tracks.any((track) => track.hlsUrl.isNotEmpty);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -981,9 +980,9 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                               ),
                               const SizedBox(width: 12),
                               GestureDetector(
-                                onTap: playableTracks.isEmpty
-                                    ? null
-                                    : () => _playRecentTracks(playableTracks),
+                                onTap: hasPlayablePlaylistTrack
+                                    ? _playBuzzingPlaylist
+                                    : null,
                                 child: Container(
                                   width: 50,
                                   height: 50,
