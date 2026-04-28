@@ -99,6 +99,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   /// Fires PUT /player/state every 5 seconds while a track is playing.
   Timer? _heartbeatTimer;
+  Timer? _seekSyncTimer;
 
   PlayerNotifier(this._api, this._audioHandler, this._engagementApi)
       : super(const PlayerState()) {
@@ -406,9 +407,55 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     state = state.copyWith(isPlaying: false, position: Duration.zero);
   }
 
+  Future<void> _hydrateCurrentTrack(
+    String trackId, {
+    String? trackPermalink,
+  }) async {
+    final details = await _api.getTrackDetails(
+      trackId,
+      trackPermalink: trackPermalink,
+    );
+    if (details == null) return;
+
+    final current = state.currentTrack;
+    if (current == null || current.id != trackId) return;
+
+    state = state.copyWith(
+      currentTrack: current.copyWith(
+        title: details.title.isNotEmpty ? details.title : current.title,
+        artist: details.artist.isNotEmpty ? details.artist : current.artist,
+        audioUrl: details.audioUrl.isNotEmpty ? details.audioUrl : current.audioUrl,
+        coverUrl: (current.coverUrl == null || current.coverUrl!.isEmpty)
+            ? details.coverUrl
+            : current.coverUrl,
+        duration: current.duration ?? details.duration,
+        waveform: details.waveform ?? current.waveform,
+        artistId: current.artistId ?? details.artistId,
+        artistPermalink: current.artistPermalink ?? details.artistPermalink,
+        trackPermalink: current.trackPermalink ?? details.trackPermalink,
+      ),
+    );
+  }
+
+  void _scheduleSeekSync(Duration position) {
+    _seekSyncTimer?.cancel();
+    final track = state.currentTrack;
+    if (track == null) return;
+
+    _seekSyncTimer = Timer(const Duration(milliseconds: 300), () {
+      _api.syncPlayerState(
+        trackId: track.id,
+        position: position.inSeconds.toDouble(),
+        isPlaying: state.isPlaying,
+        volume: state.volume,
+      );
+    });
+  }
+
   @override
   void dispose() {
     _heartbeatTimer?.cancel();
+    _seekSyncTimer?.cancel();
     _positionSub.cancel();
     _durationSub.cancel();
     _playbackStateSub.cancel();

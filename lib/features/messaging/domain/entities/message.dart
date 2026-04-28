@@ -27,15 +27,21 @@ class Message {
     required this.createdAt,
   });
 
-  Message copyWith({String? status}) => Message(
+  Message copyWith({
+    String? status,
+    String? content,
+    bool? isEdited,
+    bool? isDeleted,
+  }) =>
+      Message(
         id: id,
         conversationId: conversationId,
         senderId: senderId,
-        content: content,
+        content: content ?? this.content,
         attachment: attachment,
         status: status ?? this.status,
-        isEdited: isEdited,
-        isDeleted: isDeleted,
+        isEdited: isEdited ?? this.isEdited,
+        isDeleted: isDeleted ?? this.isDeleted,
         createdAt: createdAt,
       );
 

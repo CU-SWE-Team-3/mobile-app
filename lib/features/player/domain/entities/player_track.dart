@@ -9,6 +9,7 @@ class PlayerTrack {
   final List<int>? waveform;
   final String? artistId;
   final String? artistPermalink;
+  final String? trackPermalink;
 
   const PlayerTrack({
     required this.id,
@@ -20,7 +21,34 @@ class PlayerTrack {
     this.waveform,
     this.artistId,
     this.artistPermalink,
+    this.trackPermalink,
   });
+
+  PlayerTrack copyWith({
+    String? id,
+    String? title,
+    String? artist,
+    String? audioUrl,
+    String? coverUrl,
+    Duration? duration,
+    List<int>? waveform,
+    String? artistId,
+    String? artistPermalink,
+    String? trackPermalink,
+  }) {
+    return PlayerTrack(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      artist: artist ?? this.artist,
+      audioUrl: audioUrl ?? this.audioUrl,
+      coverUrl: coverUrl ?? this.coverUrl,
+      duration: duration ?? this.duration,
+      waveform: waveform ?? this.waveform,
+      artistId: artistId ?? this.artistId,
+      artistPermalink: artistPermalink ?? this.artistPermalink,
+      trackPermalink: trackPermalink ?? this.trackPermalink,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>

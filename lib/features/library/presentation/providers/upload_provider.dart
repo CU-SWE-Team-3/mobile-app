@@ -190,14 +190,30 @@ class UploadNotifier extends StateNotifier<UploadState> {
         durationSeconds = (audioBytes.length / 16000).round().clamp(1, 7200);
       }
 
+      final normalizedGenre = _normalizeGenre(state.track.genre);
+      final uploadInitBody = <String, dynamic>{
+        'title': state.track.title.isNotEmpty ? state.track.title : 'Untitled',
+        'format': mimeType,
+        'size': audioBytes.length,
+        'duration': durationSeconds,
+        'isPublic': state.track.isPublic,
+      };
+      if ((state.track.description ?? '').trim().isNotEmpty) {
+        uploadInitBody['description'] = state.track.description!.trim();
+      }
+      if (normalizedGenre != null) {
+        uploadInitBody['genre'] = normalizedGenre;
+      }
+      if (state.track.tags.isNotEmpty) {
+        uploadInitBody['tags'] = state.track.tags;
+      }
+      if (state.track.releaseDate != null) {
+        uploadInitBody['releaseDate'] = state.track.releaseDate!.toIso8601String();
+      }
+
       final uploadInitResponse = await dioClient.dio.post(
         '/tracks/upload',
-        data: {
-          'title': state.track.title.isNotEmpty ? state.track.title : 'Untitled',
-          'format': mimeType,
-          'size': audioBytes.length,
-          'duration': durationSeconds,
-        },
+        data: uploadInitBody,
       );
 
       final trackId = uploadInitResponse.data['data']['trackId'] as String;
@@ -252,11 +268,14 @@ class UploadNotifier extends StateNotifier<UploadState> {
       state = state.copyWith(uploadProgress: 0.85);
       final metadataBody = <String, dynamic>{};
       if (state.track.title.isNotEmpty) metadataBody['title'] = state.track.title;
-      if (state.track.description != null) metadataBody['description'] = state.track.description;
-      if (state.track.genre != null) metadataBody['genre'] = state.track.genre;
-      if (state.track.tags != null && state.track.tags!.isNotEmpty) {
+      if ((state.track.description ?? '').trim().isNotEmpty) {
+        metadataBody['description'] = state.track.description!.trim();
+      }
+      if (normalizedGenre != null) metadataBody['genre'] = normalizedGenre;
+      if (state.track.tags.isNotEmpty) {
         metadataBody['tags'] = state.track.tags;
       }
+      metadataBody['isPublic'] = state.track.isPublic;
       if (state.track.releaseDate != null) {
         metadataBody['releaseDate'] = state.track.releaseDate!.toIso8601String();
       }
@@ -337,6 +356,24 @@ class UploadNotifier extends StateNotifier<UploadState> {
         return 'audio/ogg';
       default:
         return 'audio/mpeg';
+    }
+  }
+
+  String? _normalizeGenre(String? genre) {
+    if (genre == null) return null;
+    switch (genre.trim()) {
+      case 'All Music Genres':
+        return 'All music genres';
+      case 'Deep House':
+        return 'Deep house';
+      case 'Hip-hop & Rap':
+        return 'Hiphop & rap';
+      case 'Jazz & Blues':
+        return 'Jazz & blues';
+      case 'R&B & Soul':
+        return 'R&B & soul';
+      default:
+        return genre.trim();
     }
   }
 

@@ -89,4 +89,17 @@ class MessagingRemoteDataSource {
   Future<void> markAsRead(String conversationId) async {
     await _dio.patch('/messages/conversations/$conversationId/read');
   }
+
+  Future<Message> editMessage(String messageId, String content) async {
+    final response = await _dio.patch(
+      '/messages/$messageId',
+      data: {'content': content},
+    );
+    final data = response.data['data'] as Map<String, dynamic>;
+    return Message.fromJson(data['message'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteMessageForEveryone(String messageId) async {
+    await _dio.delete('/messages/$messageId/everyone');
+  }
 }

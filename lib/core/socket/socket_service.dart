@@ -455,5 +455,9 @@ class SocketService {
     _newMessageController.close();
     _deliveryReceiptController.close();
     _readReceiptController.close();
+    _typingController.close();
+    _stoppedTypingController.close();
+    _messageEditedController.close();
+    _messageDeletedEveryoneController.close();
   }
 }
