@@ -360,6 +360,10 @@ class SocketService {
   void _onMessageEdited(dynamic data) {
     try {
       final message = Map<String, dynamic>.from(data as Map);
+      final conversationId = _conversationIdFrom(message);
+      if (conversationId.isNotEmpty) {
+        message['conversationId'] = conversationId;
+      }
       _messageEditedController.add(message);
       _newMessageController.add(message); // keep existing listeners working
     } catch (e) {
@@ -370,6 +374,10 @@ class SocketService {
   void _onMessageDeletedEveryone(dynamic data) {
     try {
       final message = Map<String, dynamic>.from(data as Map);
+      final conversationId = _conversationIdFrom(message);
+      if (conversationId.isNotEmpty) {
+        message['conversationId'] = conversationId;
+      }
       _messageDeletedEveryoneController.add(message);
       _newMessageController.add(message); // keep existing listeners working
     } catch (e) {

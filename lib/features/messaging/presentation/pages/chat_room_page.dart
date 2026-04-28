@@ -83,7 +83,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   // ── Existing receipt handlers ──────────────────────────────────────────────
 
   void _onDeliveryReceipt(Map<String, dynamic> data) {
-    final convId = data['conversationId'] as String?;
+    final convId = _conversationIdFrom(data);
     if (convId != widget.conversationId) return;
     if (_localMessages == null) return;
     setState(() {
@@ -96,7 +96,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   }
 
   void _onReadReceipt(Map<String, dynamic> data) {
-    final convId = data['conversationId'] as String?;
+    final convId = _conversationIdFrom(data);
     if (convId != widget.conversationId) return;
     if (_localMessages == null) return;
     setState(() {
@@ -182,7 +182,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   // ── Typing indicator (incoming) ────────────────────────────────────────────
 
   void _onUserTyping(Map<String, dynamic> data) {
-    final convId = data['conversationId'] as String?;
+    final convId = _conversationIdFrom(data);
     if (convId != widget.conversationId) return;
     _typingHideTimer?.cancel();
     setState(() => _otherUserIsTyping = true);
@@ -193,7 +193,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   }
 
   void _onUserStoppedTyping(Map<String, dynamic> data) {
-    final convId = data['conversationId'] as String?;
+    final convId = _conversationIdFrom(data);
     if (convId != widget.conversationId) return;
     _typingHideTimer?.cancel();
     if (mounted) setState(() => _otherUserIsTyping = false);
@@ -202,7 +202,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   // ── Edit / delete socket events ────────────────────────────────────────────
 
   void _onMessageEdited(Map<String, dynamic> data) {
-    final convId = data['conversationId'] as String?;
+    final convId = _conversationIdFrom(data);
     if (convId != widget.conversationId) return;
     if (_localMessages == null) return;
     final messageId = data['_id'] as String? ?? data['id'] as String?;
@@ -218,7 +218,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   }
 
   void _onMessageDeletedEveryone(Map<String, dynamic> data) {
-    final convId = data['conversationId'] as String?;
+    final convId = _conversationIdFrom(data);
     if (convId != widget.conversationId) return;
     if (_localMessages == null) return;
     final messageId = data['_id'] as String? ?? data['id'] as String?;

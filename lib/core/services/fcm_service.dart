@@ -236,28 +236,54 @@ class FcmService {
       'conversationId',
       'targetConversationId',
       'chatId',
+      'conversation',
     ]) {
-      final value = data[key]?.toString() ?? '';
+      final value = _idValue(data[key]);
       if (value.isNotEmpty) return value;
     }
 
     final target = data['target'];
     if (target is Map) {
-      final value = target['conversationId']?.toString() ?? '';
+      final value = _idValue(
+        target['conversationId'] ?? target['conversation'] ?? target['chatId'],
+      );
       if (value.isNotEmpty) return value;
+      final idValue = _idValue(target);
+      if (idValue.isNotEmpty) return idValue;
     }
+
+    final targetId = _idValue(data['targetId']);
+    if (targetId.isNotEmpty) return targetId;
 
     final targetString = target?.toString() ?? data['targetJson']?.toString();
     if (targetString != null && targetString.isNotEmpty) {
       try {
         final parsed = jsonDecode(targetString);
         if (parsed is Map) {
-          final value = parsed['conversationId']?.toString() ?? '';
+          final parsedMap = Map<String, dynamic>.from(parsed);
+          final value = _idValue(
+            parsedMap['conversationId'] ??
+                parsedMap['conversation'] ??
+                parsedMap['chatId'],
+          );
           if (value.isNotEmpty) return value;
+          final idValue = _idValue(parsedMap);
+          if (idValue.isNotEmpty) return idValue;
         }
       } catch (_) {}
     }
 
+    return '';
+  }
+
+  static String _idValue(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      final id = (map['_id'] ?? map['id'] ?? '').toString();
+      if (id.isNotEmpty) return id;
+    }
     return '';
   }
 

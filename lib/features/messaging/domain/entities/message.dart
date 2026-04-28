@@ -57,9 +57,9 @@ class Message {
 
     return Message(
       id: json['_id'] as String? ?? '',
-      conversationId: json['conversationId'] as String? ?? '',
+      conversationId: _idValue(json['conversationId'] ?? json['conversation']),
       senderId:
-          sender?['_id']?.toString() ?? json['senderId']?.toString() ?? '',
+          sender?['_id']?.toString() ?? _idValue(json['senderId']),
       senderDisplayName: sender?['displayName']?.toString(),
       senderAvatarUrl: sender?['avatarUrl']?.toString(),
       content: json['content'] as String? ?? '',
@@ -70,5 +70,15 @@ class Message {
       isDeleted: json['isDeleted'] as bool? ?? false,
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
+  }
+
+  static String _idValue(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is Map) {
+      final map = Map<String, dynamic>.from(value);
+      return (map['_id'] ?? map['id'] ?? '').toString();
+    }
+    return value.toString();
   }
 }
