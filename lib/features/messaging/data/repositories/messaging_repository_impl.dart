@@ -1,5 +1,3 @@
-import '../../domain/entities/attachment.dart';
-import '../../domain/entities/attachment_picker_item.dart';
 import '../../domain/entities/conversation.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/participant.dart';
@@ -30,25 +28,12 @@ class MessagingRepositoryImpl implements MessagingRepository {
   Future<Message> sendMessage({
     required String receiverId,
     required String content,
-    Attachment? attachment,
   }) =>
-      _dataSource.sendMessage(
-        receiverId: receiverId,
-        content: content,
-        attachment: attachment,
-      );
+      _dataSource.sendMessage(receiverId: receiverId, content: content);
 
   @override
   Future<List<Participant>> searchUsers(String query) =>
       _dataSource.searchUsers(query);
-
-  @override
-  Future<List<AttachmentPickerItem>> searchTracks(String query) =>
-      _dataSource.searchTracks(query);
-
-  @override
-  Future<List<AttachmentPickerItem>> searchPlaylists(String query) =>
-      _dataSource.searchPlaylists(query);
 
   @override
   Future<List<Participant>> getFollowing(String userId) =>
