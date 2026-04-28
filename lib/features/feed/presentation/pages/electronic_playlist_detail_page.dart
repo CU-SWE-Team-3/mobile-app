@@ -148,34 +148,34 @@ class _DetailTrack {
       );
 }
 
-class HiphopPlaylistDetailPage extends ConsumerStatefulWidget {
+class ElectronicPlaylistDetailPage extends ConsumerStatefulWidget {
   final String playlistId;
   final bool useBuzzingPreset;
 
-  const HiphopPlaylistDetailPage({
+  const ElectronicPlaylistDetailPage({
     super.key,
     required this.playlistId,
     this.useBuzzingPreset = false,
   });
 
   @override
-  ConsumerState<HiphopPlaylistDetailPage> createState() =>
-      _HiphopPlaylistDetailPageState();
+  ConsumerState<ElectronicPlaylistDetailPage> createState() =>
+      _ElectronicPlaylistDetailPageState();
 }
 
-class _HiphopPlaylistDetailPageState
-    extends ConsumerState<HiphopPlaylistDetailPage> {
+class _ElectronicPlaylistDetailPageState
+    extends ConsumerState<ElectronicPlaylistDetailPage> {
   _PlaylistMeta? _meta;
   List<_DetailTrack> _tracks = [];
   bool _isLoading = true;
   bool _hasError = false;
 
   bool get _isBuzzingPreset => widget.useBuzzingPreset;
-  static const _hiphopQuery = 'Hiphop & rap';
-  static const _buzzingLikeKey = 'buzzing_hiphop_rap_liked';
+  static const _electronicQuery = 'Electronic';
+  static const _buzzingLikeKey = 'buzzing_electronic_liked';
 
   static const _buzzingDescription =
-      'Audio omakase based on what real Hip Hop fans are connecting with. '
+      'Audio omakase based on what real Electronic fans are connecting with. '
       'A spot on Buzzing is determined by what listeners are replaying, '
       'sharing, and keeping in rotation right now.';
 
@@ -192,7 +192,7 @@ class _HiphopPlaylistDetailPageState
   }) {
     return _PlaylistMeta(
       id: widget.playlistId,
-      title: 'Buzzing Hip Hop & Rap',
+      title: 'Buzzing Electronic',
       ownerName: 'New!',
       artworkUrl: _resolveBuzzingArtworkUrl(tracks),
       description: _buzzingDescription,
@@ -220,7 +220,7 @@ class _HiphopPlaylistDetailPageState
 
   Future<void> _fetchBuzzingGenreTracks() async {
     final responses = await Future.wait([
-      dioClient.dio.get('/discovery/genre/${Uri.encodeComponent(_hiphopQuery)}'),
+      dioClient.dio.get('/discovery/genre/${Uri.encodeComponent(_electronicQuery)}'),
       if (widget.playlistId.isNotEmpty)
         dioClient.dio.get('/playlists/${widget.playlistId}'),
     ]);
@@ -427,7 +427,7 @@ class _HiphopPlaylistDetailPageState
               ),
               const SizedBox(height: 4),
               const Text(
-                'Buzzing Hip Hop & Rap',
+                'Buzzing Electronic',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -973,7 +973,7 @@ class _HiphopPlaylistDetailPageState
               right: 0,
               bottom: 7,
               child: Text(
-                'Hip Hop & Rap',
+                'Electronic',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -1026,3 +1026,4 @@ class _HiphopPlaylistDetailPageState
         child: const Icon(Icons.music_note, color: Colors.white38, size: 24),
       );
 }
+

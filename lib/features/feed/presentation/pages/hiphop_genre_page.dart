@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/utils/profile_navigation.dart';
 import '../../../player/presentation/providers/player_provider.dart';
+import '../../../player/presentation/providers/follow_provider.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 class HiphopGenrePage extends ConsumerStatefulWidget {
   const HiphopGenrePage({super.key});
@@ -262,6 +263,12 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     return byKey.values.take(8).toList();
   }
 
+  List<_Track> get _discoverMoreTracks {
+    final recentTracks = _recentGenreTracks;
+    if (recentTracks.length <= 2) return recentTracks;
+    return recentTracks.skip(2).take(6).toList();
+  }
+
   List<List<_Track>> _chunkTracks(List<_Track> tracks, int size) {
     final chunks = <List<_Track>>[];
     for (int i = 0; i < tracks.length; i += size) {
@@ -274,6 +281,19 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
   void _playBuzzingPlaylist() {
     if (_tracks.isEmpty) return;
     _playFrom(_tracks, 0);
+  }
+
+  List<PlayerTrack> _buzzingQueue() => _tracks
+      .where((track) => track.hlsUrl.isNotEmpty)
+      .map((track) => track.toPlayerTrack())
+      .toList();
+
+  bool _sameQueue(List<PlayerTrack> a, List<PlayerTrack> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) return false;
+    }
+    return true;
   }
 
   @override
@@ -492,7 +512,11 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
             const SizedBox(height: 20),
             _buildHomePlaylistsSection(),
             const SizedBox(height: 20),
+            _buildHomeAlbumsSection(),
+            const SizedBox(height: 20),
             _buildProfilesSection(),
+            const SizedBox(height: 20),
+            _buildDiscoverMoreTracksSection(),
           ],
           if (previewTracks.isEmpty && recentTracks.isEmpty && _playlists.isEmpty)
             const Padding(
@@ -788,13 +812,20 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
   }
 
   Widget _buildRecentTracksCard(List<_Track> recentTracks) {
+    final playerState = ref.watch(playerProvider);
     final previewTracks = recentTracks.take(2).toList();
     final heroTrack = previewTracks.isNotEmpty ? previewTracks.first : recentTracks.first;
     const heroArtworkSize = 152.0;
     final hasArtwork = heroTrack.artworkUrl != null &&
         heroTrack.artworkUrl!.isNotEmpty &&
         !heroTrack.artworkUrl!.contains('default-artwork');
-    final hasPlayablePlaylistTrack = _tracks.any((track) => track.hlsUrl.isNotEmpty);
+    final buzzingQueue = _buzzingQueue();
+    final hasPlayablePlaylistTrack = buzzingQueue.isNotEmpty;
+    final currentTrackId = playerState.currentTrack?.id;
+    final isBuzzingActive = currentTrackId != null &&
+        _sameQueue(playerState.queue, buzzingQueue) &&
+        buzzingQueue.any((track) => track.id == currentTrackId);
+    final showPause = isBuzzingActive && playerState.isPlaying;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -898,7 +929,15 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onTap: hasPlayablePlaylistTrack
-                                    ? _playBuzzingPlaylist
+                                    ? () {
+                                        if (isBuzzingActive) {
+                                          ref
+                                              .read(playerProvider.notifier)
+                                              .togglePlayPause();
+                                        } else {
+                                          _playBuzzingPlaylist();
+                                        }
+                                      }
                                     : null,
                                 child: Container(
                                   width: 50,
@@ -907,10 +946,12 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                                     color: Colors.white,
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                    Icons.play_arrow_rounded,
+                                  child: Icon(
+                                    showPause
+                                        ? Icons.pause_rounded
+                                        : Icons.play_arrow_rounded,
                                     color: Colors.black,
-                                    size: 30,
+                                    size: showPause ? 26 : 30,
                                   ),
                                 ),
                               ),
@@ -1192,6 +1233,25 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     );
   }
 
+  Widget _buildAlbumsGrid() {
+    final gridAlbums = _albumPlaylists.take(4).toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 0.78,
+        ),
+        itemCount: gridAlbums.length,
+        itemBuilder: (_, i) => _buildPlaylistGridCard(gridAlbums[i]),
+      ),
+    );
+  }
+
   Widget _buildHomePlaylistsSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1228,6 +1288,45 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     );
   }
 
+  Widget _buildHomeAlbumsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(
+          title: 'Albums',
+          actionLabel: 'See all',
+          onAction: () => _tabController.animateTo(3),
+        ),
+        const SizedBox(height: 12),
+        if (_isAlbumsLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+            ),
+          )
+        else if (_albumsError)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: _buildInlineRetryCard(
+              message: 'Failed to load Hip Hop & Rap albums.',
+              onRetry: _fetchAlbums,
+            ),
+          )
+        else if (_albumPlaylists.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'No Hip Hop & Rap albums available right now.',
+              style: TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          )
+        else
+          _buildAlbumsGrid(),
+      ],
+    );
+  }
+
   Widget _buildProfilesSection() {
     final artists = _artistProfiles;
     return Column(
@@ -1260,7 +1359,7 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
           )
         else
           SizedBox(
-            height: 104,
+            height: 176,
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               scrollDirection: Axis.horizontal,
@@ -1273,7 +1372,52 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
     );
   }
 
+  Widget _buildDiscoverMoreTracksSection() {
+    final tracks = _discoverMoreTracks;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(title: 'Discover more tracks'),
+        const SizedBox(height: 12),
+        if (_isLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+            ),
+          )
+        else if (_hasError)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: _buildInlineRetryCard(
+              message: 'Failed to load more Hip Hop & Rap tracks.',
+              onRetry: _fetchGenreTracks,
+            ),
+          )
+        else if (tracks.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              'No more Hip Hop & Rap tracks available right now.',
+              style: TextStyle(color: Colors.white54, fontSize: 14),
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 4),
+            itemCount: tracks.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (_, i) => _buildTrackListTile(tracks, i),
+          ),
+      ],
+    );
+  }
+
   Widget _buildArtistProfileCard(_ArtistProfile artist) {
+    final followState =
+        artist.id.isNotEmpty ? ref.watch(followProvider(artist.id)) : null;
     final hasAvatar = artist.avatarUrl.isNotEmpty &&
         !artist.avatarUrl.contains('default-avatar');
     final initial = artist.name.isNotEmpty ? artist.name[0].toUpperCase() : '?';
@@ -1288,24 +1432,24 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                 displayName: artist.name,
               ),
       child: SizedBox(
-        width: 84,
+        width: 110,
         child: Column(
           children: [
             CircleAvatar(
-              radius: 30,
+              radius: 42,
               backgroundColor: const Color(0xFF262626),
               child: hasAvatar
                   ? ClipOval(
                       child: CachedNetworkImage(
                         imageUrl: artist.avatarUrl,
-                        width: 60,
-                        height: 60,
+                        width: 84,
+                        height: 84,
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => Text(
                           initial,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 22,
+                            fontSize: 28,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -1315,15 +1459,15 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                       initial,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 28,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
             Text(
               artist.name,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: const TextStyle(
@@ -1331,6 +1475,55 @@ class _HiphopGenrePageState extends ConsumerState<HiphopGenrePage>
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 height: 1.2,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 68,
+              height: 22,
+              child: ElevatedButton(
+                onPressed: artist.id.isEmpty ||
+                        followState == null ||
+                        followState.isLoading ||
+                        followState.isChecking
+                    ? null
+                    : () => ref
+                        .read(followProvider(artist.id).notifier)
+                        .toggle(artist.id),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: followState?.isFollowing == true
+                      ? const Color(0xFF2A2A2A)
+                      : Colors.white,
+                  foregroundColor: followState?.isFollowing == true
+                      ? Colors.white
+                      : Colors.black,
+                  padding: EdgeInsets.zero,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                child: followState?.isLoading == true ||
+                        followState?.isChecking == true
+                    ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: followState?.isFollowing == true
+                              ? Colors.white
+                              : Colors.black,
+                        ),
+                      )
+                    : Text(
+                        followState?.isFollowing == true
+                            ? 'Following'
+                            : 'Follow',
+                      ),
               ),
             ),
           ],
@@ -1509,33 +1702,61 @@ class _Track {
   });
 
   factory _Track.fromJson(dynamic json) {
-    final user = json['user'] as Map<String, dynamic>? ?? const {};
+    final track = (json['target'] is Map<String, dynamic>
+            ? json['target'] as Map<String, dynamic>
+            : json['track'] is Map<String, dynamic>
+                ? json['track'] as Map<String, dynamic>
+                : json as Map<String, dynamic>);
+    final user = track['user'] as Map<String, dynamic>? ??
+        track['artist'] as Map<String, dynamic>? ??
+        const {};
+    final media = track['media'] as Map<String, dynamic>?;
+    final transcodings = media?['transcodings'] as List<dynamic>? ?? const [];
+    Map<String, dynamic>? hlsTranscoding;
+    for (final item in transcodings) {
+      if (item is! Map<String, dynamic>) continue;
+      final format = item['format'] as Map<String, dynamic>?;
+      if (format?['protocol'] == 'hls') {
+        hlsTranscoding = item;
+        break;
+      }
+    }
+    final artworkValue =
+        (track['artworkUrl'] ?? track['artwork_url'] ?? '').toString();
+    final trackId =
+        track['_id']?.toString() ?? track['id']?.toString() ?? '';
     return _Track(
-      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-      title: json['title'] ?? '',
+      id: trackId,
+      title: (track['title'] ?? '').toString(),
       artistName:
-          user['displayName'] as String? ?? user['username'] as String? ?? '',
+          (user['displayName'] ?? user['username'] ?? user['name'] ?? '')
+              .toString(),
       artistId: user['_id']?.toString() ?? user['id']?.toString() ?? '',
-      artistPermalink: user['permalink'] as String? ?? '',
-      artistAvatarUrl: user['avatarUrl'] as String? ?? '',
-      artworkUrl: (json['artwork_url'] ?? json['artworkUrl'] ?? '')
+      artistPermalink: (user['permalink'] ?? '').toString(),
+      artistAvatarUrl: (user['avatarUrl'] ?? '').toString(),
+      artworkUrl: artworkValue
           .replaceAll('large', 't500x500'),
-      hlsUrl: json['media']?['transcodings']
-              ?.firstWhere(
-                (t) => t['format']?['protocol'] == 'hls',
-                orElse: () => null,
-                )?['url'] ??
-            json['hlsUrl'] ??
-            '',
-      permalink: json['permalink'] as String? ?? '',
-      waveform: (json['waveform'] as List<dynamic>?)
+      hlsUrl: (track['hlsUrl'] ??
+              media?['hlsUrl'] ??
+              hlsTranscoding?['url'] ??
+              track['audioUrl'] ??
+              track['streamUrl'] ??
+              (trackId.isNotEmpty
+                  ? 'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/$trackId/playlist.m3u8'
+                  : '') ??
+              '')
+          .toString(),
+      permalink: track['permalink'] as String? ?? '',
+      waveform: (track['waveform'] as List<dynamic>?)
           ?.map((e) => (e as num).toInt())
           .toList(),
-      playCount: json['playback_count'] ?? json['playCount'] ?? 0,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'])
-          : json['createdAt'] != null
-              ? DateTime.tryParse(json['createdAt'])
+      playCount: (track['playback_count'] as num?)?.toInt() ??
+          (track['playCount'] as num?)?.toInt() ??
+          0,
+      createdAt: track['created_at'] != null
+          ? DateTime.tryParse(track['created_at'])
+          : track['createdAt'] != null
+              ? DateTime.tryParse(track['createdAt'])
           : null,
     );
   }
@@ -1543,12 +1764,14 @@ class _Track {
  PlayerTrack toPlayerTrack() => PlayerTrack(
       id: id,
       title: title,
-       artist: artistName,
-       audioUrl: hlsUrl,
-       coverUrl: artworkUrl,
-       waveform: waveform,
-       trackPermalink: permalink,
-     );
+      artist: artistName,
+      artistId: artistId.isEmpty ? null : artistId,
+      artistPermalink: artistPermalink.isEmpty ? null : artistPermalink,
+      audioUrl: hlsUrl,
+      coverUrl: artworkUrl.isEmpty ? null : artworkUrl,
+      waveform: waveform,
+      trackPermalink: permalink.isEmpty ? null : permalink,
+    );
   }
 
 class _ArtistProfile {

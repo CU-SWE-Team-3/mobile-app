@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
@@ -26,14 +27,27 @@ class _MyTrack {
     this.duration,
   });
 
-  factory _MyTrack.fromJson(Map<String, dynamic> json) {
+  factory _MyTrack.fromJson(
+    Map<String, dynamic> json, {
+    String fallbackArtistName = '',
+  }) {
     final artist = json['artist'] as Map<String, dynamic>? ?? {};
+    final user = json['user'] as Map<String, dynamic>? ?? {};
     final durationRaw = json['duration'];
+    final artistName = (artist['displayName'] ??
+            artist['username'] ??
+            artist['name'] ??
+            user['displayName'] ??
+            user['username'] ??
+            user['name'] ??
+            json['artistName'] ??
+            '')
+        .toString();
 
     return _MyTrack(
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      artistName: artist['displayName'] as String? ?? '',
+      artistName: artistName.isNotEmpty ? artistName : fallbackArtistName,
       artworkUrl: json['artworkUrl'] as String?,
       hlsUrl: json['hlsUrl'] as String? ?? '',
       waveform: (json['waveform'] as List<dynamic>?)
@@ -69,11 +83,23 @@ class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
   List<_MyTrack> _tracks = [];
   bool _isLoading = true;
   bool _hasError = false;
+  String _currentArtistName = '';
 
   @override
   void initState() {
     super.initState();
+    _loadCurrentArtistName();
     _fetchTracks();
+  }
+
+  Future<void> _loadCurrentArtistName() async {
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString('displayName') ??
+        prefs.getString('username') ??
+        prefs.getString('name') ??
+        '';
+    if (!mounted) return;
+    setState(() => _currentArtistName = name);
   }
 
   Future<void> _fetchTracks() async {
@@ -92,9 +118,13 @@ class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
         throw const FormatException('Expected tracks list');
       }
 
+      final fallbackArtistName = _currentArtistName;
       final tracks = data
           .whereType<Map<String, dynamic>>()
-          .map(_MyTrack.fromJson)
+          .map((track) => _MyTrack.fromJson(
+                track,
+                fallbackArtistName: fallbackArtistName,
+              ))
           .where((track) => track.hlsUrl.isNotEmpty)
           .toList();
 
