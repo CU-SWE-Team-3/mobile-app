@@ -338,7 +338,9 @@ class _SearchPageState extends State<SearchPage> {
                 ? '/home/genre/pop'
                 : genre.name == 'R&B'
                     ? '/home/genre/rnb'
-            : '/search/genre/${Uri.encodeComponent(genre.name)}';
+                    : genre.name == 'Chill'
+                        ? '/home/genre/chill'
+                        : '/search/genre/${Uri.encodeComponent(genre.name)}';
 
     return GestureDetector(
       onTap: () => context.push(route),

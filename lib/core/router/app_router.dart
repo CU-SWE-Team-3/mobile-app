@@ -26,6 +26,7 @@ import '../../features/feed/presentation/pages/electronic_genre_page.dart';
 import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
 import '../../features/feed/presentation/pages/electronic_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/chill_genre_page.dart';
 import '../../features/feed/presentation/pages/pop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/pop_genre_page.dart';
 import '../../features/feed/presentation/pages/rnb_genre_page.dart';
@@ -185,6 +186,9 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'genre/rnb',
                     builder: (_, __) => const RnbGenrePage()),
+                GoRoute(
+                    path: 'genre/chill',
+                    builder: (_, __) => const ChillGenrePage()),
               ],
             ),
           ],
