@@ -2,9 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/upload_track.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 
 final myTracksProvider = FutureProvider.autoDispose<List<UploadTrack>>((ref) async {
   final dio = ref.watch(dioClientProvider).dio;
+  final userId = ref.watch(sessionUserIdProvider);
+  if (userId.isEmpty) return [];
   final prefs = await SharedPreferences.getInstance();
   final currentArtistName = prefs.getString('displayName') ??
       prefs.getString('username') ??
@@ -13,8 +16,7 @@ final myTracksProvider = FutureProvider.autoDispose<List<UploadTrack>>((ref) asy
   final response = await dio.get('/tracks/my-tracks');
   final data = response.data['data'];
   if (data is! List) return [];
-  final raw = data;
-  return raw.map((t) {
+  return data.map((t) {
     final artist = t['artist'] is Map<String, dynamic>
         ? t['artist'] as Map<String, dynamic>
         : <String, dynamic>{};

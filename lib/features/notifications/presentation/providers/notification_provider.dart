@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 import '../../domain/entities/notification.dart';
 import 'package:flutter/foundation.dart';
+
 export '../../domain/entities/notification.dart';
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -232,7 +234,10 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
 
 final notificationProvider =
     StateNotifierProvider<NotificationNotifier, NotificationState>(
-  (ref) => NotificationNotifier(ref.read(dioClientProvider)),
+  (ref) {
+    ref.watch(sessionUserIdProvider);
+    return NotificationNotifier(ref.read(dioClientProvider));
+  },
 );
 
 // ── Notification Preferences ───────────────────────────────────────────────────
@@ -396,5 +401,8 @@ class PreferencesNotifier extends StateNotifier<PreferencesState> {
 
 final notificationPreferencesProvider =
     StateNotifierProvider<PreferencesNotifier, PreferencesState>(
-  (ref) => PreferencesNotifier(ref.read(dioClientProvider)),
+  (ref) {
+    ref.watch(sessionUserIdProvider);
+    return PreferencesNotifier(ref.read(dioClientProvider));
+  },
 );

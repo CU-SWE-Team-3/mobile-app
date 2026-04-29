@@ -18,10 +18,17 @@ class HistoryEntry {
 /// Persists listening history as JSON in [SharedPreferences].
 /// Caps at 50 entries (FIFO — oldest are dropped first).
 class HistoryRepository {
-  static const String _key = 'listening_history_v1';
+  static const String _keyPrefix = 'listening_history_v1';
   static const int _maxEntries = 50;
 
+  final String userId;
+
+  const HistoryRepository(this.userId);
+
+  String get _key => '$_keyPrefix:$userId';
+
   Future<List<HistoryEntry>> load() async {
+    if (userId.isEmpty) return [];
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
     if (raw == null) return [];
@@ -36,6 +43,7 @@ class HistoryRepository {
   }
 
   Future<void> save(List<HistoryEntry> entries) async {
+    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     final capped =
         entries.length > _maxEntries ? entries.sublist(0, _maxEntries) : entries;
@@ -44,6 +52,7 @@ class HistoryRepository {
   }
 
   Future<void> clear() async {
+    if (userId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key);
   }

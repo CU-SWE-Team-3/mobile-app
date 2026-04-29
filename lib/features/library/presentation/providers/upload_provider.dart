@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as path;
 import 'package:dio/dio.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/upload_track.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/providers/session_provider.dart';
 
 class UploadState {
   final UploadTrack track;
@@ -367,7 +367,9 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
   // Get MIME type from file extension
   String _getMimeType(String filepath) {
-    final ext = path.extension(filepath).toLowerCase();
+    final name = filepath.split(RegExp(r'[\\/]')).last;
+    final dotIndex = name.lastIndexOf('.');
+    final ext = dotIndex >= 0 ? name.substring(dotIndex).toLowerCase() : '';
     switch (ext) {
       case '.mp3':
         return 'audio/mpeg';
@@ -467,6 +469,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
 final uploadProvider =
     StateNotifierProvider<UploadNotifier, UploadState>((ref) {
+  ref.watch(sessionUserIdProvider);
   final dioClient = ref.watch(dioClientProvider);
   return UploadNotifier(dioClient);
 });
@@ -474,6 +477,7 @@ final uploadProvider =
 // Provider for list of uploaded tracks
 final uploadedTracksProvider =
     StateNotifierProvider<UploadedTracksNotifier, List<UploadTrack>>((ref) {
+  ref.watch(sessionUserIdProvider);
   return UploadedTracksNotifier();
 });
 

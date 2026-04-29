@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/session_provider.dart';
 import '../../../../core/services/audio_handler_service.dart';
 import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
@@ -511,9 +512,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
 final playerProvider =
     StateNotifierProvider<PlayerNotifier, PlayerState>((ref) {
-  return PlayerNotifier(
+  final notifier = PlayerNotifier(
     ref.read(playerApiServiceProvider),
     appAudioHandler!,
     sl<EngagementRemoteDataSource>(),
   );
+
+  ref.listen<String>(sessionUserIdProvider, (previous, next) {
+    if (previous != null && previous != next) {
+      notifier.stop();
+    }
+  });
+
+  return notifier;
 });
