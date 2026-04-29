@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/providers/session_provider.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
+import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/messaging/domain/entities/participant.dart';
+import 'package:soundcloud_clone/features/messaging/presentation/providers/messaging_providers.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 import '../pages/likers_list_page.dart';
@@ -20,9 +27,17 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
   final String? title;
   final String? artistName;
   final String? artworkUrl;
+  final String? audioUrl;
+  final List<int>? waveform;
   final String? artistId;
   final String? artistPermalink;
   final List<PlayerTrack>? queue;
+  final bool showSendTo;
+  final bool showShare;
+  final bool showReport;
+  final bool initialIsLiked;
+  final int initialLikeCount;
+  final int initialRepostCount;
 
   const TrackOptionsSheet({
     super.key,
@@ -30,9 +45,17 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
     this.title,
     this.artistName,
     this.artworkUrl,
+    this.audioUrl,
+    this.waveform,
     this.artistId,
     this.artistPermalink,
     this.queue,
+    this.showSendTo = true,
+    this.showShare = true,
+    this.showReport = true,
+    this.initialIsLiked = false,
+    this.initialLikeCount = 0,
+    this.initialRepostCount = 0,
   });
 
   @override
@@ -131,14 +154,22 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
   @override
   Widget build(BuildContext context) {
     final hasDetails = widget.title != null && widget.artistName != null;
+    final engagementParams = EngagementParams(
+      trackId: widget.trackId,
+      isLiked: widget.initialIsLiked,
+      likeCount: widget.initialLikeCount,
+      repostCount: widget.initialRepostCount,
+    );
+    final engagementState = ref.watch(engagementProvider(engagementParams));
     final playerTrack = PlayerTrack(
       id: widget.trackId,
       title: widget.title ?? 'Track',
       artist: widget.artistName ?? 'Unknown artist',
       artistId: widget.artistId,
       artistPermalink: widget.artistPermalink,
-      audioUrl: '',
+      audioUrl: widget.audioUrl ?? '',
       coverUrl: widget.artworkUrl,
+      waveform: widget.waveform,
     );
 
     void showSoon(String label) {
@@ -178,60 +209,202 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (hasDetails) _TrackSheetHeader(title: widget.title!, artist: widget.artistName!, artworkUrl: widget.artworkUrl),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 18, 16, 8),
-                child: Text(
-                  'SEND TO',
-                  style: TextStyle(
-                    color: Color(0xFFB6B6B6),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
+              if (widget.showSendTo) ...[
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 18, 16, 8),
+                  child: Text(
+                    'SEND TO',
+                    style: TextStyle(
+                      color: Color(0xFFB6B6B6),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: const [
-                    _SendToAvatar(name: 'Mohamed Hany'),
-                    SizedBox(width: 10),
-                    _SendToAvatar(name: 'Marwan Pablo'),
-                    SizedBox(width: 10),
-                    _SendToAvatar(name: 'Two Feet'),
-                  ],
+                Consumer(
+                  builder: (ctx, cRef, _) {
+                    final myId = cRef.watch(sessionUserIdProvider);
+                    final convAsync = cRef.watch(conversationsProvider);
+                    return convAsync.when(
+                      loading: () => const SizedBox(
+                        height: 72,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFFF5500),
+                            strokeWidth: 2,
+                          ),
+                        ),
+                      ),
+                      error: (_, __) => const SizedBox.shrink(),
+                      data: (conversations) {
+                        final contacts = <Participant>[];
+                        for (final conv in conversations) {
+                          Participant? other;
+                          for (final participant in conv.participants) {
+                            if (participant.id != myId &&
+                                participant.id.isNotEmpty) {
+                              other = participant;
+                              break;
+                            }
+                          }
+                          if (other != null &&
+                              !contacts.any((item) => item.id == other!.id)) {
+                            contacts.add(other);
+                          }
+                          if (contacts.length == 6) break;
+                        }
+                        if (contacts.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        final repo = cRef.read(messagingRepositoryProvider);
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              for (final contact in contacts)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 10),
+                                  child: GestureDetector(
+                                    onTap: () async {
+                                      final messenger =
+                                          ScaffoldMessenger.of(ctx);
+                                      Navigator.pop(ctx);
+                                      try {
+                                        await repo.sendMessage(
+                                          receiverId: contact.id,
+                                          content: widget.title == null
+                                              ? ''
+                                              : 'Shared a track: ${widget.title}',
+                                          attachmentType: 'track',
+                                          attachmentId: widget.trackId,
+                                        );
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Sent to ${contact.displayName}',
+                                            ),
+                                            backgroundColor:
+                                                const Color(0xFF333333),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      } catch (_) {
+                                        messenger.showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Failed to send'),
+                                            backgroundColor:
+                                                Color(0xFFCC3333),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child: _SendToAvatar(
+                                      name: contact.displayName,
+                                      avatarUrl: contact.avatarUrl,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
                 ),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 22, 16, 8),
-                child: Text(
-                  'SHARE',
-                  style: TextStyle(
-                    color: Color(0xFFB6B6B6),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
+              ],
+              if (widget.showShare) ...[
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 22, 16, 8),
+                  child: Text(
+                    'SHARE',
+                    style: TextStyle(
+                      color: Color(0xFFB6B6B6),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: const [
-                    _ShareButton(icon: Icons.send_outlined, label: 'Message'),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.content_copy_outlined, label: 'Copy Link'),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.chat, label: 'WhatsApp', green: true),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.check_circle_outline, label: 'Status', green: true),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
-                  ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      _ShareButton(
+                        icon: Icons.send_outlined,
+                        label: 'Message',
+                        onTap: () => showSoon('Choose a contact above'),
+                      ),
+                      const SizedBox(width: 10),
+                      const _ShareButton(icon: Icons.content_copy_outlined, label: 'Copy Link'),
+                      const SizedBox(width: 10),
+                      const _ShareButton(icon: Icons.chat, label: 'WhatsApp', green: true),
+                      const SizedBox(width: 10),
+                      const _ShareButton(icon: Icons.check_circle_outline, label: 'Status', green: true),
+                      const SizedBox(width: 10),
+                      const _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
+                    ],
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 12),
-              _OptionTile(icon: Icons.favorite_border, label: 'Like', onTap: () => showSoon('Like coming soon')),
+              _OptionTile(
+                icon: engagementState.isLiked ? Icons.favorite : Icons.favorite_border,
+                label: engagementState.isLiked ? 'Unlike' : 'Like',
+                onTap: engagementState.isLoadingLike
+                    ? () {}
+                    : () async {
+                        final wasLiked = engagementState.isLiked;
+                        final wasCount = engagementState.likeCount;
+                        void writeOverride({
+                          required bool liked,
+                          required int likeCount,
+                        }) {
+                          final current = Map<String, TrackSummary>.from(
+                            ref.read(likedTrackOverridesProvider),
+                          );
+                          if (liked) {
+                            current[widget.trackId] = TrackSummary(
+                              id: widget.trackId,
+                              title: widget.title ?? 'Track',
+                              artistName: widget.artistName ?? 'Unknown artist',
+                              artistId: widget.artistId,
+                              artistPermalink: widget.artistPermalink,
+                              artworkUrl: widget.artworkUrl,
+                              audioUrl: widget.audioUrl,
+                              waveform: widget.waveform,
+                              likeCount: likeCount,
+                              repostCount: widget.initialRepostCount,
+                            );
+                          } else {
+                            current.remove(widget.trackId);
+                          }
+                          ref.read(likedTrackOverridesProvider.notifier).state =
+                              current;
+                        }
+
+                        writeOverride(
+                          liked: !wasLiked,
+                          likeCount: wasLiked ? max(0, wasCount - 1) : wasCount + 1,
+                        );
+                        final success = await ref
+                            .read(engagementProvider(engagementParams).notifier)
+                            .toggleLike();
+                        if (!mounted) return;
+                        Navigator.pop(context);
+                        if (!success) {
+                          writeOverride(liked: wasLiked, likeCount: wasCount);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Could not update like. Please try again.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+              ),
               _OptionTile(icon: Icons.format_list_bulleted, label: 'Play Next', onTap: playNext),
               _OptionTile(icon: Icons.format_list_numbered, label: 'Play Last', onTap: playLast),
               _OptionTile(
@@ -330,7 +503,8 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                 },
               ),
               _OptionTile(icon: Icons.graphic_eq, label: 'Behind this track', onTap: () => showSoon('Behind this track coming soon')),
-              _OptionTile(icon: Icons.outlined_flag, label: 'Report', onTap: () => showSoon('Report coming soon')),
+              if (widget.showReport)
+                _OptionTile(icon: Icons.outlined_flag, label: 'Report', onTap: () => showSoon('Report coming soon')),
               const SizedBox(height: 10),
             ],
           ),
@@ -414,19 +588,33 @@ class _TrackSheetHeader extends StatelessWidget {
 
 class _SendToAvatar extends StatelessWidget {
   final String name;
+  final String? avatarUrl;
 
-  const _SendToAvatar({required this.name});
+  const _SendToAvatar({required this.name, this.avatarUrl});
 
   @override
   Widget build(BuildContext context) {
+    final isValid = avatarUrl != null &&
+        avatarUrl!.isNotEmpty &&
+        avatarUrl!.startsWith('http');
     return SizedBox(
       width: 54,
       child: Column(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 22,
-            backgroundColor: Color(0xFF3A3A3A),
-            child: Icon(Icons.person, color: Colors.white70),
+            backgroundColor: const Color(0xFF3A3A3A),
+            backgroundImage:
+                isValid ? CachedNetworkImageProvider(avatarUrl!) : null,
+            child: !isValid
+                ? Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(height: 6),
           Text(
@@ -445,36 +633,42 @@ class _ShareButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool green;
+  final VoidCallback? onTap;
 
   const _ShareButton({
     required this.icon,
     required this.label,
     this.green = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 54,
-      child: Column(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: green ? const Color(0xFF28D366) : const Color(0xFF2F2F2F),
-              shape: BoxShape.circle,
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 54,
+        child: Column(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color:
+                    green ? const Color(0xFF28D366) : const Color(0xFF2F2F2F),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.white, size: 22),
             ),
-            child: Icon(icon, color: Colors.white, size: 22),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }

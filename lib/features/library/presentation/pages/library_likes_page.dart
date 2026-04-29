@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/utils/profile_navigation.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
@@ -25,7 +26,6 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _sortBy = 'recently_added';
-  final Set<String> _removedIds = {};
 
   @override
   void dispose() {
@@ -36,10 +36,9 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
   List<TrackSummary> _applyFiltersAndSort(
     List<TrackSummary> tracks,
     Set<String> hiddenIds,
+    List<String> likedOrder,
   ) {
-    var result = tracks
-        .where((t) => !_removedIds.contains(t.id) && !hiddenIds.contains(t.id))
-        .toList();
+    var result = tracks.where((t) => !hiddenIds.contains(t.id)).toList();
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       result = result
@@ -61,6 +60,19 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
             a.artistName.toLowerCase().compareTo(b.artistName.toLowerCase()));
         break;
       default:
+        if (likedOrder.isNotEmpty) {
+          final order = {
+            for (var i = 0; i < likedOrder.length; i++) likedOrder[i]: i,
+          };
+          result.sort((a, b) {
+            final ai = order[a.id];
+            final bi = order[b.id];
+            if (ai == null && bi == null) return 0;
+            if (ai == null) return 1;
+            if (bi == null) return -1;
+            return ai.compareTo(bi);
+          });
+        }
         break;
     }
     return result;
@@ -109,6 +121,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
   Widget build(BuildContext context) {
     final playerState = ref.watch(playerProvider);
     final async = ref.watch(mergedUserLikesProvider);
+    final likedOrder = ref.watch(likedTrackOrderProvider);
 
     return Scaffold(
       backgroundColor: _bg,
@@ -186,7 +199,8 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                   ),
                 ),
                 data: (allTracks) {
-                  final tracks = _applyFiltersAndSort(allTracks, const <String>{});
+                  final tracks =
+                      _applyFiltersAndSort(allTracks, const <String>{}, likedOrder);
                   final playableTracks =
                       tracks.where((t) => t.audioUrl != null).toList();
                   final playableQueue = _toPlayerTracks(playableTracks);
@@ -197,9 +211,7 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                       queueMatchesPage &&
                       playableTracks.any((track) => track.id == currentTrackId);
                   final showPause = isFromThisPage && playerState.isPlaying;
-                  final visibleTotalCount = allTracks
-                      .where((t) => !_removedIds.contains(t.id))
-                      .length;
+                  final visibleTotalCount = allTracks.length;
 
                   return Column(
                     children: [
@@ -288,10 +300,16 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                             // Shuffle
                             GestureDetector(
                               onTap: () {
-                                final pt = _toPlayerTracks(tracks);
-                                if (pt.isEmpty) return;
-                                final shuffled = List<PlayerTrack>.from(pt)
-                                  ..shuffle(Random());
+                                final shuffledTracks =
+                                    List<TrackSummary>.from(tracks)
+                                      ..shuffle(Random());
+                                ref
+                                    .read(likedTrackOrderProvider.notifier)
+                                    .state = shuffledTracks
+                                        .map((track) => track.id)
+                                        .toList();
+                                final shuffled = _toPlayerTracks(shuffledTracks);
+                                if (shuffled.isEmpty) return;
                                 ref
                                     .read(playerProvider.notifier)
                                     .playQueue(shuffled);
@@ -358,13 +376,11 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                 ),
                               )
                             : ListView.builder(
-                                padding: const EdgeInsets.only(bottom: 96),
+                                padding: const EdgeInsets.only(bottom: 132),
                                 physics: const BouncingScrollPhysics(),
                                 itemCount: tracks.length,
                                 itemBuilder: (_, i) => _LikeTile(
                                   track: tracks[i],
-                                  onRemove: () => setState(
-                                      () => _removedIds.add(tracks[i].id)),
                                 ),
                               ),
                       ),
@@ -448,9 +464,8 @@ class _SortSheet extends StatelessWidget {
 
 class _LikeTile extends ConsumerWidget {
   final TrackSummary track;
-  final VoidCallback onRemove;
 
-  const _LikeTile({required this.track, required this.onRemove});
+  const _LikeTile({required this.track});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -560,7 +575,7 @@ class _LikeTile extends ConsumerWidget {
               ),
             ),
             GestureDetector(
-              onTap: () => _showTrackMenu(context, ref, params),
+              onTap: () => _showTrackMenu(context),
               child: Padding(
                 padding: const EdgeInsets.all(8),
                 child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
@@ -572,119 +587,32 @@ class _LikeTile extends ConsumerWidget {
     );
   }
 
-  void _showTrackMenu(
-      BuildContext context, WidgetRef ref, EngagementParams params) {
+  void _showTrackMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1E1E1E),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.queue_play_next_rounded,
-                  color: Colors.white70),
-              title: const Text('Play next',
-                  style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(ctx);
-                final playerState = ref.read(playerProvider);
-                final notifier = ref.read(playerProvider.notifier);
-                notifier.addToQueue(_buildPlayerTrack());
-                // Move the appended track to right after the current index.
-                final endIndex = playerState.queue.length;
-                final insertAt = playerState.currentQueueIndex + 1;
-                if (endIndex > insertAt) {
-                  notifier.reorderQueue(endIndex, insertAt);
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Playing next'),
-                      duration: Duration(seconds: 2)),
-                );
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.add_to_queue_rounded, color: Colors.white70),
-              title: const Text('Play last',
-                  style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(ctx);
-                ref
-                    .read(playerProvider.notifier)
-                    .addToQueue(_buildPlayerTrack());
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Added to queue'),
-                      duration: Duration(seconds: 2)),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_outline_rounded,
-                  color: Colors.white70),
-              title: const Text('Go to artist profile',
-                  style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(ctx);
-                final id = track.artistId;
-                final permalink = track.artistPermalink;
-                if (id != null && permalink != null) {
-                  navigateToUserProfile(
-                    context,
-                    userId: id,
-                    permalink: permalink,
-                    displayName: track.artistName,
-                  );
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.favorite_border_rounded,
-                  color: Colors.white70),
-              title: const Text('Remove from likes',
-                  style: TextStyle(color: Colors.white)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final removed = await ref
-                    .read(engagementProvider(params).notifier)
-                    .removeLike();
-                if (removed && context.mounted) {
-                  onRemove();
-                }
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: track.id,
+        title: track.title,
+        artistName: track.artistName,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.audioUrl,
+        waveform: track.waveform,
+        artistId: track.artistId,
+        artistPermalink: track.artistPermalink,
+        showSendTo: false,
+        showShare: false,
+        showReport: false,
+        initialIsLiked: true,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
       ),
     );
   }
-
-  PlayerTrack _buildPlayerTrack() => PlayerTrack(
-        id: track.id,
-        title: track.title,
-        artist: track.artistName,
-        artistId: track.artistId,
-        audioUrl: track.audioUrl ?? '',
-        coverUrl: track.artworkUrl,
-        waveform: track.waveform,
-        artistPermalink: track.artistPermalink,
-      );
 
   Widget _placeholder() => const ColoredBox(
         color: Color(0xFF2A2A2A),

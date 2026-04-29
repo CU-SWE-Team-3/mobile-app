@@ -139,6 +139,31 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
       _ref.read(likesRefreshTickProvider.notifier).state++;
       state = state.copyWith(isLoadingLike: false);
       return true;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final rawMessage = e.response?.data is Map
+          ? (e.response?.data as Map)['message']?.toString().toLowerCase()
+          : e.response?.data?.toString().toLowerCase();
+      final alreadyInDesiredState =
+          (!wasLiked &&
+              (status == 400 || status == 409) &&
+              (rawMessage?.contains('already') ?? false)) ||
+          (wasLiked &&
+              (status == 400 || status == 404) &&
+              ((rawMessage?.contains('not') ?? false) ||
+                  (rawMessage?.contains('found') ?? false)));
+      if (alreadyInDesiredState) {
+        _ref.read(likesRefreshTickProvider.notifier).state++;
+        state = state.copyWith(isLoadingLike: false);
+        return true;
+      }
+      state = state.copyWith(
+        isLiked: wasLiked,
+        likeCount: prevCount,
+        isLoadingLike: false,
+      );
+      _setLikeHidden(!wasLiked);
+      return false;
     } catch (e) {
       state = state.copyWith(
         isLiked: wasLiked,
@@ -246,6 +271,11 @@ final likedTrackOverridesProvider =
     StateProvider<Map<String, TrackSummary>>((ref) {
   ref.watch(sessionUserIdProvider);
   return <String, TrackSummary>{};
+});
+
+final likedTrackOrderProvider = StateProvider<List<String>>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return <String>[];
 });
 
 final backendUserLikesProvider =

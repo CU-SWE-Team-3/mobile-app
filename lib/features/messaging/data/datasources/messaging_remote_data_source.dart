@@ -55,8 +55,10 @@ class MessagingRemoteDataSource {
 
   Future<Message> sendMessage({
     required String receiverId,
-    required String content,
+    String content = '',
     String? conversationId,
+    String? attachmentType,
+    String? attachmentId,
   }) async {
     final stopwatch = Stopwatch()..start();
     final body = <String, dynamic>{
@@ -64,6 +66,10 @@ class MessagingRemoteDataSource {
       'content': content,
       if (conversationId != null && conversationId.isNotEmpty)
         'conversationId': conversationId,
+      if (attachmentType != null && attachmentType.isNotEmpty)
+        'attachmentType': attachmentType,
+      if (attachmentId != null && attachmentId.isNotEmpty)
+        'attachmentId': attachmentId,
     };
     try {
       final response = await _dio.post(
