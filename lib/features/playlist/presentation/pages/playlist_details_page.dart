@@ -6,10 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/entities/playlist.dart';
-import '../../../library/presentation/pages/library_playlists_page.dart';
+import '../providers/playlists_provider.dart';
+import '../widgets/playlist_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../../core/network/dio_client.dart';
-import 'share_playlist_page.dart';
 
 final _avatarUrlProvider = FutureProvider<String>((ref) async {
   final prefs = await SharedPreferences.getInstance();
@@ -158,10 +158,10 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
 
     // Resolve artwork image: playlist artwork → first track artwork → user avatar
     // Only treat a URL as valid if it's a real HTTPS URL (not a default/relative path).
-    bool _isValidArtwork(String? url) =>
+    bool isValidArtwork(String? url) =>
         url != null && url.startsWith('https://') && !url.contains('default');
-    final hasArtwork = _isValidArtwork(p.artworkUrl);
-    final hasFirstTrack = _isValidArtwork(_firstTrackArtworkUrl);
+    final hasArtwork = isValidArtwork(p.artworkUrl);
+    final hasFirstTrack = isValidArtwork(_firstTrackArtworkUrl);
     final hasValidAvatar = resolvedAvatarUrl.isNotEmpty &&
         !resolvedAvatarUrl.contains('default-avatar');
 
@@ -312,7 +312,11 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                       borderRadius:
                           BorderRadius.vertical(top: Radius.circular(16)),
                     ),
-                    builder: (_) => _PlaylistOptionsSheet(playlist: p),
+                    builder: (_) => PlaylistOptionsSheet(
+                      playlist: p,
+                      showCopyOption: true,
+                      popPageOnDelete: true,
+                    ),
                   ),
                   child: Container(
                     width: 36,
@@ -464,180 +468,6 @@ String _formatPlayCount(int count) {
   if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
   if (count >= 1000) return '${(count / 1000).toStringAsFixed(0)}K';
   return count.toString();
-}
-
-// ── Playlist options sheet (from detail page) ─────────────────────────────────
-
-class _PlaylistOptionsSheet extends ConsumerWidget {
-  final Playlist playlist;
-  const _PlaylistOptionsSheet({required this.playlist});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: playlist.artworkUrl != null
-                          ? Image.network(playlist.artworkUrl!,
-                              fit: BoxFit.cover)
-                          : const ColoredBox(
-                              color: Color(0xFF2A2A2A),
-                              child: Center(
-                                child: Icon(Icons.music_note,
-                                    color: Colors.white38, size: 32),
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          playlist.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          playlist.ownerName,
-                          style: const TextStyle(
-                              color: _secondary, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.white12, height: 28),
-            _optionRow(
-              icon: Icons.edit_outlined,
-              label: 'Edit',
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Coming soon'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
-            _optionRow(
-              icon: Icons.lock_outline,
-              label: playlist.isPublic ? 'Make private' : 'Make public',
-              onTap: () {
-                Navigator.pop(context);
-                ref.read(playlistsProvider.notifier).updateVisibility(
-                      playlist.id,
-                      !playlist.isPublic,
-                    );
-              },
-            ),
-            _optionRow(
-              icon: Icons.delete_outline,
-              label: 'Delete',
-              onTap: () {
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                nav.pop(); // close the sheet; user returns to details page
-                ref.read(playlistsProvider.notifier).remove(playlist.id).then((_) {
-                  nav.maybePop(); // go back only after confirmed 204
-                }).catchError((_) {
-                  messenger.showSnackBar(const SnackBar(
-                    content: Text('Could not delete playlist. Please try again.'),
-                    backgroundColor: Color(0xFF3A1A1A),
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                });
-              },
-            ),
-            _optionRow(
-              icon: Icons.copy_rounded,
-              label: 'Copy playlist',
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Coming soon'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
-            _optionRow(
-              icon: Icons.share_rounded,
-              label: 'Share',
-              onTap: () {
-                Navigator.pop(context);
-                showModalBottomSheet(
-                  context: context,
-                  backgroundColor: _surface,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  builder: (_) => SharePlaylistSheet(playlist: playlist),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _optionRow({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) =>
-      GestureDetector(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 16),
-              Text(label,
-                  style:
-                      const TextStyle(color: Colors.white, fontSize: 15)),
-            ],
-          ),
-        ),
-      );
 }
 
 // ── Track tile ────────────────────────────────────────────────────────────────

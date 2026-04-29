@@ -56,7 +56,7 @@ class _PublicProfilePageState extends State<PublicProfilePage> {
         elevation: 0,
         leading: GestureDetector(
           key: const ValueKey('profile_public_back_button'),
-          onTap: () => context.pop(),
+          onTap: () => context.canPop() ? context.pop() : context.go('/home'),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration: BoxDecoration(

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../features/engagement/presentation/providers/engagement_provider.dart';
-import '../../../../features/library/presentation/pages/library_playlists_page.dart';
+import '../../../../features/playlist/presentation/providers/playlists_provider.dart';
 import '../../../../features/library/presentation/providers/my_tracks_provider.dart';
 
 /// The result of a user selection in the attachment picker.

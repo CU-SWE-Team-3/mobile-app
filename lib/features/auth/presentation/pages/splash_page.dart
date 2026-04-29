@@ -51,11 +51,11 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
     if (mounted) {
       if (hasSession) {
-        final notifier = ref.read(notificationProvider.notifier);
         ref.read(sessionUserIdProvider.notifier).state = savedUserId;
         context.go('/home');
         await Future.delayed(const Duration(milliseconds: 500));
-        notifier.fetchUnreadCount();
+        if (!mounted) return;
+        ref.read(notificationProvider.notifier).fetchUnreadCount();
         unawaited(FcmService.registerCurrentToken());
       } else {
         context.go('/start');

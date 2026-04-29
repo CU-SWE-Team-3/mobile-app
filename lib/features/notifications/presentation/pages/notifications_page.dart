@@ -44,7 +44,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             ),
             child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
           ),
-          onPressed: () => context.pop(),
+          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
         ),
         title: const Text(
           'Notifications',
@@ -464,6 +464,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       case NotificationType.follow:
         {
           final slug = n.actorPermalink.replaceFirst('@', '');
+          if (slug.isEmpty) break;
           context.push('/user/$slug', extra: {
             'displayName': n.actorName,
             'userId': n.actorId,
@@ -488,6 +489,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       case NotificationType.newPlaylist:
         {
           final slug = n.actorPermalink.replaceFirst('@', '');
+          if (slug.isEmpty) break;
           context.push('/user/$slug', extra: {
             'displayName': n.actorName,
             'userId': n.actorId,
