@@ -223,8 +223,23 @@ class FcmService {
     if (actionLink.isNotEmpty) {
       final uri = Uri.tryParse(actionLink);
       if (uri != null && uri.path.isNotEmpty) {
-        appRouter.go(uri.path);
-        return;
+        const validPrefixes = [
+          '/user/',
+          '/player',
+          '/notifications',
+          '/messages',
+          '/playlist',
+          '/comments',
+          '/likes',
+          '/likers',
+          '/reposters',
+          '/profile',
+        ];
+        final path = uri.path;
+        if (validPrefixes.any((p) => path.startsWith(p))) {
+          appRouter.go(path);
+          return;
+        }
       }
     }
 

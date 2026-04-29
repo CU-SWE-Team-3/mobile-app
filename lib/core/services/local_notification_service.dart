@@ -48,7 +48,14 @@ class LocalNotificationService {
 
   static void _openPayload(String payload) {
     final uri = Uri.tryParse(payload);
-    if (uri == null || uri.path.isEmpty) return;
-    appRouter.go(uri.path);
+    final path = uri?.path ?? '';
+    if (path.isEmpty ||
+        path == '/' ||
+        !path.startsWith('/') ||
+        RegExp(r'^/?[a-fA-F0-9]{24}$').hasMatch(path)) {
+      appRouter.go('/notifications');
+      return;
+    }
+    appRouter.go(path);
   }
 }

@@ -70,6 +70,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   state = state.copyWith(isLoading: true, clearError: true);
   try {
       final res = await _dioClient.dio.get('/notifications');
+      if (!mounted) return;
       final data = res.data['data'] as Map<String, dynamic>;
       final raw = data['notifications'] as List<dynamic>;
       final items = raw
@@ -77,6 +78,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
           .toList();
       state = state.copyWith(notifications: items, isLoading: false);
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
@@ -84,6 +86,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   Future<void> fetchUnreadCount() async {
     try {
       final res = await _dioClient.dio.get('/notifications/unread-count');
+      if (!mounted) return;
       final count =
           (res.data['data'] as Map<String, dynamic>)['unreadCount'] as int;
       state = state.copyWith(serverUnreadCount: count);
@@ -135,6 +138,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   Future<void> markAsRead(String id) async {
     try {
       await _dioClient.dio.patch('/notifications/$id/read');
+      if (!mounted) return;
       final wasUnread =
           state.notifications.any((n) => n.id == id && !n.isRead);
       state = state.copyWith(
@@ -152,6 +156,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   Future<void> markAllAsRead() async {
     try {
       await _dioClient.dio.patch('/notifications/mark-read');
+      if (!mounted) return;
       state = state.copyWith(
         notifications:
             state.notifications.map((n) => n.copyWith(isRead: true)).toList(),
@@ -163,6 +168,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   Future<void> deleteNotification(String id) async {
     try {
       await _dioClient.dio.delete('/notifications/$id');
+      if (!mounted) return;
       final wasUnread =
           state.notifications.any((n) => n.id == id && !n.isRead);
       state = state.copyWith(
@@ -186,6 +192,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   // ── Socket-driven state mutations (no API call) ────────────────────────────
 
   void socketAddNotification(Map<String, dynamic> json) {
+    if (!mounted) return;
     try {
       final notification = AppNotification.fromJson(json);
       state = state.copyWith(
@@ -198,6 +205,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   }
 
   void socketMarkNotificationRead(String id) {
+    if (!mounted) return;
     final wasUnread = state.notifications.any((n) => n.id == id && !n.isRead);
     state = state.copyWith(
       notifications: state.notifications
@@ -211,6 +219,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   }
 
   void socketMarkAllRead() {
+    if (!mounted) return;
     state = state.copyWith(
       notifications:
           state.notifications.map((n) => n.copyWith(isRead: true)).toList(),
@@ -219,6 +228,7 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   }
 
   void socketRemoveNotification(String id) {
+    if (!mounted) return;
     final wasUnread = state.notifications.any((n) => n.id == id && !n.isRead);
     state = state.copyWith(
       notifications: state.notifications.where((n) => n.id != id).toList(),
