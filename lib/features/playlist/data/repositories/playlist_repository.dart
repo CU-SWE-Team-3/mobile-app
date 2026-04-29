@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../../core/network/dio_client.dart';
+import '../../domain/entities/playlist.dart';
 
 /// Single owner of all network calls to /playlists/*.
 /// Every method throws on API failure — callers decide how to surface errors.
@@ -19,16 +21,32 @@ class PlaylistRepository {
       '/playlists',
       data: {'title': title, 'isPrivate': !isPublic},
     );
-    final dataField = response.data['data'];
-    final Map<String, dynamic> playlistMap;
-    if (dataField is Map<String, dynamic>) {
-      playlistMap =
-          (dataField['playlist'] as Map<String, dynamic>?) ?? dataField;
-    } else {
-      playlistMap = {};
+    final raw = response.data;
+    debugPrint('[PlaylistRepository.create] raw response: $raw');
+
+    // Try each known response shape in order of specificity.
+    String? id;
+    if (raw is Map) {
+      final data = raw['data'];
+      if (data is Map) {
+        final playlist = data['playlist'];
+        if (playlist is Map) id = playlist['_id'] as String?;
+        if (id == null || id.isEmpty) {
+          final set = data['set'];
+          if (set is Map) id = set['_id'] as String?;
+        }
+        if (id == null || id.isEmpty) id = data['_id'] as String?;
+      }
+      if (id == null || id.isEmpty) {
+        final playlist = raw['playlist'];
+        if (playlist is Map) id = playlist['_id'] as String?;
+      }
+      if (id == null || id.isEmpty) id = raw['_id'] as String?;
     }
-    final id = playlistMap['_id'] as String? ?? '';
-    if (id.isEmpty) throw Exception('No _id in response');
+
+    if (id == null || id.isEmpty) {
+      throw Exception('No _id in response: $raw');
+    }
     return id;
   }
 
@@ -97,16 +115,44 @@ class PlaylistRepository {
   Future<void> reorderTracks(String id, List<String> orderedTrackIds) =>
       replaceTracks(id, orderedTrackIds);
 
+  // ── User playlist list ───────────────────────────────────────────────────────
+
+  /// GET /playlists?creator={userId} — returns all playlists owned by [userId].
+  /// Response shape mirrors ProfilePage._fetchPlaylists: data.playlists[].
+  /// MongoDB _id is normalised to id before Playlist.fromJson to handle the
+  /// backend's _id field that Playlist.fromJson doesn't natively read.
+  /// Throws on API failure.
+  Future<List<Playlist>> fetchAll(String userId) async {
+    final response = await _dio.get(
+      '/playlists',
+      queryParameters: {'creator': userId},
+    );
+    final raw = response.data;
+    List<dynamic> items = [];
+    if (raw is Map) {
+      final d = raw['data'];
+      if (d is Map) {
+        final p = d['playlists'];
+        items = p is List ? p : [];
+      }
+    }
+    return items.whereType<Map<String, dynamic>>().map((json) {
+      final normalized = Map<String, dynamic>.from(json);
+      normalized['id'] ??= normalized['_id'];
+      return Playlist.fromJson(normalized);
+    }).toList();
+  }
+
   // ── Artwork ─────────────────────────────────────────────────────────────────
 
-  /// POST /playlists/{id}/artwork — upload cover image bytes.
+  /// PATCH /playlists/{id}/artwork — upload cover image bytes.
   /// Returns the new artworkUrl.
   Future<String> uploadArtwork(
       String id, List<int> bytes, String filename) async {
     final formData = FormData.fromMap({
       'artwork': MultipartFile.fromBytes(bytes, filename: filename),
     });
-    final response = await _dio.post('/playlists/$id/artwork', data: formData);
+    final response = await _dio.patch('/playlists/$id/artwork', data: formData);
     return response.data['data']['artworkUrl'] as String? ?? '';
   }
 

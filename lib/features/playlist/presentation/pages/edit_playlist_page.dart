@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/playlist.dart';
 import '../providers/playlists_provider.dart';
+import '../widgets/playlist_artwork_picker.dart';
 
 const _bg = Color(0xFF111111);
 const _surface = Color(0xFF1F1F1F);
@@ -21,6 +22,7 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
   late final TextEditingController _titleController;
   late final TextEditingController _descController;
   late bool _isPrivate;
+  String? _artworkUrl;
   bool _submitting = false;
   String? _errorMessage;
 
@@ -34,6 +36,7 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
     _titleController = TextEditingController(text: p?.title ?? '');
     _descController = TextEditingController();
     _isPrivate = !(p?.isPublic ?? true);
+    _artworkUrl = p?.artworkUrl;
     _titleController.addListener(_onChanged);
     _descController.addListener(_onChanged);
   }
@@ -69,6 +72,7 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
             widget.playlist!.id,
             title: _titleController.text.trim(),
             isPublic: !_isPrivate,
+            artworkUrl: _artworkUrl,
           );
       if (mounted) Navigator.pop(context);
     } catch (_) {
@@ -145,6 +149,16 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               children: [
+                Center(
+                  child: PlaylistArtworkPicker(
+                    playlistId: widget.playlist!.id,
+                    currentArtworkUrl: _artworkUrl,
+                    repository: ref.read(playlistRepositoryProvider),
+                    onArtworkChanged: (newUrl) =>
+                        setState(() => _artworkUrl = newUrl),
+                  ),
+                ),
+                const SizedBox(height: 28),
                 _sectionLabel('TITLE'),
                 const SizedBox(height: 8),
                 _buildTextField(
