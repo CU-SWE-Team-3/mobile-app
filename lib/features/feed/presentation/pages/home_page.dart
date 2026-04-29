@@ -447,10 +447,12 @@ class _HomePageState extends ConsumerState<HomePage> {
           }
         }
 
+        final displayTitle =
+            stationTitle.isNotEmpty ? stationTitle : firstTrack.artistName;
         final stationTrack = _FeedTrack(
           id: stationId.isNotEmpty ? stationId : firstTrack.id,
-          title: stationTitle,
-          artistName: stationTitle,
+          title: displayTitle,
+          artistName: displayTitle,
           artworkUrl: stationArtworkUrl,
           hlsUrl: firstTrack.hlsUrl,
           playCount: firstTrack.playCount,
@@ -613,14 +615,20 @@ class _HomePageState extends ConsumerState<HomePage> {
         title: track.title,
         artistName: track.artistName,
         artworkUrl: track.artworkUrl,
+        audioUrl: track.hlsUrl,
+        waveform: track.waveform,
         artistId: track.artistId,
         artistPermalink: track.artistPermalink,
+        initialIsLiked: track.isLiked,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
       ),
     );
   }
 
   Widget _buildLikesBanner() {
     final mergedLikesAsync = ref.watch(mergedUserLikesProvider);
+    final likedOrder = ref.watch(likedTrackOrderProvider);
     final likedTracksById = {
       for (final track in _likedTracks) track.id: track,
     };
@@ -648,6 +656,8 @@ class _HomePageState extends ConsumerState<HomePage> {
           .toList(),
       orElse: () => _likedTracks,
     );
+    final orderedLikedTracks =
+        _applyLikedOrder(visibleLikedTracks, likedOrder);
     return GestureDetector(
       onTap: () => context.push('/library/likes'),
       child: Container(
@@ -677,23 +687,32 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   ),
                 ),
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.32),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.shuffle_rounded,
-                    color: Colors.white,
-                    size: 22,
+                GestureDetector(
+                  onTap: () {
+                    if (orderedLikedTracks.isEmpty) return;
+                    final shuffled = List<_FeedTrack>.from(orderedLikedTracks)
+                      ..shuffle(Random());
+                    ref.read(likedTrackOrderProvider.notifier).state =
+                        shuffled.map((track) => track.id).toList();
+                  },
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.32),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.shuffle_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 14),
-            if (visibleLikedTracks.isEmpty)
+            if (orderedLikedTracks.isEmpty)
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -706,21 +725,21 @@ class _HomePageState extends ConsumerState<HomePage> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _SmallTrackTile(track: visibleLikedTracks[0])),
-                      if (visibleLikedTracks.length > 1) ...[
+                      Expanded(child: _SmallTrackTile(track: orderedLikedTracks[0])),
+                      if (orderedLikedTracks.length > 1) ...[
                         const SizedBox(width: 10),
-                        Expanded(child: _SmallTrackTile(track: visibleLikedTracks[1])),
+                        Expanded(child: _SmallTrackTile(track: orderedLikedTracks[1])),
                       ],
                     ],
                   ),
-                  if (visibleLikedTracks.length > 2) ...[
+                  if (orderedLikedTracks.length > 2) ...[
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        Expanded(child: _SmallTrackTile(track: visibleLikedTracks[2])),
-                        if (visibleLikedTracks.length > 3) ...[
+                        Expanded(child: _SmallTrackTile(track: orderedLikedTracks[2])),
+                        if (orderedLikedTracks.length > 3) ...[
                           const SizedBox(width: 10),
-                          Expanded(child: _SmallTrackTile(track: visibleLikedTracks[3])),
+                          Expanded(child: _SmallTrackTile(track: orderedLikedTracks[3])),
                         ],
                       ],
                     ),
@@ -731,6 +750,26 @@ class _HomePageState extends ConsumerState<HomePage> {
         ),
       ),
     );
+  }
+
+  List<_FeedTrack> _applyLikedOrder(
+    List<_FeedTrack> tracks,
+    List<String> likedOrder,
+  ) {
+    if (likedOrder.isEmpty) return tracks;
+    final order = {
+      for (var i = 0; i < likedOrder.length; i++) likedOrder[i]: i,
+    };
+    final sorted = List<_FeedTrack>.from(tracks);
+    sorted.sort((a, b) {
+      final ai = order[a.id];
+      final bi = order[b.id];
+      if (ai == null && bi == null) return 0;
+      if (ai == null) return 1;
+      if (bi == null) return -1;
+      return ai.compareTo(bi);
+    });
+    return sorted;
   }
 
   String _hlsUrlFromTrackSummary(TrackSummary track) {
@@ -976,7 +1015,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     final followLikedTracks = _likedByFollowingTracks;
     final curatedTracks = _curatedTracks;
     final likedByTracks = followLikedTracks;
-    final stationTracks = _stationCards;
+    final stationTracks =
+        _stationCards.isNotEmpty ? _stationCards : _mixedShelfTracks;
+    final madeForYouTracks =
+        _madeForYouCards.isNotEmpty ? _madeForYouCards : recommendationTracks;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1008,11 +1050,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                 fontWeight: FontWeight.w800,
               ),
             ),
-          ),
-          IconButton(
-            key: const ValueKey('home_cast_button'),
-            onPressed: () {},
-            icon: const Icon(Icons.cast_connected_outlined, size: 23),
           ),
           IconButton(
             key: const ValueKey('home_upload_button'),
@@ -1063,12 +1100,13 @@ class _HomePageState extends ConsumerState<HomePage> {
             _fetchRecommended(),
             _fetchMixedForYou(),
             _fetchCurated(),
+            _fetchBuzzingGenres(),
           ]);
         },
         color: const Color(0xFFFF5500),
         backgroundColor: const Color(0xFF1A1A1A),
         child: ListView(
-          padding: const EdgeInsets.only(top: 12, bottom: 28),
+          padding: const EdgeInsets.only(top: 12, bottom: 140),
           children: [
             _buildLikesBanner(),
             _buildSectionHeader(
@@ -1087,7 +1125,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             _buildTrackRowsSection(followLikedTracks),
             const SizedBox(height: 28),
             _buildSectionHeader('Made for you'),
-            _buildMadeForYou(_madeForYouCards),
+            _buildMadeForYou(madeForYouTracks),
             const SizedBox(height: 28),
             _buildSectionHeader('Curated by SoundCloud'),
             _buildSquareShelf(curatedTracks, compact: true),
@@ -1297,6 +1335,13 @@ class _ArtworkShelfCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                    ),
+                  if (track.waveform != null && track.waveform!.isNotEmpty)
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      bottom: ribbonLabel == null ? 8 : 34,
+                      child: _MiniWaveformStrip(samples: track.waveform!),
                     ),
                 ],
               ),
@@ -2163,6 +2208,67 @@ class _NetworkArtwork extends StatelessWidget {
       errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
     );
   }
+}
+
+class _MiniWaveformStrip extends StatelessWidget {
+  final List<int> samples;
+
+  const _MiniWaveformStrip({required this.samples});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 24,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.38),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: CustomPaint(
+            painter: _MiniWaveformPainter(samples),
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniWaveformPainter extends CustomPainter {
+  final List<int> samples;
+
+  const _MiniWaveformPainter(this.samples);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (samples.isEmpty || size.width <= 0 || size.height <= 0) return;
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.82)
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.6;
+    final visibleBars = min(samples.length, (size.width / 3).floor());
+    if (visibleBars <= 0) return;
+    final stride = max(1, (samples.length / visibleBars).floor());
+    final maxSample = samples.reduce(max).clamp(1, 100).toDouble();
+    final gap = size.width / visibleBars;
+    for (var i = 0; i < visibleBars; i++) {
+      final sample = samples[min(i * stride, samples.length - 1)];
+      final normalized = (sample / maxSample).clamp(0.12, 1.0).toDouble();
+      final barHeight = size.height * normalized;
+      final x = (i * gap) + (gap / 2);
+      canvas.drawLine(
+        Offset(x, (size.height - barHeight) / 2),
+        Offset(x, (size.height + barHeight) / 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MiniWaveformPainter oldDelegate) =>
+      oldDelegate.samples != samples;
 }
 
 class _LikesGlyph extends StatelessWidget {

@@ -118,7 +118,10 @@ class MessageBubble extends StatelessWidget {
                       ),
                       if (isOwn) ...[
                         const SizedBox(width: 3),
-                        _StatusTick(status: message.status),
+                        _StatusTick(
+                          key: const ValueKey('message_status_indicator'),
+                          status: message.status,
+                        ),
                       ],
                     ],
                   ),
@@ -389,7 +392,7 @@ class _UnavailablePlaceholder extends StatelessWidget {
 class _StatusTick extends StatelessWidget {
   final String? status;
 
-  const _StatusTick({required this.status});
+  const _StatusTick({super.key, required this.status});
 
   @override
   Widget build(BuildContext context) {

@@ -468,9 +468,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/playlist',
       builder: (_, state) {
-        final extra = state.extra as Map<String, dynamic>? ?? {};
+        final rawExtra = state.extra;
+        final extra = rawExtra is Map
+            ? Map<String, dynamic>.from(rawExtra)
+            : <String, dynamic>{};
         return PlaylistDetailsPage(
-          playlistId: extra['playlistId'] as String?,
+          playlistId: rawExtra is String
+              ? rawExtra
+              : extra['playlistId']?.toString(),
         );
       },
       routes: [

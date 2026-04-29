@@ -26,8 +26,15 @@ class Attachment {
   bool get isAvailable => referenceId.isNotEmpty;
 
   factory Attachment.fromJson(Map<String, dynamic> json) {
-    final type = (json['type'] as String? ?? '').toLowerCase();
-    final refRaw = json['referenceId'];
+    final type = _normalizeType(json['type']?.toString());
+    final refRaw = json['referenceId'] ??
+        json['reference'] ??
+        json['attachmentId'] ??
+        json['targetId'] ??
+        json['trackId'] ??
+        json['playlistId'] ??
+        json['id'] ??
+        json['_id'];
 
     String referenceId;
     String? title;
@@ -41,9 +48,15 @@ class Attachment {
       final refMap = Map<String, dynamic>.from(refRaw);
       referenceId =
           refMap['_id']?.toString() ?? refMap['id']?.toString() ?? '';
-      title = refMap['title'] as String?;
-      artworkUrl = refMap['artworkUrl'] as String?;
-      permalink = refMap['permalink'] as String?;
+      title = _firstString(refMap, const ['title', 'name']);
+      artworkUrl = _firstString(refMap, const [
+        'artworkUrl',
+        'coverUrl',
+        'imageUrl',
+        'thumbnailUrl',
+        'firstTrackArtworkUrl',
+      ]);
+      permalink = _firstString(refMap, const ['permalink', 'slug']);
 
       final artistRaw = refMap['artist'] ?? refMap['user'];
       if (artistRaw is Map) {
@@ -57,10 +70,16 @@ class Attachment {
     } else {
       // Socket payload or already-flattened REST — referenceId is a string.
       referenceId = refRaw?.toString() ?? '';
-      title = json['title'] as String?;
-      artworkUrl = json['artworkUrl'] as String?;
-      permalink = json['permalink'] as String?;
-      artistName = json['artistName'] as String?;
+      title = _firstString(json, const ['title', 'name']);
+      artworkUrl = _firstString(json, const [
+        'artworkUrl',
+        'coverUrl',
+        'imageUrl',
+        'thumbnailUrl',
+        'firstTrackArtworkUrl',
+      ]);
+      permalink = _firstString(json, const ['permalink', 'slug']);
+      artistName = _firstString(json, const ['artistName', 'ownerName']);
       duration = (json['duration'] as num?)?.toInt();
     }
 
@@ -84,4 +103,19 @@ class Attachment {
         if (artistName != null) 'artistName': artistName,
         if (duration != null) 'duration': duration,
       };
+
+  static String _normalizeType(String? raw) {
+    final value = raw?.trim().toLowerCase() ?? '';
+    if (value.contains('playlist')) return 'playlist';
+    if (value.contains('track')) return 'track';
+    return value;
+  }
+
+  static String? _firstString(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key]?.toString();
+      if (value != null && value.trim().isNotEmpty) return value;
+    }
+    return null;
+  }
 }

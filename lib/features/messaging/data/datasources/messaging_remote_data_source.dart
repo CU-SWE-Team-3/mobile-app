@@ -78,9 +78,12 @@ class MessagingRemoteDataSource {
       if (content != null && content.isNotEmpty) 'content': content,
       if (conversationId != null && conversationId.isNotEmpty)
         'conversationId': conversationId,
-      if (attachmentType != null && attachmentId != null &&
-          attachmentType.isNotEmpty && attachmentId.isNotEmpty) ...{
-        'attachmentType': '${attachmentType[0].toUpperCase()}${attachmentType.substring(1)}',
+      if (attachmentType != null &&
+          attachmentId != null &&
+          attachmentType.isNotEmpty &&
+          attachmentId.isNotEmpty) ...{
+        'attachmentType':
+            '${attachmentType[0].toUpperCase()}${attachmentType.substring(1)}',
         'attachmentId': attachmentId,
       },
     };

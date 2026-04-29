@@ -38,6 +38,7 @@ class TrackAttachmentCard extends StatelessWidget {
     final duration = attachment.duration;
 
     return GestureDetector(
+      key: const ValueKey('message_track_card'),
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(

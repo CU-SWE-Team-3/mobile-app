@@ -175,8 +175,19 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
 
     debugPrint('[ChatRoom] appended socket message: ${incoming.id}');
     setState(() => _localMessages!.add(incoming));
+    if (incoming.attachment != null && !incoming.attachment!.hasRichData) {
+      _refreshMessagesFromServerSoon();
+    }
     _emitReceipts();
     _scrollToBottom(force: true);
+  }
+
+  void _refreshMessagesFromServerSoon() {
+    Future<void>.delayed(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() => _localMessages = null);
+      ref.invalidate(messagesProvider(widget.conversationId));
+    });
   }
 
   String _conversationIdFrom(Map<String, dynamic> message) {
@@ -476,7 +487,12 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
       setState(() {
         final messages = _localMessages ??= [];
         final idx = messages.indexWhere((m) => m.id == optimisticId);
-        if (idx >= 0) messages[idx] = sent;
+        if (idx >= 0) {
+          messages[idx] = _preserveOptimisticAttachmentData(
+            sent,
+            optimistic.attachment,
+          );
+        }
       });
       ref.invalidate(conversationsProvider);
     } on PrivateAttachmentException {
@@ -510,6 +526,44 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
         const SnackBar(content: Text('Failed to send message')),
       );
     }
+  }
+
+  Message _preserveOptimisticAttachmentData(
+    Message sent,
+    Attachment? optimisticAttachment,
+  ) {
+    final sentAttachment = sent.attachment;
+    if (sentAttachment == null || optimisticAttachment == null) return sent;
+    if (sentAttachment.hasRichData &&
+        (sentAttachment.artworkUrl?.isNotEmpty ?? false)) {
+      return sent;
+    }
+    return Message(
+      id: sent.id,
+      conversationId: sent.conversationId,
+      senderId: sent.senderId,
+      senderDisplayName: sent.senderDisplayName,
+      senderAvatarUrl: sent.senderAvatarUrl,
+      content: sent.content,
+      attachment: Attachment(
+        type: sentAttachment.type.isNotEmpty
+            ? sentAttachment.type
+            : optimisticAttachment.type,
+        referenceId: sentAttachment.referenceId.isNotEmpty
+            ? sentAttachment.referenceId
+            : optimisticAttachment.referenceId,
+        title: sentAttachment.title ?? optimisticAttachment.title,
+        artworkUrl: sentAttachment.artworkUrl ?? optimisticAttachment.artworkUrl,
+        permalink: sentAttachment.permalink ?? optimisticAttachment.permalink,
+        artistName:
+            sentAttachment.artistName ?? optimisticAttachment.artistName,
+        duration: sentAttachment.duration ?? optimisticAttachment.duration,
+      ),
+      status: sent.status,
+      isEdited: sent.isEdited,
+      isDeleted: sent.isDeleted,
+      createdAt: sent.createdAt,
+    );
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -617,6 +671,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: IconButton(
+          key: const ValueKey('chat_back_button'),
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: _goBack,
         ),
@@ -736,6 +791,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                     ref.invalidate(messagesProvider(widget.conversationId));
                   },
                   child: ListView.builder(
+                    key: const ValueKey('message_list'),
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     itemCount: _localMessages!.length,
@@ -753,19 +809,23 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                           isOwn && !msg.isDeleted && !isPending && withinWindow;
                       return Opacity(
                         opacity: isPending ? 0.6 : 1.0,
-                        child: MessageBubble(
-                          message: msg,
-                          isOwn: isOwn,
-                          otherParticipant: isOwn ? null : otherParticipant,
-                          onEdit: canEditDelete &&
-                                  msg.content.isNotEmpty &&
-                                  msg.attachment == null
-                              ? () => _enterEditMode(msg)
-                              : null,
-                          onDelete:
-                              canEditDelete ? () => _deleteMessage(msg) : null,
-                          onAttachmentTap:
-                              msg.attachment != null ? _onAttachmentTap : null,
+                        child: KeyedSubtree(
+                          key: ValueKey('message_bubble_$i'),
+                          child: MessageBubble(
+                            message: msg,
+                            isOwn: isOwn,
+                            otherParticipant: isOwn ? null : otherParticipant,
+                            onEdit: canEditDelete &&
+                                    msg.content.isNotEmpty &&
+                                    msg.attachment == null
+                                ? () => _enterEditMode(msg)
+                                : null,
+                            onDelete: canEditDelete
+                                ? () => _deleteMessage(msg)
+                                : null,
+                            onAttachmentTap:
+                                msg.attachment != null ? _onAttachmentTap : null,
+                          ),
                         ),
                       );
                     },
@@ -1072,6 +1132,7 @@ class _MessageInputBar extends StatelessWidget {
                   // Attach button (hidden in edit mode)
                   if (!isEditMode)
                     IconButton(
+                      key: const ValueKey('message_attach_button'),
                       onPressed: onAttach,
                       icon: Icon(
                         Icons.attach_file_rounded,
@@ -1087,6 +1148,7 @@ class _MessageInputBar extends StatelessWidget {
                   if (!isEditMode) const SizedBox(width: 4),
                   Expanded(
                     child: TextField(
+                      key: const ValueKey('message_input_field'),
                       controller: controller,
                       focusNode: focusNode,
                       style: const TextStyle(color: Colors.white, fontSize: 15),
@@ -1113,6 +1175,7 @@ class _MessageInputBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
+                    key: const ValueKey('message_send_button'),
                     onPressed: onSend,
                     icon: Icon(
                       isEditMode ? Icons.check_rounded : Icons.send_rounded,

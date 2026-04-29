@@ -130,6 +130,7 @@ class _NewMessagePageState extends ConsumerState<NewMessagePage> {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: IconButton(
+          key: const ValueKey('chat_back_button'),
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => context.pop(),
         ),
@@ -214,6 +215,7 @@ class _RecipientField extends StatelessWidget {
           ] else ...[
             Expanded(
               child: TextField(
+                key: const ValueKey('messaging_recipient_search_field'),
                 controller: controller,
                 autofocus: true,
                 style: const TextStyle(color: Colors.white, fontSize: 15),
@@ -419,6 +421,7 @@ class _ComposeBar extends StatelessWidget {
           children: [
             Expanded(
               child: TextField(
+                key: const ValueKey('message_input_field'),
                 controller: controller,
                 autofocus: true,
                 style: const TextStyle(color: Colors.white, fontSize: 15),
@@ -458,6 +461,7 @@ class _ComposeBar extends StatelessWidget {
                     ),
                   )
                 : IconButton(
+                    key: const ValueKey('message_send_button'),
                     onPressed: onSend,
                     icon: const Icon(Icons.send_rounded),
                     color: const Color(0xFFFF5500),

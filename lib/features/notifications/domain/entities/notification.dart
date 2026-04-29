@@ -62,20 +62,24 @@ class AppNotification {
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
     final actors = json['actors'] as List<dynamic>? ?? [];
-    final primary = actors.isNotEmpty
-        ? actors[0] as Map<String, dynamic>
+    final firstActor = actors.isNotEmpty ? actors[0] : null;
+    final primary = firstActor is Map
+        ? Map<String, dynamic>.from(firstActor)
         : <String, dynamic>{};
-    final target = json['target'] as Map<String, dynamic>?;
+    final rawTarget = json['target'];
+    final target = rawTarget is Map
+        ? Map<String, dynamic>.from(rawTarget)
+        : <String, dynamic>{};
 
     return AppNotification(
-      id: json['_id'] as String? ?? json['id'] as String,
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       type: NotificationType.fromString(json['type'] as String? ?? ''),
-      actorId: primary['_id'] as String? ?? '',
-      actorName: primary['displayName'] as String? ?? 'Unknown',
-      actorAvatarUrl: primary['avatarUrl'] as String?,
-      actorPermalink: primary['permalink'] as String? ?? '',
+      actorId: primary['_id']?.toString() ?? '',
+      actorName: primary['displayName']?.toString() ?? 'Unknown',
+      actorAvatarUrl: primary['avatarUrl']?.toString(),
+      actorPermalink: primary['permalink']?.toString() ?? '',
       actorCount: json['actorCount'] as int? ?? actors.length,
-      trackTitle: target?['title'] as String?,
+      trackTitle: target['title']?.toString(),
       commentText: json['contentSnippet'] as String?,
       isRead: json['isRead'] as bool? ?? false,
       createdAt: DateTime.parse(json['createdAt'] as String),
