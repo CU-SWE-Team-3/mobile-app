@@ -118,6 +118,57 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
         _kPlaylistsKey, jsonEncode(state.map((p) => p.toJson()).toList()));
   }
 
+  /// PATCH /playlists/{id} title and visibility, then mirrors both changes into
+  /// local state. Calls updatePrivacy unconditionally (idempotent on the server).
+  /// Throws on any API failure — state is not mutated on error.
+  Future<void> updateMetadata(
+    String id, {
+    required String title,
+    required bool isPublic,
+  }) async {
+    await _repository.updateMetadata(id, title: title);
+    await _repository.updatePrivacy(id, isPublic);
+    state = state
+        .map((p) => p.id == id
+            ? Playlist(
+                id: p.id,
+                title: title,
+                artworkUrl: p.artworkUrl,
+                firstTrackArtworkUrl: p.firstTrackArtworkUrl,
+                ownerName: p.ownerName,
+                trackCount: p.trackCount,
+                isPublic: isPublic,
+                permalink: p.permalink,
+                ownerPermalink: p.ownerPermalink,
+                secretToken: p.secretToken,
+              )
+            : p)
+        .toList();
+    await _persist();
+  }
+
+  /// Updates the cached track count after a server-side track mutation.
+  /// Local-only — no API call. Persist is fire-and-forget.
+  void updateTrackCount(String id, int newCount) {
+    state = state
+        .map((p) => p.id == id
+            ? Playlist(
+                id: p.id,
+                title: p.title,
+                artworkUrl: p.artworkUrl,
+                firstTrackArtworkUrl: p.firstTrackArtworkUrl,
+                ownerName: p.ownerName,
+                trackCount: newCount,
+                isPublic: p.isPublic,
+                permalink: p.permalink,
+                ownerPermalink: p.ownerPermalink,
+                secretToken: p.secretToken,
+              )
+            : p)
+        .toList();
+    _persist(); // fire-and-forget
+  }
+
   Future<void> reload() => _load();
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../domain/entities/playlist.dart';
 import '../pages/share_playlist_page.dart';
@@ -95,19 +96,14 @@ class PlaylistOptionsSheet extends ConsumerWidget {
               ),
             ),
             const Divider(color: Colors.white12, height: 28),
-            // Edit (coming soon)
+            // Edit playlist
             _optionRow(
               icon: Icons.edit_outlined,
               label: 'Edit',
               onTap: () {
+                final router = GoRouter.of(context);
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Coming soon'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                router.push('/playlist/edit', extra: playlist);
               },
             ),
             // Make private / Make public
