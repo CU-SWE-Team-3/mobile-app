@@ -920,7 +920,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         actions: [
           TextButton(
             key: const ValueKey('home_get_pro_button'),
-            onPressed: () {},
+            onPressed: () => context.push('/upgrade'),
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 10),
             ),
@@ -940,7 +940,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
           IconButton(
             key: const ValueKey('home_upload_button'),
-            onPressed: () {},
+            onPressed: () => context.push('/library/uploads'),
             icon: const Icon(Icons.arrow_circle_up_outlined, size: 23),
           ),
           IconButton(

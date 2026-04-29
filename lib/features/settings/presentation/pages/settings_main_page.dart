@@ -52,7 +52,13 @@ class SettingsMainPage extends ConsumerWidget {
             title: 'Account',
             onTap: () => context.push('/settings/account'),
           ),
-          _SettingsMenuItem(title: 'Upload', onTap: () {}),
+          _SettingsMenuItem(
+            title: 'Upload',
+            onTap: () {
+              Navigator.pop(context);
+              context.push('/library/uploads');
+            },
+          ),
           _SettingsMenuItem(
             title: 'Basic settings',
             onTap: () => Navigator.push(

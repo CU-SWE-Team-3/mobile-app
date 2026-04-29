@@ -19,13 +19,22 @@ class _TestDioClient implements DioClient {
 
   @override
   void setAuthToken(String token) {}
+
+  @override
+  Future<String?> refreshAccessToken() async => null;
+
+  @override
+  Stream<String> get tokenRefreshes => const Stream.empty();
+
+  @override
+  Stream<void> get authInvalidated => const Stream.empty();
 }
 
 void main() {
   group('UploadState Initialization', () {
     test('initial defaults are correct for all flags', () {
-      final track = UploadTrack(title: 'Song', artist: 'Artist');
-      final state = UploadState(track: track);
+      const track = UploadTrack(title: 'Song', artist: 'Artist');
+      const state = UploadState(track: track);
 
       expect(state.isLoading, false);
       expect(state.isUploading, false);
@@ -36,8 +45,8 @@ void main() {
     });
 
     test('track is set correctly', () {
-      final track = UploadTrack(title: 'Test', artist: 'Artist');
-      final state = UploadState(track: track);
+      const track = UploadTrack(title: 'Test', artist: 'Artist');
+      const state = UploadState(track: track);
 
       expect(state.track.title, 'Test');
       expect(state.track.artist, 'Artist');
@@ -48,7 +57,7 @@ void main() {
     late UploadState baseState;
 
     setUp(() {
-      baseState = UploadState(
+      baseState = const UploadState(
         track: UploadTrack(title: 'Original', artist: 'Artist'),
         isLoading: false,
         isUploading: false,
@@ -60,7 +69,7 @@ void main() {
     });
 
     test('copyWith updates track', () {
-      final newTrack = UploadTrack(title: 'New Track', artist: 'New Artist');
+      const newTrack = UploadTrack(title: 'New Track', artist: 'New Artist');
       final updated = baseState.copyWith(track: newTrack);
 
       expect(updated.track.title, 'New Track');
@@ -128,7 +137,7 @@ void main() {
 
   group('UploadState uploadProgress Range', () {
     test('uploadProgress is between 0.0 and 1.0', () {
-      final state = UploadState(
+      const state = UploadState(
         track: UploadTrack(title: 'Song', artist: 'Artist'),
         uploadProgress: 0.75,
       );
@@ -168,7 +177,7 @@ void main() {
     });
 
     test('updateTrack sets new track correctly', () {
-      final newTrack = UploadTrack(
+      const newTrack = UploadTrack(
         title: 'New Song',
         artist: 'New Artist',
         genre: 'Rock',
@@ -406,7 +415,7 @@ void main() {
     });
 
     test('updateTrack followed by updateTrackField works correctly', () {
-      final newTrack = UploadTrack(
+      const newTrack = UploadTrack(
         title: 'Initial Song',
         artist: 'Initial Artist',
         genre: 'Rock',
