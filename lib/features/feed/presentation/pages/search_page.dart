@@ -367,6 +367,12 @@ class _SearchPageState extends State<SearchPage> {
     final route = genre.routeOverride ??
         (genre.name == 'Hip Hop & Rap'
         ? '/home/genre/hiphop'
+        : genre.name == 'Folk'
+            ? '/home/genre/folk'
+        : genre.name == 'Indie'
+            ? '/home/genre/indie'
+        : genre.name == 'House'
+            ? '/home/genre/house'
         : genre.name == 'Electronic'
             ? '/home/genre/electronic'
             : genre.name == 'Pop'

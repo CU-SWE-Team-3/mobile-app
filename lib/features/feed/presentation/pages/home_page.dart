@@ -163,6 +163,11 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
+  static const List<String> _indieGenreQueries = [
+    'Indie',
+    'Independent',
+  ];
+
   static const List<_GenreTheme> _genres = [
     _GenreTheme(
       label: 'INDIE',
@@ -378,9 +383,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
 
     try {
+      final selectedGenre = _genres[_selectedGenreIndex].query;
       final response = await dioClient.dio.get(
         '/discovery/trending',
-        queryParameters: {'genre': _genres[_selectedGenreIndex].query},
+        queryParameters: {'genre': selectedGenre},
       );
       final data = response.data['data'] as Map<String, dynamic>? ?? {};
       final rawTrending = data['trending'] as List<dynamic>? ?? [];
@@ -388,6 +394,10 @@ class _HomePageState extends ConsumerState<HomePage> {
           .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
           .where((track) => track.id.isNotEmpty)
           .toList();
+
+      if (tracks.isEmpty && selectedGenre == 'Indie') {
+        tracks = await _fetchIndieGenreTracks();
+      }
 
       if (mounted) {
         setState(() {
@@ -407,6 +417,56 @@ class _HomePageState extends ConsumerState<HomePage> {
         setState(() => _isTrendingLoading = false);
       }
     }
+  }
+
+  Future<List<_FeedTrack>> _fetchIndieGenreTracks() async {
+    final responses = await Future.wait(
+      _indieGenreQueries.map(
+        (genre) => dioClient.dio
+            .get('/discovery/genre/${Uri.encodeComponent(genre)}')
+            .then<dynamic>((resp) => resp.data)
+            .catchError((_) => null),
+      ),
+    );
+
+    final tracks = <_FeedTrack>[];
+    for (final body in responses) {
+      if (body is! Map<String, dynamic>) continue;
+      final data = body['data'];
+      final raw = _coerceTrackList(
+        data,
+        candidateKeys: const ['tracks', 'trending', 'items', 'results'],
+      );
+      tracks.addAll(
+        raw
+            .whereType<Map<String, dynamic>>()
+            .map(_FeedTrack.fromJson)
+            .where((track) => track.id.isNotEmpty),
+      );
+    }
+
+    final byId = <String, _FeedTrack>{};
+    for (final track in tracks) {
+      byId.putIfAbsent(track.id, () => track);
+    }
+    return byId.values.toList();
+  }
+
+  List<dynamic> _coerceTrackList(
+    dynamic value, {
+    List<String> candidateKeys = const [],
+  }) {
+    if (value is List<dynamic>) return value;
+    if (value is Map<String, dynamic>) {
+      for (final key in candidateKeys) {
+        final nested = value[key];
+        if (nested is List<dynamic>) return nested;
+      }
+      for (final nested in value.values) {
+        if (nested is List<dynamic>) return nested;
+      }
+    }
+    return const <dynamic>[];
   }
 
   Future<void> _fetchRecommended() async {
