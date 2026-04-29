@@ -654,6 +654,9 @@ class _GenreCard extends StatelessWidget {
         'Pop' => '/home/genre/pop',
         'R&B' => '/home/genre/rnb',
         'Chill' => '/home/genre/chill',
+        'Party' => '/home/genre/party',
+        'Workout' => '/home/genre/workout',
+        'Techno' => '/home/genre/techno',
         _ => '/search/genre/${Uri.encodeComponent(genre.name)}',
       };
 
