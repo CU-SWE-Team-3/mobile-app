@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart' as ja;
 
 import '../../../../core/services/audio_handler_service.dart';
 import '../../../../injection_container.dart';
@@ -100,7 +99,6 @@ class PlayerState {
 // ---------------------------------------------------------------------------
 
 class PlayerNotifier extends StateNotifier<PlayerState> {
-  final ja.AudioPlayer _audioPlayer = ja.AudioPlayer();
   final AppAudioHandler _audioHandler;
   final PlayerApiService _api;
   final EngagementRemoteDataSource _engagementApi;
@@ -204,6 +202,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         isTogglingLike: false,
       );
       _audioHandler.setLiked(false);
+      unawaited(
+        _hydrateCurrentTrack(
+          track.id,
+          trackPermalink: track.trackPermalink,
+        ),
+      );
 
       // Resolve the server-authorized HLS URL.
       // If the stream endpoint fails, fall back to track.audioUrl only when
@@ -226,13 +230,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         return;
       }
 
-      if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
-        await _audioPlayer.setUrl(resolvedUrl);
-      } else {
-        await _audioPlayer.setFilePath(resolvedUrl);
-      }
-
-      await _audioPlayer.play();
+      await _audioHandler.loadTrack(track, resolvedUrl);
+      await _audioHandler.play();
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -286,6 +285,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   Future<void> seekTo(Duration position) async {
     await _audioHandler.seek(position);
+    _scheduleSeekSync(position);
   }
 
   void addToQueue(PlayerTrack track) {
