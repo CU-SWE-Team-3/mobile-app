@@ -27,7 +27,7 @@ class MessagingRepositoryImpl implements MessagingRepository {
   @override
   Future<Message> sendMessage({
     required String receiverId,
-    String content = '',
+    String? content,
     String? conversationId,
     String? attachmentType,
     String? attachmentId,

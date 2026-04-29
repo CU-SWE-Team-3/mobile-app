@@ -32,8 +32,18 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
+        toolbarHeight: 68,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          key: const ValueKey('notifications_back_button'),
+          icon: Container(
+            width: 34,
+            height: 34,
+            decoration: const BoxDecoration(
+              color: Color(0xFF2A2A2A),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+          ),
           onPressed: () => context.pop(),
         ),
         title: const Text(
@@ -41,12 +51,13 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 18,
+            fontSize: 22,
           ),
         ),
         actions: [
           if (state.unreadCount > 0)
             TextButton(
+              key: const ValueKey('notifications_mark_all_read_button'),
               onPressed: () =>
                   ref.read(notificationProvider.notifier).markAllAsRead(),
               child: const Text(
@@ -55,13 +66,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
               ),
             ),
           IconButton(
-            icon: const Icon(Icons.tune, color: Colors.white),
+            key: const ValueKey('notifications_filter_button'),
+            icon: const Icon(Icons.tune_rounded, color: Colors.white),
             onPressed: () => _showFilterSheet(context),
           ),
-          IconButton(
-            icon: const Icon(Icons.cast, color: Colors.white),
-            onPressed: () {},
-          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: _buildBody(context, state),
@@ -76,9 +85,25 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     }
     if (state.error != null) {
       return Center(
-        child: Text(
-          state.error!,
-          style: const TextStyle(color: Colors.white54, fontSize: 15),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              state.error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white54, fontSize: 15),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              key: const ValueKey('notifications_retry_button'),
+              onPressed: () =>
+                  ref.read(notificationProvider.notifier).fetchNotifications(),
+              child: const Text(
+                'Retry',
+                style: TextStyle(color: Color(0xFFFF5500)),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -95,13 +120,19 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
     final grouped = _groupByDate(items);
     return ListView.builder(
+      key: const ValueKey('notifications_list'),
+      padding: const EdgeInsets.only(bottom: 120),
       itemCount: grouped.length,
       itemBuilder: (context, i) {
         final entry = grouped[i];
         if (entry is _SectionHeader) {
           return _buildSectionHeader(entry.label);
         }
-        return _buildNotificationTile(context, entry as AppNotification);
+        return _buildNotificationTile(
+          context,
+          entry as AppNotification,
+          i,
+        );
       },
     );
   }
@@ -117,7 +148,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     final Map<String, List<AppNotification>> buckets = {
       'Today': [],
       'Yesterday': [],
-      'This week': [],
+      'Last 7 days': [],
       'Earlier': [],
     };
 
@@ -129,14 +160,14 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       } else if (!day.isBefore(yesterday)) {
         buckets['Yesterday']!.add(n);
       } else if (day.isAfter(weekAgo)) {
-        buckets['This week']!.add(n);
+        buckets['Last 7 days']!.add(n);
       } else {
         buckets['Earlier']!.add(n);
       }
     }
 
     final result = <Object>[];
-    for (final label in ['Today', 'Yesterday', 'This week', 'Earlier']) {
+    for (final label in ['Today', 'Yesterday', 'Last 7 days', 'Earlier']) {
       final list = buckets[label]!;
       if (list.isEmpty) continue;
       result.add(_SectionHeader(label));
@@ -149,7 +180,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   Widget _buildSectionHeader(String label) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+      padding: const EdgeInsets.fromLTRB(12, 22, 12, 8),
       child: Text(
         label,
         style: const TextStyle(
@@ -164,12 +195,15 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
 
   // ── Notification tile ────────────────────────────────────────────────────────
 
-  Widget _buildNotificationTile(BuildContext context, AppNotification n) {
-    final bg =
-        n.isRead ? const Color(0xFF111111) : const Color(0xFF1E1E1E);
+  Widget _buildNotificationTile(
+    BuildContext context,
+    AppNotification n,
+    int index,
+  ) {
+    const bg = Color(0xFF111111);
 
     return Dismissible(
-      key: ValueKey(n.id),
+      key: ValueKey('notification_dismiss_${n.id}'),
       direction: DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
@@ -180,50 +214,68 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       onDismissed: (_) =>
           ref.read(notificationProvider.notifier).deleteNotification(n.id),
       child: InkWell(
+        key: ValueKey('notification_tile_$index'),
         onTap: () => _handleTap(context, n),
         onLongPress: () => _showDeleteSheet(context, n),
         child: Container(
           color: bg,
+          padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Unread accent bar
-              Container(
-                width: 3,
-                height: 72,
-                color: n.isRead
-                    ? Colors.transparent
-                    : const Color(0xFFFF5500),
-              ),
-              const SizedBox(width: 12),
               // Avatar + badge
               _buildAvatar(n),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               // Notification text
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Text(
-                    _notificationText(n),
-                    style: TextStyle(
-                      color: n.isRead ? Colors.white70 : Colors.white,
+                child: RichText(
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    style: const TextStyle(
+                      color: Colors.white70,
                       fontSize: 14,
-                      height: 1.4,
+                      height: 1.25,
                     ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+                    children: [
+                      TextSpan(
+                        text: n.actorName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '  ${n.timeAgo}\n',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 13,
+                        ),
+                      ),
+                      TextSpan(text: _notificationActionText(n)),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              // Time
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Text(
-                  n.timeAgo,
-                  style: const TextStyle(color: Colors.white38, fontSize: 12),
+              if (n.type == NotificationType.follow) ...[
+                const SizedBox(width: 12),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF333333),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: const Text(
+                    'Following',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -293,6 +345,9 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             right: 0,
             bottom: 0,
             child: Container(
+              key: n.isRead
+                  ? null
+                  : const ValueKey('notification_unread_dot'),
               width: 18,
               height: 18,
               decoration: const BoxDecoration(
@@ -371,6 +426,31 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         return '$actor created a new playlist${n.trackTitle != null ? ': ${n.trackTitle}' : ''}';
       case NotificationType.mention:
         return '$actor mentioned you';
+      case NotificationType.system:
+        return n.commentText ?? 'System notification';
+    }
+  }
+
+  String _notificationActionText(AppNotification n) {
+    switch (n.type) {
+      case NotificationType.follow:
+        return 'followed you';
+      case NotificationType.like:
+        return 'liked your track ${n.trackTitle ?? ''}';
+      case NotificationType.repost:
+        return 'reposted your track ${n.trackTitle ?? ''}';
+      case NotificationType.comment:
+        final quote = n.commentText != null ? '"${n.commentText}"' : '';
+        final track = n.trackTitle != null ? ' on ${n.trackTitle}' : '';
+        return 'commented: $quote$track';
+      case NotificationType.message:
+        return 'sent you a message';
+      case NotificationType.newTrack:
+        return 'released a new track${n.trackTitle != null ? ': ${n.trackTitle}' : ''}';
+      case NotificationType.newPlaylist:
+        return 'created a new playlist${n.trackTitle != null ? ': ${n.trackTitle}' : ''}';
+      case NotificationType.mention:
+        return 'mentioned you';
       case NotificationType.system:
         return n.commentText ?? 'System notification';
     }

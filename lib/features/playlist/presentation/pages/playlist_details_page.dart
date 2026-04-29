@@ -63,18 +63,24 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     try {
       final response = await dioClient.dio.get('/playlists/$playlistId');
       final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final playlistData = data['playlist'] as Map<String, dynamic>? ?? {};
+      final rawPlaylist = data['playlist'];
+      final playlistData = rawPlaylist is Map
+          ? Map<String, dynamic>.from(rawPlaylist)
+          : data;
 
       // When navigated by playlistId only (no Playlist object passed), build
       // one from the response so the page can render title/artwork/owner.
       if (widget.playlist == null) {
-        final creator = playlistData['creator'] as Map<String, dynamic>?;
+        final creatorRaw = playlistData['creator'];
+        final creator = creatorRaw is Map
+            ? Map<String, dynamic>.from(creatorRaw)
+            : <String, dynamic>{};
         final fetched = Playlist(
           id: playlistId,
           title: playlistData['title'] as String? ?? '',
           artworkUrl: playlistData['artworkUrl'] as String?,
           ownerName: (playlistData['ownerName'] as String?) ??
-              (creator?['displayName'] as String?) ??
+              (creator['displayName'] as String?) ??
               '',
           trackCount: (playlistData['trackCount'] as num?)?.toInt() ?? 0,
           isPublic: playlistData['isPublic'] as bool? ?? true,

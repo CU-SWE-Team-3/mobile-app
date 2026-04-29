@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,8 +17,15 @@ class _Genre {
   final Color color;
   final int imageWidth;
   final int imageHeight;
+  final String? routeOverride;
   const _Genre(
-      this.name, this.assetPath, this.color, this.imageWidth, this.imageHeight);
+    this.name,
+    this.assetPath,
+    this.color,
+    this.imageWidth,
+    this.imageHeight, {
+    this.routeOverride,
+  });
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -33,6 +41,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   static const _bg = Color(0xFF1A1A1A);
   static const _orange = Color(0xFFFF5500);
   static const _fieldBg = Color(0xFF343434);
+  static const _screenInset = 16.0;
+  static const _sectionGap = 8.0;
 
   static const List<_Genre> _genres = [
     _Genre('Hip Hop & Rap', 'assets/images/HipHop_&_Rap.png',
@@ -51,8 +61,26 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         264),
     _Genre(
         'At Home', 'assets/images/At_home.png', Color(0xFFFF8F00), 556, 274),
-    _Genre('Healing Era', 'assets/images/Healing_era.png', Color(0xFF00897B),
-        511, 488),
+    _Genre(
+      'Healing Era',
+      'assets/images/Healing_era.png',
+      Color(0xFF00897B),
+      511,
+      488,
+    ),
+    _Genre(
+      'Study',
+      'assets/images/Study.png',
+      Color(0xFFFF5CA8),
+      501,
+      488,
+    ),
+    _Genre('Folk', 'assets/images/Folk.png', Color(0xFFFF8A5B), 501, 729),
+    _Genre('Indie', 'assets/images/Indie.png', Color(0xFF5B8CFF), 501, 729),
+    _Genre('Soul', 'assets/images/Soul.png', Color(0xFF23B7B3), 501, 488),
+    _Genre('Country', 'assets/images/Country.png', Color(0xFFFF8A5B), 556, 274),
+    _Genre('Latin', 'assets/images/Latin.png', Color(0xFFD66AC2), 501, 488),
+    _Genre('Rock', 'assets/images/Rock.png', Color(0xFFFF5C7A), 556, 274),
   ];
 
   final _controller = TextEditingController();
@@ -187,7 +215,12 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           children: [
             // ── Search field ─────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              padding: const EdgeInsets.fromLTRB(
+                _screenInset,
+                _screenInset,
+                _screenInset,
+                _sectionGap,
+              ),
               child: TextField(
                 key: const ValueKey('search_field'),
                 controller: _controller,
@@ -560,7 +593,12 @@ class _VibesGrid extends StatelessWidget {
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(
+        _SearchPageState._screenInset,
+        _SearchPageState._sectionGap,
+        _SearchPageState._screenInset,
+        _SearchPageState._screenInset,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -610,11 +648,15 @@ class _GenreCard extends StatelessWidget {
   const _GenreCard({required this.genre});
 
   String get _route => switch (genre.name) {
+        _ when genre.routeOverride != null => genre.routeOverride!,
         'Hip Hop & Rap' => '/home/genre/hiphop',
         'Electronic' => '/home/genre/electronic',
         'Pop' => '/home/genre/pop',
         'R&B' => '/home/genre/rnb',
         'Chill' => '/home/genre/chill',
+        'Party' => '/home/genre/party',
+        'Workout' => '/home/genre/workout',
+        'Techno' => '/home/genre/techno',
         _ => '/search/genre/${Uri.encodeComponent(genre.name)}',
       };
 

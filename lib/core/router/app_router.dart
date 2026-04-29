@@ -27,10 +27,13 @@ import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
 import '../../features/feed/presentation/pages/electronic_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/chill_genre_page.dart';
+import '../../features/feed/presentation/pages/party_genre_page.dart';
+import '../../features/feed/presentation/pages/workout_genre_page.dart';
 import '../../features/feed/presentation/pages/pop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/pop_genre_page.dart';
 import '../../features/feed/presentation/pages/rnb_genre_page.dart';
 import '../../features/feed/presentation/pages/rnb_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/techno_genre_page.dart';
 import '../../features/feed/presentation/pages/genre_results_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
@@ -191,6 +194,15 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'genre/chill',
                     builder: (_, __) => const ChillGenrePage()),
+                GoRoute(
+                    path: 'genre/party',
+                    builder: (_, __) => const PartyGenrePage()),
+                GoRoute(
+                    path: 'genre/workout',
+                    builder: (_, __) => const WorkoutGenrePage()),
+                GoRoute(
+                    path: 'genre/techno',
+                    builder: (_, __) => const TechnoGenrePage()),
               ],
             ),
           ],
@@ -456,9 +468,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/playlist',
       builder: (_, state) {
-        final extra = state.extra as Map<String, dynamic>? ?? {};
+        final rawExtra = state.extra;
+        final extra = rawExtra is Map
+            ? Map<String, dynamic>.from(rawExtra)
+            : <String, dynamic>{};
         return PlaylistDetailsPage(
-          playlistId: extra['playlistId'] as String?,
+          playlistId: rawExtra is String
+              ? rawExtra
+              : extra['playlistId']?.toString(),
         );
       },
       routes: [

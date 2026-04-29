@@ -11,7 +11,7 @@ abstract class MessagingRepository {
   });
   Future<Message> sendMessage({
     required String receiverId,
-    String content = '',
+    String? content,
     String? conversationId,
     String? attachmentType,
     String? attachmentId,

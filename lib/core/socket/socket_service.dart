@@ -21,6 +21,7 @@ class SocketService {
   int _authRecoveryAttempts = 0;
   String? _lastRecoveredTokenFingerprint;
   String? _blockedTokenFingerprint;
+  final Set<String> _recentLocalNotificationMessageIds = {};
   final Set<String> _activeConversationIds = {};
 
   final _newMessageController =
@@ -135,6 +136,10 @@ class SocketService {
     _socket?.emit('leave_chat', {'conversationId': conversationId});
     debugPrint('[SocketService] leave_chat: $conversationId');
   }
+
+  /// Returns true while the user has that conversation's chat page open.
+  bool isViewingConversation(String conversationId) =>
+      _activeConversationIds.contains(conversationId);
 
   // ── NEW ──────────────────────────────────────────────────────────────────
   void sendTyping(String conversationId) {
@@ -411,6 +416,19 @@ class SocketService {
     if (conversationId.isEmpty ||
         _activeConversationIds.contains(conversationId)) {
       return;
+    }
+
+    final messageId = message['_id']?.toString() ?? message['id']?.toString();
+    if (messageId != null &&
+        messageId.isNotEmpty &&
+        !_recentLocalNotificationMessageIds.add(messageId)) {
+      return;
+    }
+    if (_recentLocalNotificationMessageIds.length > 80) {
+      _recentLocalNotificationMessageIds.clear();
+      if (messageId != null && messageId.isNotEmpty) {
+        _recentLocalNotificationMessageIds.add(messageId);
+      }
     }
 
     final content = message['content']?.toString().trim();
