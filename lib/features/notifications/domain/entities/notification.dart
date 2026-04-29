@@ -72,7 +72,10 @@ class AppNotification {
         : <String, dynamic>{};
 
     return AppNotification(
-      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      id: json['_id']?.toString() ??
+          json['id']?.toString() ??
+          json['notificationId']?.toString() ??
+          '',
       type: NotificationType.fromString(json['type'] as String? ?? ''),
       actorId: primary['_id']?.toString() ?? '',
       actorName: primary['displayName']?.toString() ?? 'Unknown',

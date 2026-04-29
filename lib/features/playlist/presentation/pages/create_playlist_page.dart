@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../features/library/presentation/pages/library_playlists_page.dart';
+import '../providers/playlists_provider.dart';
 import '../../../../features/playlist/domain/entities/playlist.dart';
 
 final _avatarUrlProvider = FutureProvider<String>((ref) async {

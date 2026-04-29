@@ -60,6 +60,7 @@ class NotificationState {
 
 class NotificationNotifier extends StateNotifier<NotificationState> {
   final DioClient _dioClient;
+  final Set<String> _locallyReadIds = {};
 
   NotificationNotifier(this._dioClient) : super(const NotificationState());
 
@@ -73,9 +74,17 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
       if (!mounted) return;
       final data = res.data['data'] as Map<String, dynamic>;
       final raw = data['notifications'] as List<dynamic>;
-      final items = raw
-          .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
-          .toList();
+      final seenIds = <String>{};
+      final items = <AppNotification>[];
+      for (final e in raw) {
+        final item = AppNotification.fromJson(e as Map<String, dynamic>);
+        if (item.id.isNotEmpty && !seenIds.add(item.id)) continue;
+        items.add(
+          _locallyReadIds.contains(item.id)
+              ? item.copyWith(isRead: true)
+              : item,
+        );
+      }
       state = state.copyWith(notifications: items, isLoading: false);
     } catch (e) {
       if (!mounted) return;
@@ -136,21 +145,27 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   }
 
   Future<void> markAsRead(String id) async {
-    try {
-      await _dioClient.dio.patch('/notifications/$id/read');
-      if (!mounted) return;
-      final wasUnread =
-          state.notifications.any((n) => n.id == id && !n.isRead);
+    if (id.isEmpty || !mounted) return;
+    _locallyReadIds.add(id);
+    final wasUnread =
+        state.notifications.any((n) => n.id == id && !n.isRead);
+    if (wasUnread) {
       state = state.copyWith(
         notifications: state.notifications
             .map((n) => n.id == id ? n.copyWith(isRead: true) : n)
             .toList(),
         serverUnreadCount:
-            (wasUnread && state.serverUnreadCount != null && state.serverUnreadCount! > 0)
+            (state.serverUnreadCount != null && state.serverUnreadCount! > 0)
                 ? state.serverUnreadCount! - 1
                 : state.serverUnreadCount,
       );
-    } catch (_) {}
+    }
+    try {
+      await _dioClient.dio.patch('/notifications/$id/read');
+      if (!mounted) return;
+    } catch (e) {
+      debugPrint('[Notifications] markAsRead failed for $id: $e');
+    }
   }
 
   Future<void> markAllAsRead() async {
@@ -194,10 +209,21 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   void socketAddNotification(Map<String, dynamic> json) {
     if (!mounted) return;
     try {
-      final notification = AppNotification.fromJson(json);
+      var notification = AppNotification.fromJson(json);
+      if (notification.id.isEmpty) return;
+      if (_locallyReadIds.contains(notification.id)) {
+        notification = notification.copyWith(isRead: true);
+      }
+      final existing =
+          state.notifications.any((n) => n.id == notification.id);
+      final withoutDuplicate = state.notifications
+          .where((n) => n.id != notification.id)
+          .toList();
       state = state.copyWith(
-        notifications: [notification, ...state.notifications],
-        serverUnreadCount: (state.serverUnreadCount ?? 0) + 1,
+        notifications: [notification, ...withoutDuplicate],
+        serverUnreadCount: existing || notification.isRead
+            ? state.serverUnreadCount
+            : (state.serverUnreadCount ?? 0) + 1,
       );
     } catch (e) {
       debugPrint('[Notifications] socketAddNotification parse error: $e');

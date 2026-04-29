@@ -1,133 +1,12 @@
-import 'dart:convert';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/network/dio_client.dart';
 import '../../../playlist/domain/entities/playlist.dart';
 import '../../../playlist/presentation/pages/playlist_details_page.dart';
-import '../../../playlist/presentation/pages/share_playlist_page.dart';
-
-// ── Provider ────────────────────────────────────────────────────────────────
-
-const _kPlaylistsKey = 'playlists_data';
-
-class _PlaylistNotifier extends StateNotifier<List<Playlist>> {
-  _PlaylistNotifier() : super([]) {
-    _load();
-  }
-
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_kPlaylistsKey);
-    if (raw != null && raw.isNotEmpty) {
-      final list = (jsonDecode(raw) as List<dynamic>)
-          .map((e) => Playlist.fromJson(e as Map<String, dynamic>))
-          .toList();
-      if (mounted) {
-        state = list;
-        // Backfill firstTrackArtworkUrl for any playlist that was cached before
-        // this field existed or that still has no artwork — runs in background.
-        _backfillArtwork();
-      }
-    }
-  }
-
-  // Fetches GET /playlists/{id} sequentially for each playlist missing
-  // firstTrackArtworkUrl, then persists the result. Throttled to 300 ms
-  // between calls to avoid hammering the API.
-  Future<void> _backfillArtwork() async {
-    for (final p in List<Playlist>.from(state)) {
-      if (!mounted) return;
-      if (p.firstTrackArtworkUrl != null) continue;
-      await _fetchAndStoreFirstTrackArtwork(p.id);
-      await Future.delayed(const Duration(milliseconds: 300));
-    }
-  }
-
-  Future<void> _fetchAndStoreFirstTrackArtwork(String playlistId) async {
-    try {
-      final response = await dioClient.dio.get('/playlists/$playlistId');
-      final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final playlistData = data['playlist'] as Map<String, dynamic>? ?? {};
-      final tracks = playlistData['tracks'] as List? ?? [];
-      String? artwork;
-      for (final raw in tracks) {
-        if (raw is Map<String, dynamic>) {
-          final url = raw['artworkUrl'] as String?;
-          if (url != null &&
-              url.startsWith('https://') &&
-              !url.contains('default')) {
-            artwork = url;
-            break;
-          }
-        }
-      }
-      if (artwork == null || !mounted) return;
-      state = state.map((p) {
-        if (p.id != playlistId) return p;
-        return Playlist(
-          id: p.id,
-          title: p.title,
-          artworkUrl: p.artworkUrl,
-          firstTrackArtworkUrl: artwork,
-          ownerName: p.ownerName,
-          trackCount: p.trackCount,
-          isPublic: p.isPublic,
-          permalink: p.permalink,
-          ownerPermalink: p.ownerPermalink,
-          secretToken: p.secretToken,
-        );
-      }).toList();
-      await _persist();
-    } catch (_) {}
-  }
-
-  Future<void> add(Playlist playlist) async {
-    state = [...state, playlist];
-    await _persist();
-  }
-
-  // Calls DELETE /playlists/{id} first; updates local state only on 204.
-  // Throws on API failure so the calling UI can surface feedback.
-  Future<void> remove(String id) async {
-    await dioClient.dio.delete('/playlists/$id');
-    state = state.where((p) => p.id != id).toList();
-    await _persist();
-  }
-
-  Future<void> updateVisibility(String id, bool isPublic) async {
-    state = state
-        .map((p) => p.id == id
-            ? Playlist(
-                id: p.id,
-                title: p.title,
-                artworkUrl: p.artworkUrl,
-                firstTrackArtworkUrl: p.firstTrackArtworkUrl,
-                ownerName: p.ownerName,
-                trackCount: p.trackCount,
-                isPublic: isPublic,
-              )
-            : p)
-        .toList();
-    await _persist();
-  }
-
-  Future<void> _persist() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _kPlaylistsKey, jsonEncode(state.map((p) => p.toJson()).toList()));
-  }
-
-  Future<void> reload() => _load();
-}
-
-final playlistsProvider =
-    StateNotifierProvider<_PlaylistNotifier, List<Playlist>>(
-  (_) => _PlaylistNotifier(),
-);
+import '../../../playlist/presentation/providers/playlists_provider.dart';
+import '../../../playlist/presentation/widgets/playlist_options_sheet.dart';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -150,7 +29,7 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
   @override
   void initState() {
     super.initState();
-    // Re-read SharedPreferences each time this page instance is shown so that
+    // Re-read SharedPreferences each time this page is shown so that
     // track counts written by AddToPlaylistPage are reflected immediately.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(playlistsProvider.notifier).reload();
@@ -206,6 +85,7 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
       BuildContext context, String title, bool isPublic) async {
     // Capture these before any await so they remain valid across async gaps.
     final messenger = ScaffoldMessenger.of(context);
+    final repository = ref.read(playlistRepositoryProvider);
     final notifier = ref.read(playlistsProvider.notifier);
 
     final prefs = await SharedPreferences.getInstance();
@@ -215,21 +95,7 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
     // POST to the backend first so we get a real backend-issued _id.
     String playlistId;
     try {
-      final response = await dioClient.dio.post(
-        '/playlists',
-        data: {'title': title, 'isPrivate': !isPublic},
-      );
-      // Handles both { data: { playlist: { _id } } } and { data: { _id } }.
-      final dataField = response.data['data'];
-      final Map<String, dynamic> playlistMap;
-      if (dataField is Map<String, dynamic>) {
-        playlistMap =
-            (dataField['playlist'] as Map<String, dynamic>?) ?? dataField;
-      } else {
-        playlistMap = {};
-      }
-      playlistId = playlistMap['_id'] as String? ?? '';
-      if (playlistId.isEmpty) throw Exception('No _id in response');
+      playlistId = await repository.create(title, isPublic);
     } catch (_) {
       messenger.showSnackBar(const SnackBar(
         content: Text('Could not create playlist. Please try again.'),
@@ -631,274 +497,83 @@ class _PlaylistTileState extends State<_PlaylistTile> {
         ),
       ),
       child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Row(
-        children: [
-          // Thumbnail
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: thumbnailChild,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Row(
+          children: [
+            // Thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 56,
+                height: 56,
+                child: thumbnailChild,
+              ),
             ),
-          ),
-          const SizedBox(width: 14),
-          // Info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  playlist.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+            const SizedBox(width: 14),
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  playlist.ownerName,
-                  style: const TextStyle(color: _secondary, fontSize: 12),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    const Text(
-                      'Playlist',
-                      style: TextStyle(color: _secondary, fontSize: 11),
-                    ),
-                    const Text(' · ',
-                        style: TextStyle(color: _secondary, fontSize: 11)),
-                    Text(
-                      '${playlist.trackCount} Tracks',
-                      style: const TextStyle(color: _secondary, fontSize: 11),
-                    ),
-                    if (!playlist.isPublic) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    playlist.ownerName,
+                    style: const TextStyle(color: _secondary, fontSize: 12),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      const Text(
+                        'Playlist',
+                        style: TextStyle(color: _secondary, fontSize: 11),
+                      ),
                       const Text(' · ',
                           style: TextStyle(color: _secondary, fontSize: 11)),
-                      const Icon(Icons.lock_outline,
-                          color: _secondary, size: 11),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => showModalBottomSheet(
-              context: context,
-              backgroundColor: _surface,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              useSafeArea: true,
-              builder: (_) => _PlaylistOptionsSheet(playlist: playlist),
-            ),
-            child: const Padding(
-              padding: EdgeInsets.all(4),
-              child: Icon(Icons.more_vert_rounded, color: _secondary, size: 20),
-            ),
-          ),
-        ],
-      ),
-    ));
-  }
-}
-
-// ── Playlist options sheet ────────────────────────────────────────────────────
-
-class _PlaylistOptionsSheet extends ConsumerWidget {
-  final Playlist playlist;
-  const _PlaylistOptionsSheet({required this.playlist});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Drag handle
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            // Header: thumbnail + title/owner
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: SizedBox(
-                      width: 56,
-                      height: 56,
-                      child: playlist.artworkUrl != null
-                          ? Image.network(playlist.artworkUrl!,
-                              fit: BoxFit.cover)
-                          : const ColoredBox(
-                              color: Color(0xFF2A2A2A),
-                              child: Center(
-                                child: Icon(Icons.music_note,
-                                    color: Colors.white38, size: 24),
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          playlist.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          playlist.ownerName,
-                          style:
-                              const TextStyle(color: _secondary, fontSize: 12),
-                        ),
+                      Text(
+                        '${playlist.trackCount} Tracks',
+                        style: const TextStyle(color: _secondary, fontSize: 11),
+                      ),
+                      if (!playlist.isPublic) ...[
+                        const Text(' · ',
+                            style: TextStyle(color: _secondary, fontSize: 11)),
+                        const Icon(Icons.lock_outline,
+                            color: _secondary, size: 11),
                       ],
-                    ),
+                    ],
                   ),
                 ],
               ),
             ),
-            const Divider(color: Colors.white12, height: 28),
-            // Edit
-            _optionRow(
-              icon: Icons.edit_outlined,
-              label: 'Edit',
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Coming soon'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
+            GestureDetector(
+              onTap: () => showModalBottomSheet(
+                context: context,
+                backgroundColor: _surface,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                useSafeArea: true,
+                builder: (_) => PlaylistOptionsSheet(playlist: playlist),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.more_vert_rounded, color: _secondary, size: 20),
+              ),
             ),
-            // Make private / Make public
-            _optionRow(
-              icon: Icons.lock_outline,
-              label: playlist.isPublic ? 'Make private' : 'Make public',
-              onTap: () async {
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                final notifier = ref.read(playlistsProvider.notifier);
-                final newIsPublic = !playlist.isPublic;
-                nav.pop();
-                try {
-                  await dioClient.dio.patch(
-                    '/playlists/${playlist.id}',
-                    data: {'isPrivate': !newIsPublic},
-                  );
-                  notifier.updateVisibility(playlist.id, newIsPublic);
-                  messenger.showSnackBar(SnackBar(
-                    content: Text(newIsPublic
-                        ? 'Playlist is now public'
-                        : 'Playlist is now private'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                } catch (_) {
-                  messenger.showSnackBar(const SnackBar(
-                    content: Text('Failed to update playlist privacy'),
-                    backgroundColor: Color(0xFF3A1A1A),
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                }
-              },
-            ),
-            // Delete
-            _optionRow(
-              icon: Icons.delete_outline,
-              label: 'Delete',
-              onTap: () {
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                nav.pop();
-                ref.read(playlistsProvider.notifier).remove(playlist.id).then((_) {
-                  messenger.showSnackBar(const SnackBar(
-                    content: Text('Playlist deleted'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                }).catchError((_) {
-                  messenger.showSnackBar(const SnackBar(
-                    content: Text('Could not delete playlist. Please try again.'),
-                    backgroundColor: Color(0xFF3A1A1A),
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                });
-              },
-            ),
-            // Share
-            _optionRow(
-              icon: Icons.share_rounded,
-              label: 'Share',
-              onTap: () {
-                Navigator.pop(context);
-                showModalBottomSheet(
-                  context: context,
-                  backgroundColor: _surface,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  builder: (_) => SharePlaylistSheet(playlist: playlist),
-                );
-              },
-            ),
-            // Clearance for mini player (64dp height + 8dp bottom margin)
-            const SizedBox(height: 72),
           ],
         ),
       ),
     );
   }
-
-  Widget _optionRow({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) =>
-      GestureDetector(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 16),
-              Text(label,
-                  style:
-                      const TextStyle(color: Colors.white, fontSize: 15)),
-            ],
-          ),
-        ),
-      );
 }
 
 // ── Create bottom sheet ───────────────────────────────────────────────────────

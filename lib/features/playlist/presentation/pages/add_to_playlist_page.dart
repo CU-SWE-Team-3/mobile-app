@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/network/dio_client.dart';
+import '../../data/repositories/playlist_repository.dart';
+import '../providers/playlists_provider.dart';
 
 // ── Lightweight playlist model (API-backed) ──────────────────────────────────
 
@@ -25,18 +25,6 @@ class _ApiPlaylist {
     required this.isPublic,
   });
 
-  factory _ApiPlaylist.fromJson(Map<String, dynamic> json) {
-    final tracks = json['tracks'];
-    final trackCount = (json['trackCount'] as num?)?.toInt() ??
-        (tracks is List ? tracks.length : 0);
-    return _ApiPlaylist(
-      id: json['_id'] as String? ?? '',
-      title: json['title'] as String? ?? '',
-      artworkUrl: json['artworkUrl'] as String?,
-      trackCount: trackCount,
-      isPublic: json['isPublic'] as bool? ?? true,
-    );
-  }
 }
 
 // ── Page state ───────────────────────────────────────────────────────────────
@@ -78,10 +66,11 @@ class _PageState {
 
 class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
   final String trackId;
-  final Dio _dio;
+  final PlaylistRepository _repository;
 
-  _AddToPlaylistNotifier({required this.trackId, required Dio dio})
-      : _dio = dio,
+  _AddToPlaylistNotifier(
+      {required this.trackId, required PlaylistRepository repository})
+      : _repository = repository,
         super(const _PageState()) {
     _fetchPlaylists();
   }
@@ -134,32 +123,11 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
 
     state = state.copyWith(submitting: true, clearError: true);
     try {
-      // 1. Fetch current track list (full replacement required by API)
-      final getResp = await _dio.get('/playlists/$playlistId');
-      final playlistData =
-          getResp.data['data']['playlist'] as Map<String, dynamic>? ?? {};
-      final rawTracks =
-          (playlistData['tracks'] as List<dynamic>?) ?? [];
-      final currentIds = rawTracks.map((t) {
-        if (t is String) return t;
-        if (t is Map) return (t as Map<String, dynamic>)['_id'] as String? ?? '';
-        return '';
-      }).where((id) => id.isNotEmpty).toList();
+      final newCount = await _repository.appendTrack(playlistId, trackId);
 
-      // 2. Append (guard against duplicates)
-      if (!currentIds.contains(trackId)) {
-        currentIds.add(trackId);
-      }
-
-      // 3. PUT full updated array
-      await _dio.put(
-        '/playlists/$playlistId/tracks',
-        data: {'tracks': currentIds},
-      );
-
-      // 4. Sync the real track count back into the local cache so that
-      //    Library → Playlists shows the correct number immediately.
-      await _syncLocalTrackCount(playlistId, currentIds.length);
+      // Sync the real track count back into the local cache so that
+      // Library → Playlists shows the correct number immediately.
+      await _syncLocalTrackCount(playlistId, newCount);
 
       if (mounted) state = state.copyWith(submitting: false);
       return true;
@@ -205,7 +173,10 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
 
 final _addToPlaylistProvider = StateNotifierProvider.autoDispose
     .family<_AddToPlaylistNotifier, _PageState, String>(
-  (ref, trackId) => _AddToPlaylistNotifier(trackId: trackId, dio: dioClient.dio),
+  (ref, trackId) => _AddToPlaylistNotifier(
+    trackId: trackId,
+    repository: ref.read(playlistRepositoryProvider),
+  ),
 );
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -422,7 +393,6 @@ class _PlaylistRow extends StatelessWidget {
       ),
     );
   }
-
 
   Widget _artworkPlaceholder() => const ColoredBox(
         color: Color(0xFF2A2A2A),

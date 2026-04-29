@@ -8,7 +8,7 @@ import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
-import 'package:soundcloud_clone/features/library/presentation/pages/library_playlists_page.dart';
+import 'package:soundcloud_clone/features/playlist/presentation/providers/playlists_provider.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
 import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
 import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
