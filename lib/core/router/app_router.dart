@@ -27,10 +27,13 @@ import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
 import '../../features/feed/presentation/pages/electronic_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/chill_genre_page.dart';
+import '../../features/feed/presentation/pages/party_genre_page.dart';
+import '../../features/feed/presentation/pages/workout_genre_page.dart';
 import '../../features/feed/presentation/pages/pop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/pop_genre_page.dart';
 import '../../features/feed/presentation/pages/rnb_genre_page.dart';
 import '../../features/feed/presentation/pages/rnb_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/techno_genre_page.dart';
 import '../../features/feed/presentation/pages/genre_results_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
@@ -89,6 +92,8 @@ import '../../features/premium/presentation/pages/premium_paywall_page.dart';
 import '../../features/premium/presentation/pages/pricing_tiers_page.dart';
 import '../../features/premium/presentation/pages/subscription_status_page.dart';
 import '../../features/premium/presentation/pages/offline_download_page.dart';
+import '../../features/premium/presentation/pages/payment_success_page.dart';
+import '../../features/premium/presentation/pages/explore_features_page.dart';
 
 import '../../features/settings/presentation/pages/settings_main_page.dart';
 import '../../features/settings/presentation/pages/account_settings_page.dart';
@@ -189,6 +194,15 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'genre/chill',
                     builder: (_, __) => const ChillGenrePage()),
+                GoRoute(
+                    path: 'genre/party',
+                    builder: (_, __) => const PartyGenrePage()),
+                GoRoute(
+                    path: 'genre/workout',
+                    builder: (_, __) => const WorkoutGenrePage()),
+                GoRoute(
+                    path: 'genre/techno',
+                    builder: (_, __) => const TechnoGenrePage()),
               ],
             ),
           ],
@@ -315,11 +329,20 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'offline',
                     builder: (_, __) => const OfflineDownloadPage()),
+                GoRoute(
+                    path: 'features',
+                    builder: (_, __) => const ExploreFeaturesPage()),
               ],
             ),
           ],
         ),
       ],
+    ),
+
+    // ── PAYMENT SUCCESS (global, shown after Stripe return) ───────────
+    GoRoute(
+      path: '/payment-success',
+      builder: (_, __) => const PaymentSuccessPage(),
     ),
 
     // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─

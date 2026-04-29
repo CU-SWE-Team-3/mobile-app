@@ -121,7 +121,6 @@ void main() {
         trackId: 't1',
         position: 30.5,
         isPlaying: true,
-        volume: 0.8,
       );
 
       final body = verify(() => mockDio.put(
@@ -129,10 +128,9 @@ void main() {
             data: captureAny(named: 'data'),
           )).captured.first as Map<String, dynamic>;
 
-      expect(body['trackId'], 't1');
-      expect(body['position'], 30.5);
+      expect(body['currentTrack'], 't1');
+      expect(body['currentTime'], 30.5);
       expect(body['isPlaying'], isTrue);
-      expect(body['volume'], 0.8);
     });
 
     test('swallows DioException silently', () async {
@@ -142,7 +140,7 @@ void main() {
       // Should not throw
       await expectLater(
         service.syncPlayerState(
-            trackId: 't1', position: 0, isPlaying: false, volume: 0.5),
+            trackId: 't1', position: 0, isPlaying: false),
         completes,
       );
     });

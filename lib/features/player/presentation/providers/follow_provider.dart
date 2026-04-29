@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
+import '../../../../core/providers/session_provider.dart';
 
 class FollowState {
   final bool isFollowing;
@@ -68,6 +69,7 @@ class FollowNotifier extends StateNotifier<FollowState> {
 /// Automatically triggers [checkStatus] when first created for an artistId.
 final followProvider = StateNotifierProvider
     .family<FollowNotifier, FollowState, String>((ref, artistId) {
+  ref.watch(sessionUserIdProvider);
   final notifier = FollowNotifier();
   Future.microtask(() => notifier.checkStatus(artistId));
   return notifier;

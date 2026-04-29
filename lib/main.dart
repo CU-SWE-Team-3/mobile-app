@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/network/dio_client.dart';
 import 'core/providers/session_provider.dart';
@@ -13,6 +14,7 @@ import 'core/services/local_notification_service.dart';
 import 'core/themes/app_theme.dart';
 import 'features/messaging/presentation/providers/messaging_providers.dart';
 import 'features/notifications/presentation/providers/notification_provider.dart';
+import 'features/premium/presentation/providers/subscription_provider.dart';
 import 'injection_container.dart';
 
 void main() async {
@@ -36,7 +38,7 @@ class MyApp extends ConsumerStatefulWidget {
   ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends ConsumerState<MyApp> {
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<void>? _authInvalidatedSub;
@@ -52,7 +54,40 @@ class _MyAppState extends ConsumerState<MyApp> {
       ref.read(sessionUserIdProvider.notifier).state = '';
       appRouter.go('/login-screen');
     });
+    WidgetsBinding.instance.addObserver(this);
     _initDeepLinks();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh subscription when user returns from background (e.g., from Stripe browser)
+    if (state == AppLifecycleState.resumed) {
+      _onResume();
+    }
+  }
+
+  Future<void> _onResume() async {
+    try {
+      await ref.read(subscriptionProvider.notifier).refreshFromProfile();
+      // Only navigate to PaymentSuccessPage when a checkout was explicitly
+      // started from this app (pendingCheckout flag). Without this gate every
+      // app-resume event — file picker close, login, keyboard dismiss — would
+      // wrongly open PaymentSuccessPage for any already-subscribed user.
+      final prefs = await SharedPreferences.getInstance();
+      final pending = prefs.getBool('pendingCheckout') ?? false;
+      if (!pending) return;
+      await prefs.setBool('pendingCheckout', false); // consume — one-shot
+      final sub = ref.read(subscriptionProvider);
+      if (sub.isPremium) {
+        try {
+          appRouter.go('/payment-success');
+        } catch (_) {
+          // ignore navigation errors during resume
+        }
+      }
+    } catch (_) {
+      // Ignore errors during resume refresh
+    }
   }
 
   Future<void> _initDeepLinks() async {
@@ -67,6 +102,16 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   Future<void> _handleLink(Uri uri) async {
+    // Payment return paths — no token required
+    if (uri.path == '/payment-success') {
+      appRouter.go('/payment-success');
+      return;
+    }
+    if (uri.path == '/payment-cancel') {
+      appRouter.go('/upgrade');
+      return;
+    }
+
     final token = uri.queryParameters['token'];
     if (token == null || token.isEmpty) return;
 
@@ -86,6 +131,7 @@ class _MyAppState extends ConsumerState<MyApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
     _authInvalidatedSub?.cancel();
     super.dispose();

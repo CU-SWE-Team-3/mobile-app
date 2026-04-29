@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as path;
 import 'package:dio/dio.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/upload_track.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/providers/session_provider.dart';
 
 class UploadState {
   final UploadTrack track;
@@ -128,18 +128,6 @@ class UploadNotifier extends StateNotifier<UploadState> {
       return;
     }
 
-    // Role pre-check: only Artist accounts can upload
-    final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('role') ?? '';
-    if (role.toLowerCase() != 'artist') {
-      state = state.copyWith(
-        isUploading: false,
-        needsRoleUpgrade: true,
-        error: 'Artist role required to upload tracks.',
-      );
-      return;
-    }
-
     state = state.copyWith(
       isUploading: true,
       uploadProgress: 0.0,
@@ -148,6 +136,37 @@ class UploadNotifier extends StateNotifier<UploadState> {
       processingState: null,
       needsRoleUpgrade: false,
     );
+
+    // Pre-check: enforce upload limits for Free / Go+ (max 3 tracks). If plan is Pro, allow.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final permalink = prefs.getString('permalink') ?? '';
+      if (permalink.isNotEmpty) {
+        final profileResp = await dioClient.dio.get('/profile/$permalink');
+        final user = profileResp.data['data']?['user'] as Map<String, dynamic>?;
+        final planType = (user?['subscription']?['planType'] as String?) ??
+            (user?['planType'] as String?) ??
+            prefs.getString('subscriptionPlanType');
+        if (planType != null && planType != 'Pro') {
+          int? tracksCount;
+          tracksCount = (user?['counts']?['tracks'] as int?) ??
+              (user?['tracksCount'] as int?) ??
+              (user?['trackCount'] as int?);
+          tracksCount ??= (user?['tracks'] as List?)?.length;
+          if (tracksCount != null && tracksCount >= 3) {
+            state = state.copyWith(
+              isUploading: false,
+              needsRoleUpgrade: true,
+              error:
+                  'Upload limit reached. Free and Go+ accounts are limited to 3 tracks. Upgrade to Artist Pro for unlimited uploads.',
+            );
+            return;
+          }
+        }
+      }
+    } catch (_) {
+      // tolerate failures here — let the backend enforce limits if we cannot determine count
+    }
 
     try {
       final audioFile = File(state.track.audioFilePath!);
@@ -208,7 +227,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
         uploadInitBody['tags'] = state.track.tags;
       }
       if (state.track.releaseDate != null) {
-        uploadInitBody['releaseDate'] = state.track.releaseDate!.toIso8601String();
+        uploadInitBody['releaseDate'] =
+            state.track.releaseDate!.toIso8601String();
       }
 
       final uploadInitResponse = await dioClient.dio.post(
@@ -249,7 +269,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
         ),
       );
 
-      if (azureResponse.statusCode == null || azureResponse.statusCode! >= 300) {
+      if (azureResponse.statusCode == null ||
+          azureResponse.statusCode! >= 300) {
         throw Exception(
           'Azure upload rejected (HTTP ${azureResponse.statusCode}). '
           'Ensure Content-Type matches the format declared during initiation.',
@@ -267,7 +288,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
       // Step D: PATCH /tracks/{trackId}/metadata — non-null fields only
       state = state.copyWith(uploadProgress: 0.85);
       final metadataBody = <String, dynamic>{};
-      if (state.track.title.isNotEmpty) metadataBody['title'] = state.track.title;
+      if (state.track.title.isNotEmpty)
+        metadataBody['title'] = state.track.title;
       if ((state.track.description ?? '').trim().isNotEmpty) {
         metadataBody['description'] = state.track.description!.trim();
       }
@@ -277,10 +299,12 @@ class UploadNotifier extends StateNotifier<UploadState> {
       }
       metadataBody['isPublic'] = state.track.isPublic;
       if (state.track.releaseDate != null) {
-        metadataBody['releaseDate'] = state.track.releaseDate!.toIso8601String();
+        metadataBody['releaseDate'] =
+            state.track.releaseDate!.toIso8601String();
       }
       if (metadataBody.isNotEmpty) {
-        await dioClient.dio.patch('/tracks/$trackId/metadata', data: metadataBody);
+        await dioClient.dio
+            .patch('/tracks/$trackId/metadata', data: metadataBody);
       }
 
       // Step E: PATCH /tracks/{trackId}/artwork — multipart, only if cover selected
@@ -325,7 +349,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
       try {
         final response = await dioClient.dio.get('/tracks/$permalink');
-        final processingState = response.data['data']['track']['processingState'] as String?;
+        final processingState =
+            response.data['data']['track']['processingState'] as String?;
 
         if (processingState == 'Finished') {
           return;
@@ -342,7 +367,9 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
   // Get MIME type from file extension
   String _getMimeType(String filepath) {
-    final ext = path.extension(filepath).toLowerCase();
+    final name = filepath.split(RegExp(r'[\\/]')).last;
+    final dotIndex = name.lastIndexOf('.');
+    final ext = dotIndex >= 0 ? name.substring(dotIndex).toLowerCase() : '';
     switch (ext) {
       case '.mp3':
         return 'audio/mpeg';
@@ -442,6 +469,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
 final uploadProvider =
     StateNotifierProvider<UploadNotifier, UploadState>((ref) {
+  ref.watch(sessionUserIdProvider);
   final dioClient = ref.watch(dioClientProvider);
   return UploadNotifier(dioClient);
 });
@@ -449,6 +477,7 @@ final uploadProvider =
 // Provider for list of uploaded tracks
 final uploadedTracksProvider =
     StateNotifierProvider<UploadedTracksNotifier, List<UploadTrack>>((ref) {
+  ref.watch(sessionUserIdProvider);
   return UploadedTracksNotifier();
 });
 

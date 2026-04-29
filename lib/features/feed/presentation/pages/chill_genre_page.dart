@@ -125,7 +125,7 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
               shadowColor: Colors.transparent,
               automaticallyImplyLeading: false,
               pinned: true,
-              expandedHeight: 320,
+              expandedHeight: 195,
               leadingWidth: 68,
               leading: SafeArea(
                 child: Padding(
@@ -195,6 +195,7 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
                   dividerColor: Colors.transparent,
                   indicatorColor: Colors.white,
                   indicatorWeight: 2,
+                  indicatorSize: TabBarIndicatorSize.tab,
                   labelColor: Colors.white,
                   unselectedLabelColor: Colors.white70,
                   labelStyle: const TextStyle(

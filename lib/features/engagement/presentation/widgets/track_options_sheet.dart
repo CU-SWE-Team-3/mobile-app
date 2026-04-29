@@ -1,7 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
@@ -12,8 +15,32 @@ import '../../../../core/providers/session_provider.dart';
 import '../../../messaging/domain/entities/participant.dart';
 import '../../../messaging/presentation/providers/messaging_providers.dart';
 import '../../../messaging/presentation/widgets/send_to_sheet.dart';
+import '../../../premium/data/models/offline_downloaded_track.dart';
+import '../../../premium/data/services/offline_downloads_repository.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
 
-class TrackOptionsSheet extends ConsumerWidget {
+import 'dart:math';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
+import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+
+import '../pages/likers_list_page.dart';
+import '../pages/reposters_list_page.dart';
+import '../../../playlist/presentation/pages/add_to_playlist_page.dart';
+import '../../../premium/data/models/offline_downloaded_track.dart';
+import '../../../premium/data/services/offline_downloads_repository.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
+
+class TrackOptionsSheet extends ConsumerStatefulWidget {
   final String trackId;
   final String? title;
   final String? artistName;
@@ -34,16 +61,111 @@ class TrackOptionsSheet extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final hasDetails = title != null && artistName != null;
+  ConsumerState<TrackOptionsSheet> createState() => _TrackOptionsSheetState();
+}
+
+class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
+  bool _isDownloading = false;
+
+  Future<void> _handleDownload() async {
+    debugPrint(
+        '[Download] tapped from options sheet, trackId=${widget.trackId}');
+
+    var sub = ref.read(subscriptionProvider);
+    debugPrint(
+        '[Download] isPremium=${sub.isPremium}, currentPlan=${sub.planType}');
+
+    if (!sub.isPremium) {
+      await ref.read(subscriptionProvider.notifier).refreshFromProfile();
+      sub = ref.read(subscriptionProvider);
+      debugPrint('[Download] after refresh — isPremium=${sub.isPremium}');
+    }
+
+    if (!sub.isPremium) {
+      if (!mounted) return;
+      final scaffold = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      scaffold.showSnackBar(
+        const SnackBar(
+          content: Text('Offline downloads require Go+ or Artist Pro.'),
+          backgroundColor: Color(0xFF333333),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isDownloading = true);
+    debugPrint('[Download] calling GET /tracks/${widget.trackId}/download');
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final localPath = '${dir.path}/offline_${widget.trackId}.mp3';
+      final dioClient = ref.read(dioClientProvider);
+      await dioClient.dio
+          .download('/tracks/${widget.trackId}/download', localPath);
+      debugPrint('[Download] backend responded 200 — saving metadata');
+
+      final repo = ref.read(offlineDownloadsRepositoryProvider);
+      await repo.save(OfflineDownloadedTrack(
+        trackId: widget.trackId,
+        title: widget.title ?? 'Unknown',
+        artistName: widget.artistName ?? 'Unknown',
+        artworkUrl: widget.artworkUrl,
+        downloadedAt: DateTime.now(),
+        localPath: localPath,
+        planType: sub.planType,
+      ));
+      ref.invalidate(offlineDownloadsProvider);
+
+      if (!mounted) return;
+      final scaffold = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      scaffold.showSnackBar(
+        const SnackBar(
+          content: Text('Track saved for offline listening.'),
+          backgroundColor: Color(0xFF333333),
+        ),
+      );
+    } on DioException catch (e) {
+      debugPrint('[Download] failed — status: ${e.response?.statusCode}, '
+          'body: ${e.response?.data}');
+      if (!mounted) return;
+      setState(() => _isDownloading = false);
+      String msg;
+      if (e.response?.statusCode == 401) {
+        msg = 'Please log in again.';
+      } else if (e.response?.statusCode == 403) {
+        final data = e.response?.data;
+        msg = (data is Map ? data['message'] as String? : null) ??
+            'Offline downloads require Go+ or Artist Pro.';
+      } else {
+        msg = 'Download failed. Please try again.';
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: Colors.red),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isDownloading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Download failed. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDetails = widget.title != null && widget.artistName != null;
     final playerTrack = PlayerTrack(
-      id: trackId,
-      title: title ?? 'Track',
-      artist: artistName ?? 'Unknown artist',
-      artistId: artistId,
-      artistPermalink: artistPermalink,
+      id: widget.trackId,
+      title: widget.title ?? 'Track',
+      artist: widget.artistName ?? 'Unknown artist',
+      artistId: widget.artistId,
+      artistPermalink: widget.artistPermalink,
       audioUrl: '',
-      coverUrl: artworkUrl,
+      coverUrl: widget.artworkUrl,
     );
 
     void showSoon(String label) {
@@ -82,7 +204,11 @@ class TrackOptionsSheet extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (hasDetails) _TrackSheetHeader(title: title!, artist: artistName!, artworkUrl: artworkUrl),
+              if (hasDetails)
+                _TrackSheetHeader(
+                    title: widget.title!,
+                    artist: widget.artistName!,
+                    artworkUrl: widget.artworkUrl),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 18, 16, 8),
                 child: Text(
@@ -130,8 +256,7 @@ class TrackOptionsSheet extends ConsumerWidget {
                               padding: const EdgeInsets.only(right: 10),
                               child: GestureDetector(
                                 onTap: () async {
-                                  final messenger =
-                                      ScaffoldMessenger.of(ctx);
+                                  final messenger = ScaffoldMessenger.of(ctx);
                                   Navigator.pop(ctx);
                                   try {
                                     await repo.sendMessage(
@@ -140,10 +265,8 @@ class TrackOptionsSheet extends ConsumerWidget {
                                       attachmentId: trackId,
                                     );
                                     messenger.showSnackBar(SnackBar(
-                                      content: Text(
-                                          'Sent to ${c.displayName}'),
-                                      backgroundColor:
-                                          const Color(0xFF333333),
+                                      content: Text('Sent to ${c.displayName}'),
+                                      backgroundColor: const Color(0xFF333333),
                                       behavior: SnackBarBehavior.floating,
                                     ));
                                   } catch (_) {
@@ -192,20 +315,34 @@ class TrackOptionsSheet extends ConsumerWidget {
                       },
                     ),
                     const SizedBox(width: 10),
-                    const _ShareButton(icon: Icons.content_copy_outlined, label: 'Copy Link'),
+                    const _ShareButton(
+                        icon: Icons.content_copy_outlined, label: 'Copy Link'),
                     const SizedBox(width: 10),
-                    const _ShareButton(icon: Icons.chat, label: 'WhatsApp', green: true),
+                    const _ShareButton(
+                        icon: Icons.chat, label: 'WhatsApp', green: true),
                     const SizedBox(width: 10),
-                    const _ShareButton(icon: Icons.check_circle_outline, label: 'Status', green: true),
+                    const _ShareButton(
+                        icon: Icons.check_circle_outline,
+                        label: 'Status',
+                        green: true),
                     const SizedBox(width: 10),
                     const _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              _OptionTile(icon: Icons.favorite_border, label: 'Like', onTap: () => showSoon('Like coming soon')),
-              _OptionTile(icon: Icons.format_list_bulleted, label: 'Play Next', onTap: playNext),
-              _OptionTile(icon: Icons.format_list_numbered, label: 'Play Last', onTap: playLast),
+              _OptionTile(
+                  icon: Icons.favorite_border,
+                  label: 'Like',
+                  onTap: () => showSoon('Like coming soon')),
+              _OptionTile(
+                  icon: Icons.format_list_bulleted,
+                  label: 'Play Next',
+                  onTap: playNext),
+              _OptionTile(
+                  icon: Icons.format_list_numbered,
+                  label: 'Play Last',
+                  onTap: playLast),
               _OptionTile(
                 icon: Icons.playlist_add_outlined,
                 label: 'Add to playlist',
@@ -214,24 +351,46 @@ class TrackOptionsSheet extends ConsumerWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => AddToPlaylistPage(trackId: trackId),
+                      builder: (_) =>
+                          AddToPlaylistPage(trackId: widget.trackId),
                     ),
                   );
                 },
               ),
-              _OptionTile(icon: Icons.wifi_tethering_outlined, label: 'Start station', onTap: () => showSoon('Start station coming soon')),
+              _OptionTile(
+                  icon: Icons.wifi_tethering_outlined,
+                  label: 'Start station',
+                  onTap: () => showSoon('Start station coming soon')),
+              _isDownloading
+                  ? const ListTile(
+                      leading: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.orange),
+                      ),
+                      title: Text('Downloading...',
+                          style: TextStyle(color: Colors.white70)),
+                    )
+                  : _OptionTile(
+                      icon: Icons.download_outlined,
+                      label: 'Download',
+                      onTap: _handleDownload,
+                    ),
               const Divider(color: Color(0xFF2A2A2A), height: 1),
               _OptionTile(
                 icon: Icons.person_outline,
                 label: 'Go to artist profile',
                 onTap: () {
-                  if (artistId != null && artistPermalink != null && artistName != null) {
+                  if (widget.artistId != null &&
+                      widget.artistPermalink != null &&
+                      widget.artistName != null) {
                     Navigator.pop(context);
                     navigateToUserProfile(
                       context,
-                      userId: artistId!,
-                      permalink: artistPermalink!,
-                      displayName: artistName!,
+                      userId: widget.artistId!,
+                      permalink: widget.artistPermalink!,
+                      displayName: widget.artistName!,
                     );
                   } else {
                     showSoon('Artist profile unavailable');
@@ -246,10 +405,10 @@ class TrackOptionsSheet extends ConsumerWidget {
                   context.push(
                     '/comments',
                     extra: {
-                      'trackId': trackId,
-                      'trackTitle': title,
-                      'trackArtist': artistName,
-                      'trackArtworkUrl': artworkUrl,
+                      'trackId': widget.trackId,
+                      'trackTitle': widget.title,
+                      'trackArtist': widget.artistName,
+                      'trackArtworkUrl': widget.artworkUrl,
                       'currentPositionSeconds': 0,
                     },
                   );
@@ -269,7 +428,7 @@ class TrackOptionsSheet extends ConsumerWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => LikersListPage(trackId: trackId),
+                      builder: (_) => LikersListPage(trackId: widget.trackId),
                     ),
                   );
                 },
@@ -282,13 +441,20 @@ class TrackOptionsSheet extends ConsumerWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RepostersListPage(trackId: trackId),
+                      builder: (_) =>
+                          RepostersListPage(trackId: widget.trackId),
                     ),
                   );
                 },
               ),
-              _OptionTile(icon: Icons.graphic_eq, label: 'Behind this track', onTap: () => showSoon('Behind this track coming soon')),
-              _OptionTile(icon: Icons.outlined_flag, label: 'Report', onTap: () => showSoon('Report coming soon')),
+              _OptionTile(
+                  icon: Icons.graphic_eq,
+                  label: 'Behind this track',
+                  onTap: () => showSoon('Behind this track coming soon')),
+              _OptionTile(
+                  icon: Icons.outlined_flag,
+                  label: 'Report',
+                  onTap: () => showSoon('Report coming soon')),
               const SizedBox(height: 10),
             ],
           ),
@@ -333,7 +499,8 @@ class _TrackSheetHeader extends StatelessWidget {
                   : CachedNetworkImage(
                       imageUrl: artworkUrl!,
                       fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => const _SheetArtworkPlaceholder(),
+                      errorWidget: (_, __, ___) =>
+                          const _SheetArtworkPlaceholder(),
                     ),
             ),
           ),
@@ -438,7 +605,8 @@ class _ShareButton extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: green ? const Color(0xFF28D366) : const Color(0xFF2F2F2F),
+                color:
+                    green ? const Color(0xFF28D366) : const Color(0xFF2F2F2F),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: Colors.white, size: 22),

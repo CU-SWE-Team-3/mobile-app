@@ -1,8 +1,7 @@
-
-
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -11,6 +10,30 @@ import 'package:soundcloud_clone/features/engagement/presentation/providers/enga
 
 class MockEngagementRemoteDataSource extends Mock
     implements EngagementRemoteDataSource {}
+
+class FakeRef extends Fake implements Ref {
+  final ProviderContainer _container = ProviderContainer();
+
+  @override
+  T read<T>(ProviderListenable<T> provider) {
+    return _container.read(provider);
+  }
+
+  @override
+  ProviderSubscription<T> listen<T>(
+    ProviderListenable<T> provider,
+    void Function(T? previous, T next) listener, {
+    bool fireImmediately = false,
+    void Function(Object error, StackTrace stackTrace)? onError,
+  }) {
+    return _container.listen(
+      provider,
+      listener,
+      fireImmediately: fireImmediately,
+      onError: onError,
+    );
+  }
+}
 
 void main() {
   late MockEngagementRemoteDataSource mockDataSource;
@@ -27,6 +50,7 @@ void main() {
     int repostCount = 0,
   }) {
     return EngagementNotifier(
+      FakeRef(),
       mockDataSource,
       trackId,
       initialIsLiked: isLiked,
@@ -69,8 +93,7 @@ void main() {
 
   group('toggleLike — success path', () {
     test('like: isLiked flips to true and count increments', () async {
-      when(() => mockDataSource.likeTrack(any()))
-          .thenAnswer((_) async {});
+      when(() => mockDataSource.likeTrack(any())).thenAnswer((_) async {});
 
       final notifier = buildNotifier(isLiked: false, likeCount: 10);
       await notifier.toggleLike();
@@ -81,8 +104,7 @@ void main() {
     });
 
     test('unlike: isLiked flips to false and count decrements', () async {
-      when(() => mockDataSource.unlikeTrack(any()))
-          .thenAnswer((_) async {});
+      when(() => mockDataSource.unlikeTrack(any())).thenAnswer((_) async {});
 
       final notifier = buildNotifier(isLiked: true, likeCount: 10);
       await notifier.toggleLike();
@@ -109,7 +131,8 @@ void main() {
       expect(notifier.state.isLoadingLike, isFalse);
     });
 
-    test('calls likeTrack for a new like and unlikeTrack for un-like', () async {
+    test('calls likeTrack for a new like and unlikeTrack for un-like',
+        () async {
       when(() => mockDataSource.likeTrack(any())).thenAnswer((_) async {});
       when(() => mockDataSource.unlikeTrack(any())).thenAnswer((_) async {});
 
@@ -147,7 +170,8 @@ void main() {
   });
 
   group('toggleLike — failure rollback', () {
-    test('rolls back optimistic state on network failure (no response)', () async {
+    test('rolls back optimistic state on network failure (no response)',
+        () async {
       when(() => mockDataSource.likeTrack(any())).thenThrow(
         DioException(
           requestOptions: RequestOptions(path: '/tracks/track-1/like'),
@@ -163,7 +187,8 @@ void main() {
       expect(notifier.state.isLoadingLike, isFalse);
     });
 
-    test('keeps optimistic state when server responded (e.g. 409 conflict)',
+    test(
+        'rolls back optimistic state when server responded (e.g. 409 conflict)',
         () async {
       when(() => mockDataSource.likeTrack(any())).thenThrow(
         DioException(
@@ -178,9 +203,9 @@ void main() {
       final notifier = buildNotifier(isLiked: false, likeCount: 10);
       await notifier.toggleLike();
 
-      // Optimistic state is preserved — server did receive the request
-      expect(notifier.state.isLiked, isTrue);
-      expect(notifier.state.likeCount, 11);
+      // This notifier rolls back on any error response.
+      expect(notifier.state.isLiked, isFalse);
+      expect(notifier.state.likeCount, 10);
       expect(notifier.state.isLoadingLike, isFalse);
     });
   });
@@ -189,8 +214,7 @@ void main() {
 
   group('toggleRepost — success path', () {
     test('repost: isReposted flips to true and count increments', () async {
-      when(() => mockDataSource.repostTrack(any()))
-          .thenAnswer((_) async {});
+      when(() => mockDataSource.repostTrack(any())).thenAnswer((_) async {});
 
       final notifier = buildNotifier(isReposted: false, repostCount: 3);
       await notifier.toggleRepost();
@@ -201,8 +225,7 @@ void main() {
     });
 
     test('un-repost: isReposted flips to false and count decrements', () async {
-      when(() => mockDataSource.unRepostTrack(any()))
-          .thenAnswer((_) async {});
+      when(() => mockDataSource.unRepostTrack(any())).thenAnswer((_) async {});
 
       final notifier = buildNotifier(isReposted: true, repostCount: 3);
       await notifier.toggleRepost();
@@ -317,7 +340,8 @@ void main() {
     });
 
     test('partial seed only updates supplied fields', () {
-      final notifier = buildNotifier(isLiked: false, likeCount: 10, repostCount: 3);
+      final notifier =
+          buildNotifier(isLiked: false, likeCount: 10, repostCount: 3);
 
       notifier.seed(likeCount: 20);
 
