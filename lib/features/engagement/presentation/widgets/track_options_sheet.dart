@@ -8,6 +8,10 @@ import 'package:soundcloud_clone/features/player/presentation/providers/player_p
 import '../pages/likers_list_page.dart';
 import '../pages/reposters_list_page.dart';
 import '../../../playlist/presentation/pages/add_to_playlist_page.dart';
+import '../../../../core/providers/session_provider.dart';
+import '../../../messaging/domain/entities/participant.dart';
+import '../../../messaging/presentation/providers/messaging_providers.dart';
+import '../../../messaging/presentation/widgets/send_to_sheet.dart';
 
 class TrackOptionsSheet extends ConsumerWidget {
   final String trackId;
@@ -91,17 +95,77 @@ class TrackOptionsSheet extends ConsumerWidget {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: const [
-                    _SendToAvatar(name: 'Mohamed Hany'),
-                    SizedBox(width: 10),
-                    _SendToAvatar(name: 'Marwan Pablo'),
-                    SizedBox(width: 10),
-                    _SendToAvatar(name: 'Two Feet'),
-                  ],
-                ),
+              Consumer(
+                builder: (ctx, cRef, _) {
+                  final myId = cRef.watch(sessionUserIdProvider);
+                  final convAsync = cRef.watch(conversationsProvider);
+                  return convAsync.when(
+                    loading: () => const SizedBox(
+                      height: 72,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFFF5500),
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ),
+                    error: (_, __) => const SizedBox.shrink(),
+                    data: (conversations) {
+                      final contacts = <Participant>[];
+                      for (final conv in conversations) {
+                        final other = conv.participants
+                            .where((p) => p.id != myId && p.id.isNotEmpty)
+                            .firstOrNull;
+                        if (other != null) contacts.add(other);
+                        if (contacts.length == 6) break;
+                      }
+                      if (contacts.isEmpty) return const SizedBox.shrink();
+                      final repo = cRef.read(messagingRepositoryProvider);
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: contacts.map((c) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: GestureDetector(
+                                onTap: () async {
+                                  final messenger =
+                                      ScaffoldMessenger.of(ctx);
+                                  Navigator.pop(ctx);
+                                  try {
+                                    await repo.sendMessage(
+                                      receiverId: c.id,
+                                      attachmentType: 'track',
+                                      attachmentId: trackId,
+                                    );
+                                    messenger.showSnackBar(SnackBar(
+                                      content: Text(
+                                          'Sent to ${c.displayName}'),
+                                      backgroundColor:
+                                          const Color(0xFF333333),
+                                      behavior: SnackBarBehavior.floating,
+                                    ));
+                                  } catch (_) {
+                                    messenger.showSnackBar(const SnackBar(
+                                      content: Text('Failed to send'),
+                                      backgroundColor: Color(0xFFCC3333),
+                                      behavior: SnackBarBehavior.floating,
+                                    ));
+                                  }
+                                },
+                                child: _SendToAvatar(
+                                  name: c.displayName,
+                                  avatarUrl: c.avatarUrl,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 22, 16, 8),
@@ -118,16 +182,23 @@ class TrackOptionsSheet extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
-                  children: const [
-                    _ShareButton(icon: Icons.send_outlined, label: 'Message'),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.content_copy_outlined, label: 'Copy Link'),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.chat, label: 'WhatsApp', green: true),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.check_circle_outline, label: 'Status', green: true),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
+                  children: [
+                    _ShareButton(
+                      icon: Icons.send_outlined,
+                      label: 'Message',
+                      onTap: () {
+                        Navigator.pop(context);
+                        showSendToSheet(context, ShareableTrack(trackId));
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    const _ShareButton(icon: Icons.content_copy_outlined, label: 'Copy Link'),
+                    const SizedBox(width: 10),
+                    const _ShareButton(icon: Icons.chat, label: 'WhatsApp', green: true),
+                    const SizedBox(width: 10),
+                    const _ShareButton(icon: Icons.check_circle_outline, label: 'Status', green: true),
+                    const SizedBox(width: 10),
+                    const _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
                   ],
                 ),
               ),
@@ -301,19 +372,33 @@ class _TrackSheetHeader extends StatelessWidget {
 
 class _SendToAvatar extends StatelessWidget {
   final String name;
+  final String? avatarUrl;
 
-  const _SendToAvatar({required this.name});
+  const _SendToAvatar({required this.name, this.avatarUrl});
 
   @override
   Widget build(BuildContext context) {
+    final isValid = avatarUrl != null &&
+        avatarUrl!.isNotEmpty &&
+        avatarUrl!.startsWith('http');
     return SizedBox(
       width: 54,
       child: Column(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 22,
-            backgroundColor: Color(0xFF3A3A3A),
-            child: Icon(Icons.person, color: Colors.white70),
+            backgroundColor: const Color(0xFF3A3A3A),
+            backgroundImage:
+                isValid ? CachedNetworkImageProvider(avatarUrl!) : null,
+            child: !isValid
+                ? Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(height: 6),
           Text(
@@ -332,36 +417,41 @@ class _ShareButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool green;
+  final VoidCallback? onTap;
 
   const _ShareButton({
     required this.icon,
     required this.label,
     this.green = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 54,
-      child: Column(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: green ? const Color(0xFF28D366) : const Color(0xFF2F2F2F),
-              shape: BoxShape.circle,
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 54,
+        child: Column(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: green ? const Color(0xFF28D366) : const Color(0xFF2F2F2F),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.white, size: 22),
             ),
-            child: Icon(icon, color: Colors.white, size: 22),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }

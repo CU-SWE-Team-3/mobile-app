@@ -215,9 +215,33 @@ class EngagementRemoteDataSource {
         continue;
       }
 
-      final track = _asStringMap(
-        itemMap['target'] ?? itemMap['track'] ?? itemMap['item'] ?? itemMap,
-      );
+      // Resolve the nested track object. Three possible shapes from the API:
+      //   A) target/track/item is a populated Map  → use it directly
+      //   B) target/track/item is a bare ObjectId string (un-populated ref)
+      //      → use itemMap for display fields but override _id with that string
+      //   C) none of those keys exist → itemMap IS the track record
+      Map<String, dynamic> track;
+      final targetVal = itemMap['target'];
+      final trackVal  = itemMap['track'];
+      final itemVal   = itemMap['item'];
+
+      if (targetVal is Map) {
+        track = _asStringMap(targetVal);
+      } else if (trackVal is Map) {
+        track = _asStringMap(trackVal);
+      } else if (itemVal is Map) {
+        track = _asStringMap(itemVal);
+      } else if (targetVal is String && targetVal.isNotEmpty) {
+        // Shape B: target is an un-populated ObjectId — authoritative ID is
+        // the string itself; remaining display fields live in itemMap.
+        track = Map<String, dynamic>.from(itemMap)..['_id'] = targetVal;
+      } else if (trackVal is String && trackVal.isNotEmpty) {
+        track = Map<String, dynamic>.from(itemMap)..['_id'] = trackVal;
+      } else {
+        // Shape C: treat the item itself as the track record.
+        track = itemMap;
+      }
+
       if (track.isEmpty) continue;
 
       final summary = TrackSummary.fromJson(track);

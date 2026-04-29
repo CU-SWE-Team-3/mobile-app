@@ -1,9 +1,12 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/utils/relative_time.dart';
+import '../../domain/entities/attachment.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/participant.dart';
 import 'participant_avatar.dart';
+import 'track_attachment_card.dart';
 
 class MessageBubble extends StatelessWidget {
   final Message message;
@@ -11,6 +14,7 @@ class MessageBubble extends StatelessWidget {
   final Participant? otherParticipant;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
+  final void Function(Attachment)? onAttachmentTap;
 
   const MessageBubble({
     super.key,
@@ -19,6 +23,7 @@ class MessageBubble extends StatelessWidget {
     this.otherParticipant,
     this.onEdit,
     this.onDelete,
+    this.onAttachmentTap,
   });
 
   void _showContextMenu(BuildContext context) {
@@ -92,7 +97,14 @@ class MessageBubble extends StatelessWidget {
                     ? CrossAxisAlignment.end
                     : CrossAxisAlignment.start,
                 children: [
-                  _BubbleBody(message: message, isOwn: isOwn),
+                  _BubbleBody(
+                    message: message,
+                    isOwn: isOwn,
+                    onAttachmentTap: onAttachmentTap != null &&
+                            message.attachment != null
+                        ? () => onAttachmentTap!(message.attachment!)
+                        : null,
+                  ),
                   const SizedBox(height: 3),
                   Row(
                     mainAxisSize: MainAxisSize.min,
@@ -124,8 +136,13 @@ class MessageBubble extends StatelessWidget {
 class _BubbleBody extends StatelessWidget {
   final Message message;
   final bool isOwn;
+  final VoidCallback? onAttachmentTap;
 
-  const _BubbleBody({required this.message, required this.isOwn});
+  const _BubbleBody({
+    required this.message,
+    required this.isOwn,
+    this.onAttachmentTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -140,26 +157,31 @@ class _BubbleBody extends StatelessWidget {
           fontStyle: FontStyle.italic,
         ),
       );
-    } else if (message.attachment != null) {
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _AttachmentPill(type: message.attachment!.type),
-          if (message.content.isNotEmpty) ...[
+    } else {
+      final hasText = message.content.isNotEmpty;
+      final hasAttachment = message.attachment != null;
+
+      if (hasAttachment && hasText) {
+        content = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _attachmentWidget(message.attachment!, onAttachmentTap),
             const SizedBox(height: 6),
             _MessageText(
               content: message.content,
               isEdited: message.isEdited,
             ),
           ],
-        ],
-      );
-    } else {
-      content = _MessageText(
-        content: message.content,
-        isEdited: message.isEdited,
-      );
+        );
+      } else if (hasAttachment) {
+        content = _attachmentWidget(message.attachment!, onAttachmentTap);
+      } else {
+        content = _MessageText(
+          content: message.content,
+          isEdited: message.isEdited,
+        );
+      }
     }
 
     return Container(
@@ -176,6 +198,13 @@ class _BubbleBody extends StatelessWidget {
       ),
       child: content,
     );
+  }
+
+  Widget _attachmentWidget(Attachment attachment, VoidCallback? onTap) {
+    if (attachment.type == 'track') {
+      return TrackAttachmentCard(attachment: attachment, onTap: onTap);
+    }
+    return _AttachmentCard(attachment: attachment, onTap: onTap);
   }
 }
 
@@ -210,33 +239,146 @@ class _MessageText extends StatelessWidget {
   }
 }
 
-class _AttachmentPill extends StatelessWidget {
-  final String type;
+/// Rich in-chat preview card for track and playlist attachments.
+/// Shows artwork, title, and type badge. Gracefully degrades when
+/// rich data is absent (socket-only payload) or the entity is deleted.
+class _AttachmentCard extends StatelessWidget {
+  final Attachment attachment;
+  final VoidCallback? onTap;
 
-  const _AttachmentPill({required this.type});
+  const _AttachmentCard({required this.attachment, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final isTrack = type == 'track';
+    if (!attachment.isAvailable) {
+      return _UnavailablePlaceholder(type: attachment.type);
+    }
+
+    final isTrack = attachment.type == 'track';
+    final hasArtwork = attachment.artworkUrl != null &&
+        attachment.artworkUrl!.isNotEmpty &&
+        attachment.artworkUrl!.startsWith('http');
+    final displayTitle =
+        attachment.hasRichData ? attachment.title! : (isTrack ? 'Track' : 'Playlist');
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF111111),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFF3A3A3A)),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Artwork thumbnail (48×48)
+            SizedBox(
+              width: 52,
+              height: 52,
+              child: hasArtwork
+                  ? CachedNetworkImage(
+                      imageUrl: attachment.artworkUrl!,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => _artworkFallback(isTrack),
+                      errorWidget: (_, __, ___) => _artworkFallback(isTrack),
+                    )
+                  : _artworkFallback(isTrack),
+            ),
+            // Title + type badge
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      displayTitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isTrack ? Icons.music_note : Icons.queue_music,
+                          size: 11,
+                          color: const Color(0xFFFF5500),
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          isTrack ? 'Track' : 'Playlist',
+                          style: const TextStyle(
+                            color: Color(0xFFFF5500),
+                            fontSize: 11,
+                          ),
+                        ),
+                        if (onTap != null) ...[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 10,
+                            color: Colors.white38,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _artworkFallback(bool isTrack) => ColoredBox(
+        color: const Color(0xFF2A2A2A),
+        child: Center(
+          child: Icon(
+            isTrack ? Icons.music_note : Icons.queue_music,
+            color: Colors.white38,
+            size: 22,
+          ),
+        ),
+      );
+}
+
+class _UnavailablePlaceholder extends StatelessWidget {
+  final String type;
+
+  const _UnavailablePlaceholder({required this.type});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF333333),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF555555)),
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF3A3A3A)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            isTrack ? Icons.music_note : Icons.queue_music,
-            size: 14,
-            color: Colors.white54,
+            type == 'track' ? Icons.music_off : Icons.playlist_remove,
+            size: 16,
+            color: Colors.white38,
           ),
-          const SizedBox(width: 5),
-          Text(
-            isTrack ? 'Track' : 'Playlist',
-            style: const TextStyle(color: Colors.white54, fontSize: 13),
+          const SizedBox(width: 8),
+          const Text(
+            'Content no longer available',
+            style: TextStyle(color: Colors.white38, fontSize: 12),
           ),
         ],
       ),

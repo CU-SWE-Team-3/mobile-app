@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/entities/playlist.dart';
+import '../../../messaging/presentation/widgets/send_to_sheet.dart';
 
 // ── Stub page (router entry /playlist/share kept alive) ──────────────────────
 
@@ -206,7 +207,10 @@ class SharePlaylistSheet extends StatelessWidget {
                     icon: Icons.message_rounded,
                     label: 'Message',
                     bgColor: const Color(0xFF2A2A2A),
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.pop(context);
+                      showSendToSheet(context, ShareablePlaylist(playlist.id));
+                    },
                   ),
                 ],
               ),
