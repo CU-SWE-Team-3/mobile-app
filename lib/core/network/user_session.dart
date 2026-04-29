@@ -11,6 +11,11 @@ class UserSession {
     return prefs.getString('displayName');
   }
 
+  static Future<String?> getAvatarUrl() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('avatarUrl');
+  }
+
   static Future<String?> getAccessToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('accessToken');

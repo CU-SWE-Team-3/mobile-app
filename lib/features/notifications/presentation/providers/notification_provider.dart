@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/dio_client.dart';
@@ -60,7 +62,9 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
   NotificationNotifier(this._dioClient) : super(const NotificationState());
 
  Future<void> fetchNotifications() async {
-  debugPrint('[Notifications] token: ${_dioClient.dio.options.headers['Authorization']}');
+  debugPrint(
+    '[Notifications] token: ${_tokenSummary(_dioClient.dio.options.headers['Authorization'])}',
+  );
   state = state.copyWith(isLoading: true, clearError: true);
   try {
       final res = await _dioClient.dio.get('/notifications');
@@ -83,6 +87,26 @@ class NotificationNotifier extends StateNotifier<NotificationState> {
       state = state.copyWith(serverUnreadCount: count);
     } catch (e) {
       debugPrint('[Notifications] fetchUnreadCount failed: $e');
+    }
+  }
+
+  String _tokenSummary(Object? header) {
+    final value = header?.toString();
+    if (value == null || value.isEmpty) return 'none';
+    final token =
+        value.startsWith('Bearer ') ? value.substring('Bearer '.length) : value;
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return 'present';
+      final payload = jsonDecode(
+        utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+      ) as Map<String, dynamic>;
+      final id = payload['id'] ?? payload['sub'] ?? payload['userId'];
+      final iat = payload['iat'];
+      final exp = payload['exp'];
+      return '(id=$id iat=$iat exp=$exp)';
+    } catch (_) {
+      return 'present';
     }
   }
 

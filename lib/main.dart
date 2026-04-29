@@ -6,13 +6,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/network/dio_client.dart';
+import 'core/providers/session_provider.dart';
 import 'core/router/app_router.dart';
+import 'core/services/audio_handler_service.dart';
+import 'core/services/fcm_service.dart';
+import 'core/services/local_notification_service.dart';
 import 'core/themes/app_theme.dart';
+import 'features/messaging/presentation/providers/messaging_providers.dart';
+import 'features/notifications/presentation/providers/notification_provider.dart';
 import 'features/premium/presentation/providers/subscription_provider.dart';
 import 'injection_container.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await FcmService.initializeCore();
+  await initAudioHandler();
   await initDependencies();
   await dioClient.init();
 
@@ -33,10 +41,19 @@ class MyApp extends ConsumerStatefulWidget {
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
+  StreamSubscription<void>? _authInvalidatedSub;
 
   @override
   void initState() {
     super.initState();
+    unawaited(LocalNotificationService.initialize());
+    unawaited(FcmService.initialize());
+    unawaited(FcmService.handleInitialMessageAfterFirstFrame());
+    _authInvalidatedSub = dioClient.authInvalidated.listen((_) {
+      if (!mounted) return;
+      ref.read(sessionUserIdProvider.notifier).state = '';
+      appRouter.go('/login-screen');
+    });
     WidgetsBinding.instance.addObserver(this);
     _initDeepLinks();
   }
@@ -116,13 +133,23 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
+    _authInvalidatedSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final socketSvc = ref.watch(socketServiceProvider);
+    final notifier = ref.read(notificationProvider.notifier);
+    socketSvc.onNewNotification = notifier.socketAddNotification;
+    socketSvc.onNotificationRead = notifier.socketMarkNotificationRead;
+    socketSvc.onAllNotificationsRead = notifier.socketMarkAllRead;
+    socketSvc.onNotificationDeleted = notifier.socketRemoveNotification;
+    ref.watch(socketLifecycleProvider);
+    ref.watch(socketMessageLifecycleProvider);
+
     return MaterialApp.router(
-      title: 'SoundCloud',
+      title: 'BioBeats',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       routerConfig: appRouter,

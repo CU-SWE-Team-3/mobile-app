@@ -19,6 +19,15 @@ class _TestDioClient implements DioClient {
 
   @override
   void setAuthToken(String token) {}
+
+  @override
+  Future<String?> refreshAccessToken() async => null;
+
+  @override
+  Stream<String> get tokenRefreshes => const Stream.empty();
+
+  @override
+  Stream<void> get authInvalidated => const Stream.empty();
 }
 
 void main() {

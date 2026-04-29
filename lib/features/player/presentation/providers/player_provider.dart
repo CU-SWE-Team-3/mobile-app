@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart' as ja;
 
+import '../../../../core/services/audio_handler_service.dart';
+import '../../../../injection_container.dart';
+import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../player/domain/entities/player_track.dart';
 import '../../data/services/player_api_service.dart';
 
@@ -23,6 +26,11 @@ class PlayerState {
   final bool isLoading;
   final String? error;
   final double volume;
+  final bool isCurrentTrackLiked;
+  final bool isTogglingLike;
+  // PUT /player/state context fields (API: queueContext enum + contextId ObjectId).
+  final String queueContext;
+  final String? contextId;
 
   const PlayerState({
     this.currentTrack,
@@ -35,6 +43,10 @@ class PlayerState {
     this.isLoading = false,
     this.error,
     this.volume = 0.7,
+    this.isCurrentTrackLiked = false,
+    this.isTogglingLike = false,
+    this.queueContext = 'none',
+    this.contextId,
   });
 
   // Backward-compat getters used by existing UI
@@ -56,6 +68,11 @@ class PlayerState {
     String? error,
     bool clearError = false,
     double? volume,
+    bool? isCurrentTrackLiked,
+    bool? isTogglingLike,
+    String? queueContext,
+    String? contextId,
+    bool clearContextId = false,
   }) {
     return PlayerState(
       currentTrack:
@@ -69,6 +86,10 @@ class PlayerState {
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
       volume: volume ?? this.volume,
+      isCurrentTrackLiked: isCurrentTrackLiked ?? this.isCurrentTrackLiked,
+      isTogglingLike: isTogglingLike ?? this.isTogglingLike,
+      queueContext: queueContext ?? this.queueContext,
+      contextId: clearContextId ? null : (contextId ?? this.contextId),
     );
   }
 }
@@ -78,42 +99,47 @@ class PlayerState {
 // ---------------------------------------------------------------------------
 
 class PlayerNotifier extends StateNotifier<PlayerState> {
-  final ja.AudioPlayer _audioPlayer = ja.AudioPlayer();
+  final AppAudioHandler _audioHandler;
   final PlayerApiService _api;
+  final EngagementRemoteDataSource _engagementApi;
+  
 
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration?> _durationSub;
-  late final StreamSubscription<ja.PlayerState> _playerStateSub;
+  late final StreamSubscription<PlaybackState> _playbackStateSub;
+  
 
   /// Fires PUT /player/state every 5 seconds while a track is playing.
   Timer? _heartbeatTimer;
   Timer? _seekSyncTimer;
 
-  PlayerNotifier(this._api) : super(const PlayerState()) {
-    // Sync the hardware volume to the state default so the UI and player agree
-    // before the first explicit setVolume() call.
-    _audioPlayer.setVolume(const PlayerState().volume);
+  PlayerNotifier(this._api, this._audioHandler, this._engagementApi)
+      : super(const PlayerState()) {
+    _audioHandler.onSkipNextRequested = skipToNext;
+    _audioHandler.onSkipPreviousRequested = skipToPrevious;
+    _audioHandler.onLikeRequested = toggleCurrentTrackLike;
 
-    _positionSub = _audioPlayer.positionStream.listen((pos) {
+    _positionSub = _audioHandler.positionStream.listen((pos) {
       state = state.copyWith(position: pos);
     });
 
-    _durationSub = _audioPlayer.durationStream.listen((dur) {
+    _durationSub = _audioHandler.durationStream.listen((dur) {
       if (dur != null) {
         state = state.copyWith(duration: dur);
       }
     });
 
-    _playerStateSub = _audioPlayer.playerStateStream.listen((ps) {
-      final loading = ps.processingState == ja.ProcessingState.loading ||
-          ps.processingState == ja.ProcessingState.buffering;
+    _playbackStateSub = _audioHandler.playbackState.listen((playbackState) {
+      final loading =
+          playbackState.processingState == AudioProcessingState.loading ||
+              playbackState.processingState == AudioProcessingState.buffering;
 
       state = state.copyWith(
-        isPlaying: ps.playing,
+        isPlaying: playbackState.playing,
         isLoading: loading,
       );
 
-      if (ps.processingState == ja.ProcessingState.completed) {
+      if (playbackState.processingState == AudioProcessingState.completed) {
         _onTrackCompleted();
       }
     });
@@ -134,10 +160,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
           trackId: track.id,
           position: state.position.inSeconds.toDouble(),
           isPlaying: state.isPlaying,
-          volume: state.volume,
+          queueContext: state.queueContext,
+          contextId: state.contextId,
         );
       }
     });
+  }
+
+  /// Records the playback context so the heartbeat can include it in
+  /// PUT /player/state.  Call immediately after playQueue / playTrack.
+  void setQueueContext(String context, {String? contextId}) {
+    state = state.copyWith(queueContext: context, contextId: contextId);
   }
 
   // -------------------------------------------------------------------------
@@ -163,20 +196,42 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         );
       }
 
-      state = state.copyWith(currentTrack: track);
-      _hydrateCurrentTrack(track.id, trackPermalink: track.trackPermalink);
+      state = state.copyWith(
+        currentTrack: track,
+        isCurrentTrackLiked: false,
+        isTogglingLike: false,
+      );
+      _audioHandler.setLiked(false);
+      unawaited(
+        _hydrateCurrentTrack(
+          track.id,
+          trackPermalink: track.trackPermalink,
+        ),
+      );
 
-      // Resolve the server-authorized HLS URL; fall back to track.audioUrl
-      // if the API is unreachable (e.g. offline or unauthenticated).
-      final streamUrl = await _api.getStreamUrl(track.id) ?? track.audioUrl;
+      // Resolve the server-authorized HLS URL.
+      // If the stream endpoint fails, fall back to track.audioUrl only when
+      // it is a valid remote URL — never pass an empty or local path to
+      // ExoPlayer (setFilePath("") throws FileNotFoundException: ENOENT).
+      final streamUrl = await _api.getStreamUrl(track.id);
+      final fallback = track.audioUrl;
+      final bool fallbackIsRemote =
+          fallback.startsWith('http://') || fallback.startsWith('https://');
 
-      if (streamUrl.startsWith('http://') || streamUrl.startsWith('https://')) {
-        await _audioPlayer.setUrl(streamUrl);
-      } else {
-        await _audioPlayer.setFilePath(streamUrl);
+      final String? resolvedUrl = (streamUrl != null && streamUrl.isNotEmpty)
+          ? streamUrl
+          : (fallbackIsRemote ? fallback : null);
+
+      if (resolvedUrl == null) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Track audio is unavailable',
+        );
+        return;
       }
 
-      await _audioPlayer.play();
+      await _audioHandler.loadTrack(track, resolvedUrl);
+      await _audioHandler.play();
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -198,9 +253,15 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
   Future<void> skipToNext() async {
     final queue = state.queue;
-    if (queue.isEmpty) return;
+    if (queue.isEmpty) {
+      await seekTo(state.duration);
+      return;
+    }
     final nextIndex = state.currentQueueIndex + 1;
-    if (nextIndex >= queue.length) return;
+    if (nextIndex >= queue.length) {
+      await seekTo(state.duration);
+      return;
+    }
     state = state.copyWith(currentQueueIndex: nextIndex);
     await playTrack(queue[nextIndex]);
   }
@@ -212,7 +273,10 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       return;
     }
     final queue = state.queue;
-    if (queue.isEmpty) return;
+    if (queue.isEmpty) {
+      await seekTo(Duration.zero);
+      return;
+    }
     final prevIndex = state.currentQueueIndex - 1;
     if (prevIndex < 0) return;
     state = state.copyWith(currentQueueIndex: prevIndex);
@@ -220,8 +284,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   }
 
   Future<void> seekTo(Duration position) async {
-    await _audioPlayer.seek(position);
-    state = state.copyWith(position: position);
+    await _audioHandler.seek(position);
     _scheduleSeekSync(position);
   }
 
@@ -301,12 +364,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   }
 
   void pause() {
-    _audioPlayer.pause();
+    _audioHandler.pause();
   }
 
   void resume() {
     if (state.currentTrack != null) {
-      _audioPlayer.play();
+      _audioHandler.play();
     }
   }
 
@@ -318,14 +381,41 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     }
   }
 
+  Future<void> toggleCurrentTrackLike() async {
+    final track = state.currentTrack;
+    if (track == null || state.isTogglingLike) return;
+
+    final wasLiked = state.isCurrentTrackLiked;
+    state = state.copyWith(
+      isCurrentTrackLiked: !wasLiked,
+      isTogglingLike: true,
+    );
+    _audioHandler.setLiked(!wasLiked);
+
+    try {
+      if (wasLiked) {
+        await _engagementApi.unlikeTrack(track.id);
+      } else {
+        await _engagementApi.likeTrack(track.id);
+      }
+      state = state.copyWith(isTogglingLike: false);
+    } catch (_) {
+      state = state.copyWith(
+        isCurrentTrackLiked: wasLiked,
+        isTogglingLike: false,
+      );
+      _audioHandler.setLiked(wasLiked);
+    }
+  }
+
   void stop() {
-    _audioPlayer.stop();
+    _audioHandler.stop();
     state = const PlayerState();
   }
 
   Future<void> setVolume(double volume) async {
     final clamped = volume.clamp(0.0, 1.0);
-    await _audioPlayer.setVolume(clamped);
+    await _audioHandler.setVolume(clamped);
     state = state.copyWith(volume: clamped);
   }
 
@@ -400,7 +490,6 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         trackId: track.id,
         position: position.inSeconds.toDouble(),
         isPlaying: state.isPlaying,
-        volume: state.volume,
       );
     });
   }
@@ -411,8 +500,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     _seekSyncTimer?.cancel();
     _positionSub.cancel();
     _durationSub.cancel();
-    _playerStateSub.cancel();
-    _audioPlayer.dispose();
+    _playbackStateSub.cancel();
     super.dispose();
   }
 }
@@ -423,5 +511,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
 final playerProvider =
     StateNotifierProvider<PlayerNotifier, PlayerState>((ref) {
-  return PlayerNotifier(ref.read(playerApiServiceProvider));
+  return PlayerNotifier(
+    ref.read(playerApiServiceProvider),
+    appAudioHandler!,
+    sl<EngagementRemoteDataSource>(),
+  );
 });

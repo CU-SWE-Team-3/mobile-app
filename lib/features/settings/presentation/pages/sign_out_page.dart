@@ -59,10 +59,10 @@ class _SignOutPageState extends ConsumerState<SignOutPage> {
             onPressed: () async {
               Navigator.pop(context);
               ref.read(playerProvider.notifier).stop();
+              ref.read(sessionUserIdProvider.notifier).state = '';
               await ref.read(authProvider.notifier).logout();
               if (!context.mounted) return;
               context.go('/start');
-              ref.read(sessionUserIdProvider.notifier).state = '';
             },
             child: const Text(
               'OK',

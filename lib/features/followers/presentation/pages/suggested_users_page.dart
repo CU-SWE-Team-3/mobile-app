@@ -19,6 +19,12 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
   bool _isLoading = true;
   bool _hasError = false;
 
+  Map<String, dynamic> _asStringMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return const {};
+  }
+
   @override
   void initState() {
     super.initState();
@@ -36,9 +42,14 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
       final response = await dioClient.dio
           .get('/network/suggested', queryParameters: {'page': 1, 'limit': 20});
       final raw = response.data['data'];
-      final all = (raw is List) ? raw.cast<Map<String, dynamic>>() : <Map<String, dynamic>>[];
+      final all = raw is List
+          ? raw
+              .map(_asStringMap)
+              .where((u) => (u['_id'] ?? u['id']) != null)
+              .toList()
+          : <Map<String, dynamic>>[];
       setState(() {
-        _users = all.where((u) => u['_id'] != myId).toList();
+        _users = all.where((u) => (u['_id'] ?? u['id']) != myId).toList();
         _isLoading = false;
       });
     } on DioException {
@@ -142,10 +153,16 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
                       itemCount: _users.length,
                       itemBuilder: (context, i) {
                         final user = _users[i];
-                        final id = user['_id'] as String;
+                        final id =
+                            user['_id'] as String? ?? user['id'] as String? ?? '';
                         final displayName =
-                            user['displayName'] as String? ?? '';
-                        final avatarUrl = user['avatarUrl'] as String?;
+                            user['displayName'] as String? ??
+                            user['username'] as String? ??
+                            user['name'] as String? ??
+                            '';
+                        final avatarUrl = user['avatarUrl'] as String? ??
+                            user['profileImageUrl'] as String? ??
+                            user['photoUrl'] as String?;
                         final followerCountRaw = user['followerCount'];
                         final followerCount = followerCountRaw is int
                             ? followerCountRaw
@@ -159,7 +176,9 @@ class _SuggestedUsersPageState extends State<SuggestedUsersPage> {
                         final isFollowing = _followingIds.contains(id);
                         final isButtonLoading = _loadingIds.contains(id);
 
-                        final permalink = user['permalink'] as String? ?? id;
+                        final permalink = user['permalink'] as String? ??
+                            user['username'] as String? ??
+                            id;
                         return InkWell(
                           onTap: () => _navigateToProfile(
                             context,

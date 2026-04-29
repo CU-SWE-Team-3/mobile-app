@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/providers/session_provider.dart';
+import '../../../../core/services/fcm_service.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   final String email;
@@ -40,21 +43,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         'password': _passwordController.text.trim(),
       });
       final token = response.data['data']['token'] as String? ?? '';
-      final refreshToken = response.data['data']['refreshToken'] as String? ?? '';
+      final refreshToken =
+          response.data['data']['refreshToken'] as String? ?? '';
       final user = response.data['data']['user'] as Map<String, dynamic>? ?? {};
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('accessToken', token);
       await prefs.setString('refreshToken', refreshToken);
       await prefs.setString('userId', user['_id'] as String? ?? '');
-      await prefs.setString('displayName', user['displayName'] as String? ?? '');
+      await prefs.setString(
+          'displayName', user['displayName'] as String? ?? '');
       await prefs.setString('role', user['role'] as String? ?? '');
       await prefs.setString('permalink', user['permalink'] as String? ?? '');
-      final avatarUrl = (user['avatarUrl'] ?? user['avatar'] ?? user['picture'] ?? '') as String;
+      final avatarUrl = (user['avatarUrl'] ??
+          user['avatar'] ??
+          user['picture'] ??
+          '') as String;
       await prefs.setString('avatarUrl', avatarUrl);
       debugPrint('[Login] avatarUrl saved: $avatarUrl');
       dioClient.setAuthToken(token);
       if (!mounted) return;
-      ref.read(sessionUserIdProvider.notifier).state = user['_id'] as String? ?? '';
+      ref.read(sessionUserIdProvider.notifier).state =
+          user['_id'] as String? ?? '';
+      unawaited(FcmService.registerCurrentToken());
       context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;
@@ -91,7 +101,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             backgroundColor: Colors.grey[850],
             child: IconButton(
               key: const ValueKey('auth_login_back_button'),
-              icon: const Icon(Icons.arrow_back_ios_sharp, color: Colors.white, size: 30),
+              icon: const Icon(Icons.arrow_back_ios_sharp,
+                  color: Colors.white, size: 30),
               onPressed: () => Navigator.pop(context),
             ),
           ),
@@ -128,7 +139,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             Container(
               margin: const EdgeInsets.only(right: 30, bottom: 35),
               child: Text(
-                widget.email.isNotEmpty ? widget.email : 'Enter your email on the previous screen',
+                widget.email.isNotEmpty
+                    ? widget.email
+                    : 'Enter your email on the previous screen',
                 textAlign: TextAlign.left,
                 style: const TextStyle(
                   color: Colors.white,
@@ -163,20 +176,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   });
                 },
                 decoration: InputDecoration(
-                  contentPadding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
                   labelText: 'Your Password (min. 8 characters)',
                   labelStyle: const TextStyle(color: Colors.grey, fontSize: 16),
                   floatingLabelBehavior: FloatingLabelBehavior.auto,
                   errorText: _fieldError,
-                  errorStyle: const TextStyle(color: Colors.white, fontSize: 16),
+                  errorStyle:
+                      const TextStyle(color: Colors.white, fontSize: 16),
                   suffixIcon: IconButton(
                     key: const ValueKey('auth_login_password_toggle_button'),
                     icon: Icon(
-                      _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+                      _isPasswordVisible
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                       size: 30,
                       color: Colors.grey,
                     ),
-                    onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                    onPressed: () => setState(
+                        () => _isPasswordVisible = !_isPasswordVisible),
                   ),
                   errorBorder: OutlineInputBorder(
                     borderSide: const BorderSide(color: Colors.red, width: 1.5),
@@ -194,7 +212,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(5),
-                    borderSide: const BorderSide(color: Colors.white54, width: 1.5),
+                    borderSide:
+                        const BorderSide(color: Colors.white54, width: 1.5),
                   ),
                 ),
               ),
@@ -207,7 +226,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 key: const ValueKey('auth_login_continue_button'),
                 style: TextButton.styleFrom(
                   backgroundColor: const Color(0xFF888888),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4)),
                 ),
                 onPressed: _isPasswordValid && !_isLoading ? _onContinue : null,
                 child: Container(
@@ -224,7 +244,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             'Continue',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: _isPasswordValid ? Colors.black : Colors.grey[700],
+                              color: _isPasswordValid
+                                  ? Colors.black
+                                  : Colors.grey[700],
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),

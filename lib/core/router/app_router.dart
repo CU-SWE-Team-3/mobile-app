@@ -16,7 +16,7 @@ import '../../features/auth/presentation/pages/register_screen.dart';
 
 import '../../features/feed/presentation/pages/home_page.dart';
 import '../../features/feed/presentation/pages/recommended_tracks_page.dart';
-import '../../features/feed/presentation/pages/search_page.dart';
+import '../../features/search/presentation/pages/search_page.dart';
 import '../../features/feed/presentation/pages/discover_page.dart';
 import '../../features/feed/presentation/pages/feed_page.dart';
 import '../../features/feed/presentation/pages/search_results_tracks_page.dart';

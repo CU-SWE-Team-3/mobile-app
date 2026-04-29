@@ -28,8 +28,13 @@ class MessagingRepositoryImpl implements MessagingRepository {
   Future<Message> sendMessage({
     required String receiverId,
     required String content,
+    String? conversationId,
   }) =>
-      _dataSource.sendMessage(receiverId: receiverId, content: content);
+      _dataSource.sendMessage(
+        receiverId: receiverId,
+        content: content,
+        conversationId: conversationId,
+      );
 
   @override
   Future<List<Participant>> searchUsers(String query) =>

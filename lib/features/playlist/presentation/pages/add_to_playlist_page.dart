@@ -423,6 +423,7 @@ class _PlaylistRow extends StatelessWidget {
     );
   }
 
+
   Widget _artworkPlaceholder() => const ColoredBox(
         color: Color(0xFF2A2A2A),
         child: Center(

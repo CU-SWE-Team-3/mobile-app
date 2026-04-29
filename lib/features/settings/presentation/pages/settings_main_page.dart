@@ -79,7 +79,8 @@ class SettingsMainPage extends ConsumerWidget {
             title: 'Notifications',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const NotificationsSettingsPage()),
+              MaterialPageRoute(
+                  builder: (_) => const NotificationsSettingsPage()),
             ),
           ),
           _SettingsMenuItem(title: 'Add widgets', onTap: () {}),
@@ -190,10 +191,10 @@ class SettingsMainPage extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
+              ref.read(sessionUserIdProvider.notifier).state = '';
               await ref.read(authProvider.notifier).logout();
               if (!context.mounted) return;
               context.go('/start');
-              ref.read(sessionUserIdProvider.notifier).state = '';
             },
             child: const Text(
               'OK',

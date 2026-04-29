@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
+import '../../../../core/services/fcm_service.dart';
+import '../../../../core/socket/socket_service.dart';
+import '../../../../injection_container.dart';
 import '../../data/datasources/auth_mock_datasource.dart';
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/entities/user.dart';
@@ -67,7 +70,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // prevent the remaining cleanup steps from running.
   Future<void> logout() async {
     try {
-      await _dioClient.dio.delete('/notifications/fcm-token');
+      await FcmService.unregisterCurrentToken();
     } catch (e) {
       debugPrint('[Auth] FCM token unregister failed: $e');
     }
@@ -80,6 +83,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await UserSession.clear();
     } catch (e) {
       debugPrint('[Auth] Session clear failed: $e');
+    }
+    try {
+      sl<SocketService>().disconnect();
+    } catch (e) {
+      debugPrint('[Auth] Socket disconnect failed: $e');
     }
     _dioClient.dio.options.headers.remove('Authorization');
     state = const AuthState();
