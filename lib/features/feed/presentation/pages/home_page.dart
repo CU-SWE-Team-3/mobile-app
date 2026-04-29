@@ -13,6 +13,21 @@ import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'dart:math';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
+import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
+import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 class _FeedTrack {
   final String id;
@@ -633,31 +648,28 @@ class _HomePageState extends ConsumerState<HomePage> {
       for (final track in _likedTracks) track.id: track,
     };
     final visibleLikedTracks = mergedLikesAsync.maybeWhen(
-      data: (tracks) => tracks
-          .map(
-            (track) {
-              final rawTrack = likedTracksById[track.id];
-              return _FeedTrack(
-                id: track.id,
-                title: track.title,
-                artistName: track.artistName,
-                artworkUrl: track.artworkUrl,
-                hlsUrl: rawTrack?.hlsUrl ?? _hlsUrlFromTrackSummary(track),
-                playCount: track.playCount,
-                artistId: track.artistId,
-                artistPermalink: track.artistPermalink,
-                likeCount: track.likeCount,
-                repostCount: track.repostCount,
-                isLiked: true,
-                waveform: track.waveform,
-              );
-            },
-          )
-          .toList(),
+      data: (tracks) => tracks.map(
+        (track) {
+          final rawTrack = likedTracksById[track.id];
+          return _FeedTrack(
+            id: track.id,
+            title: track.title,
+            artistName: track.artistName,
+            artworkUrl: track.artworkUrl,
+            hlsUrl: rawTrack?.hlsUrl ?? _hlsUrlFromTrackSummary(track),
+            playCount: track.playCount,
+            artistId: track.artistId,
+            artistPermalink: track.artistPermalink,
+            likeCount: track.likeCount,
+            repostCount: track.repostCount,
+            isLiked: true,
+            waveform: track.waveform,
+          );
+        },
+      ).toList(),
       orElse: () => _likedTracks,
     );
-    final orderedLikedTracks =
-        _applyLikedOrder(visibleLikedTracks, likedOrder);
+    final orderedLikedTracks = _applyLikedOrder(visibleLikedTracks, likedOrder);
     return GestureDetector(
       onTap: () => context.push('/library/likes'),
       child: Container(
@@ -725,10 +737,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _SmallTrackTile(track: orderedLikedTracks[0])),
+                      Expanded(
+                          child: _SmallTrackTile(track: orderedLikedTracks[0])),
                       if (orderedLikedTracks.length > 1) ...[
                         const SizedBox(width: 10),
-                        Expanded(child: _SmallTrackTile(track: orderedLikedTracks[1])),
+                        Expanded(
+                            child:
+                                _SmallTrackTile(track: orderedLikedTracks[1])),
                       ],
                     ],
                   ),
@@ -736,10 +751,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        Expanded(child: _SmallTrackTile(track: orderedLikedTracks[2])),
+                        Expanded(
+                            child:
+                                _SmallTrackTile(track: orderedLikedTracks[2])),
                         if (orderedLikedTracks.length > 3) ...[
                           const SizedBox(width: 10),
-                          Expanded(child: _SmallTrackTile(track: orderedLikedTracks[3])),
+                          Expanded(
+                              child: _SmallTrackTile(
+                                  track: orderedLikedTracks[3])),
                         ],
                       ],
                     ),
@@ -1184,7 +1203,6 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
     );
   }
-
 }
 
 class _SmallTrackTile extends StatelessWidget {
@@ -2090,15 +2108,14 @@ class _GenreStationPage extends ConsumerWidget {
                     ),
                     const SizedBox(width: 10),
                     IconButton(
-                      onPressed:
-                          engagementParams == null || engagement!.isLoadingLike
-                              ? null
-                              : () => ref
-                                  .read(
-                                    engagementProvider(engagementParams)
-                                        .notifier,
-                                  )
-                                  .toggleLike(),
+                      onPressed: engagementParams == null ||
+                              engagement!.isLoadingLike
+                          ? null
+                          : () => ref
+                              .read(
+                                engagementProvider(engagementParams).notifier,
+                              )
+                              .toggleLike(),
                       icon: Icon(
                         engagement?.isLiked == true
                             ? Icons.favorite

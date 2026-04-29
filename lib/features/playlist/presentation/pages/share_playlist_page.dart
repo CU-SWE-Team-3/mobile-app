@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/entities/playlist.dart';
+import '../widgets/embed_code_sheet.dart';
+import '../widgets/playlist_url_builder.dart';
 import '../../../messaging/presentation/widgets/send_to_sheet.dart';
 
 // ── Stub page (router entry /playlist/share kept alive) ──────────────────────
@@ -38,22 +40,7 @@ class SharePlaylistSheet extends StatelessWidget {
 
   const SharePlaylistSheet({super.key, required this.playlist});
 
-  static const _base = 'https://biobeats.duckdns.org';
-
-  String get _url {
-    final op = playlist.ownerPermalink;
-    final pp = playlist.permalink;
-    final st = playlist.secretToken;
-
-    final path = (op != null && op.isNotEmpty && pp != null && pp.isNotEmpty)
-        ? '$_base/$op/sets/$pp'
-        : '$_base/playlists/${playlist.id}';
-
-    if (!playlist.isPublic && st != null && st.isNotEmpty) {
-      return '$path?secret_token=$st';
-    }
-    return path;
-  }
+  String get _url => buildPlaylistUrl(playlist);
 
   Future<void> _copyLink(BuildContext context) async {
     await Clipboard.setData(ClipboardData(text: _url));
@@ -210,6 +197,25 @@ class SharePlaylistSheet extends StatelessWidget {
                     onTap: () {
                       Navigator.pop(context);
                       showSendToSheet(context, ShareablePlaylist(playlist.id));
+                    },
+                  ),
+                  _ShareButton(
+                    icon: Icons.code_rounded,
+                    label: 'Embed',
+                    bgColor: const Color(0xFF2A2A2A),
+                    onTap: () {
+                      Navigator.pop(context);
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: const Color(0xFF1F1F1F),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.vertical(top: Radius.circular(16)),
+                        ),
+                        isScrollControlled: true,
+                        builder: (_) =>
+                            EmbedCodeSheet(playlistId: playlist.id),
+                      );
                     },
                   ),
                 ],
