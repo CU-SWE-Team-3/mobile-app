@@ -55,12 +55,18 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       final likesData =
           results[0].data['data'] as Map<String, dynamic>? ?? {};
       final likedRaw = (likesData['likedTracks'] as List?) ?? [];
+      Map<String, dynamic>? trackMapFrom(dynamic item) {
+        if (item is! Map<String, dynamic>) return null;
+        final track = item['target'] ?? item['track'];
+        if (track is Map<String, dynamic>) return track;
+        if (track is Map) return Map<String, dynamic>.from(track);
+        return null;
+      }
+
       final likedIds = <String>{};
       for (final item in likedRaw) {
-        if (item is! Map<String, dynamic>) continue;
-        final track =
-            (item['target'] ?? item['track']) as Map<String, dynamic>?;
-        final id = (track?['_id'] ?? item['_id']) as String?;
+        final track = trackMapFrom(item);
+        final id = track?['_id'] as String?;
         if (id != null && id.isNotEmpty) likedIds.add(id);
       }
 
@@ -70,8 +76,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       final repostedIds = <String>{};
       for (final item in repostedRaw) {
         if (item is! Map<String, dynamic>) continue;
-        final track =
-            (item['target'] ?? item['track']) as Map<String, dynamic>?;
+        final track = trackMapFrom(item);
         final id = (track?['_id'] ?? item['_id']) as String?;
         if (id != null && id.isNotEmpty) repostedIds.add(id);
       }

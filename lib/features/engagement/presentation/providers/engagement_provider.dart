@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/providers/session_provider.dart';
 import '../../data/sources/engagement_remote_data_source.dart';
 import '../../../../injection_container.dart';
 
@@ -218,27 +218,40 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
 
 final engagementProvider =
     StateNotifierProvider.family<EngagementNotifier, EngagementState, EngagementParams>(
-  (ref, params) => EngagementNotifier(
-    ref,
-    sl<EngagementRemoteDataSource>(),
-    params.trackId,
-    initialIsLiked: params.isLiked,
-    initialIsReposted: params.isReposted,
-    initialLikeCount: params.likeCount,
-    initialRepostCount: params.repostCount,
-  ),
+  (ref, params) {
+    ref.watch(sessionUserIdProvider);
+    return EngagementNotifier(
+      ref,
+      sl<EngagementRemoteDataSource>(),
+      params.trackId,
+      initialIsLiked: params.isLiked,
+      initialIsReposted: params.isReposted,
+      initialLikeCount: params.likeCount,
+      initialRepostCount: params.repostCount,
+    );
+  },
 );
 
-final likesRefreshTickProvider = StateProvider<int>((ref) => 0);
-final hiddenLikedTrackIdsProvider = StateProvider<Set<String>>((ref) => <String>{});
+final likesRefreshTickProvider = StateProvider<int>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return 0;
+});
+
+final hiddenLikedTrackIdsProvider = StateProvider<Set<String>>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return <String>{};
+});
+
 final likedTrackOverridesProvider =
-    StateProvider<Map<String, TrackSummary>>((ref) => <String, TrackSummary>{});
+    StateProvider<Map<String, TrackSummary>>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return <String, TrackSummary>{};
+});
 
 final backendUserLikesProvider =
     FutureProvider.autoDispose<List<TrackSummary>>((ref) async {
   ref.watch(likesRefreshTickProvider);
-  final prefs = await SharedPreferences.getInstance();
-  final userId = prefs.getString('userId') ?? '';
+  final userId = ref.watch(sessionUserIdProvider);
   if (userId.isEmpty) return [];
   return sl<EngagementRemoteDataSource>().getUserLikes(userId);
 });

@@ -4,23 +4,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/utils/profile_navigation.dart';
-import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
-
-final _userLikesProvider =
-    FutureProvider.autoDispose<List<TrackSummary>>((ref) async {
-  final prefs = await SharedPreferences.getInstance();
-  final userId = prefs.getString('userId') ?? '';
-  if (userId.isEmpty) return [];
-  return sl<EngagementRemoteDataSource>().getUserLikes(userId);
-});
 
 class LibraryLikesPage extends ConsumerStatefulWidget {
   const LibraryLikesPage({super.key});

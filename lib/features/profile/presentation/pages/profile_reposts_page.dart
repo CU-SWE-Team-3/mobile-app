@@ -2,8 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/providers/session_provider.dart';
 import '../../../../core/utils/profile_navigation.dart';
 import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
@@ -12,8 +12,7 @@ import '../../../player/presentation/providers/player_provider.dart';
 
 final _userRepostsProvider =
     FutureProvider.autoDispose<List<TrackSummary>>((ref) async {
-  final prefs = await SharedPreferences.getInstance();
-  final userId = prefs.getString('userId') ?? '';
+  final userId = ref.watch(sessionUserIdProvider);
   if (userId.isEmpty) return [];
   return sl<EngagementRemoteDataSource>().getUserReposts(userId);
 });
@@ -45,7 +44,7 @@ class ProfileRepostsPage extends ConsumerWidget {
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.arrow_back_ios_new_rounded,
@@ -69,7 +68,7 @@ class ProfileRepostsPage extends ConsumerWidget {
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.cast_rounded,
@@ -156,7 +155,7 @@ class _RepostTile extends ConsumerWidget {
     // Hide immediately when the user un-reposts this track
     if (!engState.isReposted) return const SizedBox.shrink();
 
-    final sub = Colors.white.withOpacity(0.55);
+    final sub = Colors.white.withValues(alpha: 0.55);
     final hasArtwork = track.artworkUrl != null &&
         track.artworkUrl!.isNotEmpty &&
         track.artworkUrl!.startsWith('http');

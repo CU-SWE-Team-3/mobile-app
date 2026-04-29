@@ -16,7 +16,7 @@ class FeedTrack {
   final bool isReposted;
   final List<int>? waveform;
   // Following-feed activity fields — null for Discover tracks.
-  final String? activityType;       // "post" or "repost"
+  final String? activityType; // "post", "repost", or "like"
   final String? actorName;
   final String? actorAvatarUrl;
   final DateTime? activityTimestamp;
@@ -63,7 +63,7 @@ class FeedTrack {
       id: json['_id'] as String? ?? '',
       title: json['title'] as String? ?? '',
       artworkUrl: json['artworkUrl'] as String?,
-      audioUrl: json['audioUrl'] as String?,
+      audioUrl: json['hlsUrl'] as String?,
       artistId: artistMap['_id'] as String? ?? '',
       artistName: artistMap['displayName'] as String? ?? '',
       artistAvatarUrl: artistMap['avatarUrl'] as String?,

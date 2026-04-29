@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 import '../../data/models/feed_track.dart';
 
 export '../../data/models/feed_track.dart';
@@ -77,7 +78,7 @@ class FeedNotifier extends StateNotifier<FeedState> {
 final discoverFeedProvider =
     StateNotifierProvider<FeedNotifier, FeedState>((ref) {
   return FeedNotifier(
-    '/discovery/trending?page=1&limit=20',
+    '/discovery/trending?limit=20',
     (data) {
       // Response shape: { "data": { "trending": [...] } }
       final inner = data['data'];
@@ -141,7 +142,9 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     }
   }
 
-  // Extracts TRACK_UPLOAD and REPOST items from /feed response.
+  // Extracts track-backed activity from /feed response. LIKE is included
+  // because it represents a followed user recommending a real track; PROMOTED
+  // remains excluded because ads are not playable feed tracks.
   List<Map<String, dynamic>> _extractFeedItems(dynamic data) {
     final dataMap = data['data'];
     if (dataMap is! Map<String, dynamic>) return [];
@@ -150,13 +153,23 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     for (final raw in items) {
       if (raw is! Map<String, dynamic>) continue;
       final activityType = raw['activityType'] as String? ?? '';
-      if (activityType != 'TRACK_UPLOAD' && activityType != 'REPOST') continue;
-      final trackData = raw['target'] as Map<String, dynamic>? ?? {};
+      if (activityType != 'TRACK_UPLOAD' &&
+          activityType != 'REPOST' &&
+          activityType != 'LIKE') {
+        continue;
+      }
+      final trackData = _asStringMap(raw['target']);
+      if (trackData == null) continue;
       final actorsList = raw['actors'] as List?;
-      final actor =
-          actorsList != null && actorsList.isNotEmpty ? actorsList.first : null;
+      final actor = actorsList != null && actorsList.isNotEmpty
+          ? _asStringMap(actorsList.first)
+          : null;
       final timestamp = raw['activityDate'] as String?;
-      final normalisedType = activityType == 'REPOST' ? 'repost' : 'post';
+      final normalisedType = activityType == 'REPOST'
+          ? 'repost'
+          : activityType == 'LIKE'
+              ? 'like'
+              : 'post';
       result.add(<String, dynamic>{
         ...trackData,
         '_activityType': normalisedType,
@@ -180,7 +193,8 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     for (final item in raw) {
       if (item is! Map<String, dynamic>) continue;
       final trackData =
-          (item['target'] ?? item['track']) as Map<String, dynamic>? ?? item;
+          _asStringMap(item['target']) ?? _asStringMap(item['track']);
+      if (trackData == null) continue;
       final repostDate = item['repostDate'] as String?;
       result.add(<String, dynamic>{
         ...trackData,
@@ -194,9 +208,16 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     }
     return result;
   }
+
+  Map<String, dynamic>? _asStringMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
 }
 
 final followingFeedProvider =
     StateNotifierProvider<FollowingFeedNotifier, FeedState>((ref) {
+  ref.watch(sessionUserIdProvider);
   return FollowingFeedNotifier();
 });
