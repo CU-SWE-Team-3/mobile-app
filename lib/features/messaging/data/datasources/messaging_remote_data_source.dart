@@ -5,6 +5,13 @@ import '../../domain/entities/conversation.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/participant.dart';
 
+class PrivateAttachmentException implements Exception {
+  const PrivateAttachmentException();
+  @override
+  String toString() =>
+      'PrivateAttachmentException: track is private and cannot be shared';
+}
+
 class MessagingRemoteDataSource {
   final Dio _dio;
 
@@ -53,18 +60,31 @@ class MessagingRemoteDataSource {
     return raw.map((m) => Message.fromJson(m as Map<String, dynamic>)).toList();
   }
 
+  // Monotonically increasing counter so concurrent sendMessage calls are
+  // distinguishable in logs (req #1, req #2, …).
+  static int _reqSeq = 0;
+
   Future<Message> sendMessage({
     required String receiverId,
-    required String content,
+    String? content,
     String? conversationId,
+    String? attachmentType,
+    String? attachmentId,
   }) async {
+    final reqId = ++_reqSeq;
     final stopwatch = Stopwatch()..start();
     final body = <String, dynamic>{
       'receiverId': receiverId,
-      'content': content,
+      if (content != null && content.isNotEmpty) 'content': content,
       if (conversationId != null && conversationId.isNotEmpty)
         'conversationId': conversationId,
+      if (attachmentType != null && attachmentId != null &&
+          attachmentType.isNotEmpty && attachmentId.isNotEmpty) ...{
+        'attachmentType': '${attachmentType[0].toUpperCase()}${attachmentType.substring(1)}',
+        'attachmentId': attachmentId,
+      },
     };
+    debugPrint('[Messaging] sendMessage #$reqId body=$body');
     try {
       final response = await _dio.post(
         '/messages',
@@ -75,13 +95,22 @@ class MessagingRemoteDataSource {
         ),
       );
       debugPrint(
-        '[Messaging] sendMessage completed in ${stopwatch.elapsedMilliseconds}ms',
+        '[Messaging] sendMessage #$reqId completed in ${stopwatch.elapsedMilliseconds}ms',
       );
       final data = response.data['data'] as Map<String, dynamic>;
       return Message.fromJson(data['message'] as Map<String, dynamic>);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        throw const PrivateAttachmentException();
+      }
+      debugPrint(
+        '[Messaging] sendMessage #$reqId failed after ${stopwatch.elapsedMilliseconds}ms: '
+        'status=${e.response?.statusCode} body=${e.response?.data}',
+      );
+      rethrow;
     } catch (e) {
       debugPrint(
-        '[Messaging] sendMessage failed after ${stopwatch.elapsedMilliseconds}ms: $e',
+        '[Messaging] sendMessage #$reqId failed after ${stopwatch.elapsedMilliseconds}ms: $e',
       );
       rethrow;
     }

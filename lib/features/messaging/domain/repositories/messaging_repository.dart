@@ -11,8 +11,10 @@ abstract class MessagingRepository {
   });
   Future<Message> sendMessage({
     required String receiverId,
-    required String content,
+    String? content,
     String? conversationId,
+    String? attachmentType,
+    String? attachmentId,
   });
   Future<List<Participant>> searchUsers(String query);
   Future<List<Participant>> getFollowing(String userId);

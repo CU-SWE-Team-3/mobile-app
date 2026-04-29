@@ -24,6 +24,9 @@ class ConversationTile extends StatelessWidget {
     final lastMsg = conversation.lastMessage;
     final isOwnLast = lastMsg?.senderId == currentUserId;
 
+    final unread = conversation.unreadCount;
+    final hasUnread = unread > 0;
+
     final preview = lastMsg == null
         ? ''
         : isOwnLast
@@ -32,6 +35,13 @@ class ConversationTile extends StatelessWidget {
 
     final timestamp =
         lastMsg != null ? formatRelativeTime(lastMsg.createdAt) : '';
+
+    // Cap badge label at 99+; use 4+ for counts in the 5–99 range per spec.
+    final badgeLabel = unread > 99
+        ? '99+'
+        : unread > 4
+            ? '4+'
+            : '$unread';
 
     return InkWell(
       onTap: onTap,
@@ -54,10 +64,11 @@ class ConversationTile extends StatelessWidget {
                       Expanded(
                         child: Text(
                           otherParticipant.displayName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                            fontWeight:
+                                hasUnread ? FontWeight.w700 : FontWeight.w600,
                           ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
@@ -66,9 +77,14 @@ class ConversationTile extends StatelessWidget {
                       const SizedBox(width: 8),
                       Text(
                         timestamp,
-                        style: const TextStyle(
-                          color: Colors.white54,
+                        style: TextStyle(
+                          color: hasUnread
+                              ? const Color(0xFFFF5500)
+                              : Colors.white54,
                           fontSize: 12,
+                          fontWeight: hasUnread
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -79,15 +95,18 @@ class ConversationTile extends StatelessWidget {
                       Expanded(
                         child: Text(
                           preview,
-                          style: const TextStyle(
-                            color: Colors.white54,
+                          style: TextStyle(
+                            color: hasUnread ? Colors.white70 : Colors.white54,
                             fontSize: 13,
+                            fontWeight: hasUnread
+                                ? FontWeight.w500
+                                : FontWeight.normal,
                           ),
                           overflow: TextOverflow.ellipsis,
                           maxLines: 1,
                         ),
                       ),
-                      if (conversation.unreadCount > 0) ...[
+                      if (hasUnread) ...[
                         const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.all(5),
@@ -96,7 +115,7 @@ class ConversationTile extends StatelessWidget {
                             shape: BoxShape.circle,
                           ),
                           child: Text(
-                            '${conversation.unreadCount}',
+                            badgeLabel,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 11,

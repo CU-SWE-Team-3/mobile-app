@@ -136,6 +136,10 @@ class SocketService {
     debugPrint('[SocketService] leave_chat: $conversationId');
   }
 
+  /// Returns true while the user has that conversation's chat page open.
+  bool isViewingConversation(String conversationId) =>
+      _activeConversationIds.contains(conversationId);
+
   // ── NEW ──────────────────────────────────────────────────────────────────
   void sendTyping(String conversationId) {
     _socket?.emit('typing', {'conversationId': conversationId});

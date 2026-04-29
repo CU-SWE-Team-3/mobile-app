@@ -11,6 +11,31 @@ import 'package:soundcloud_clone/features/player/presentation/providers/player_p
 import '../pages/likers_list_page.dart';
 import '../pages/reposters_list_page.dart';
 import '../../../playlist/presentation/pages/add_to_playlist_page.dart';
+import '../../../../core/providers/session_provider.dart';
+import '../../../messaging/domain/entities/participant.dart';
+import '../../../messaging/presentation/providers/messaging_providers.dart';
+import '../../../messaging/presentation/widgets/send_to_sheet.dart';
+import '../../../premium/data/models/offline_downloaded_track.dart';
+import '../../../premium/data/services/offline_downloads_repository.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
+
+import 'dart:math';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
+import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+
+import '../pages/likers_list_page.dart';
+import '../pages/reposters_list_page.dart';
+import '../../../playlist/presentation/pages/add_to_playlist_page.dart';
 import '../../../premium/data/models/offline_downloaded_track.dart';
 import '../../../premium/data/services/offline_downloads_repository.dart';
 import '../../../premium/presentation/providers/subscription_provider.dart';
@@ -43,10 +68,12 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
   bool _isDownloading = false;
 
   Future<void> _handleDownload() async {
-    debugPrint('[Download] tapped from options sheet, trackId=${widget.trackId}');
+    debugPrint(
+        '[Download] tapped from options sheet, trackId=${widget.trackId}');
 
     var sub = ref.read(subscriptionProvider);
-    debugPrint('[Download] isPremium=${sub.isPremium}, currentPlan=${sub.planType}');
+    debugPrint(
+        '[Download] isPremium=${sub.isPremium}, currentPlan=${sub.planType}');
 
     if (!sub.isPremium) {
       await ref.read(subscriptionProvider.notifier).refreshFromProfile();
@@ -73,8 +100,8 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
       final dir = await getApplicationDocumentsDirectory();
       final localPath = '${dir.path}/offline_${widget.trackId}.mp3';
       final dioClient = ref.read(dioClientProvider);
-      await dioClient.dio.download(
-          '/tracks/${widget.trackId}/download', localPath);
+      await dioClient.dio
+          .download('/tracks/${widget.trackId}/download', localPath);
       debugPrint('[Download] backend responded 200 — saving metadata');
 
       final repo = ref.read(offlineDownloadsRepositoryProvider);
@@ -177,7 +204,11 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (hasDetails) _TrackSheetHeader(title: widget.title!, artist: widget.artistName!, artworkUrl: widget.artworkUrl),
+              if (hasDetails)
+                _TrackSheetHeader(
+                    title: widget.title!,
+                    artist: widget.artistName!,
+                    artworkUrl: widget.artworkUrl),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 18, 16, 8),
                 child: Text(
@@ -190,17 +221,74 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: const [
-                    _SendToAvatar(name: 'Mohamed Hany'),
-                    SizedBox(width: 10),
-                    _SendToAvatar(name: 'Marwan Pablo'),
-                    SizedBox(width: 10),
-                    _SendToAvatar(name: 'Two Feet'),
-                  ],
-                ),
+              Consumer(
+                builder: (ctx, cRef, _) {
+                  final myId = cRef.watch(sessionUserIdProvider);
+                  final convAsync = cRef.watch(conversationsProvider);
+                  return convAsync.when(
+                    loading: () => const SizedBox(
+                      height: 72,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFFF5500),
+                          strokeWidth: 2,
+                        ),
+                      ),
+                    ),
+                    error: (_, __) => const SizedBox.shrink(),
+                    data: (conversations) {
+                      final contacts = <Participant>[];
+                      for (final conv in conversations) {
+                        final other = conv.participants
+                            .where((p) => p.id != myId && p.id.isNotEmpty)
+                            .firstOrNull;
+                        if (other != null) contacts.add(other);
+                        if (contacts.length == 6) break;
+                      }
+                      if (contacts.isEmpty) return const SizedBox.shrink();
+                      final repo = cRef.read(messagingRepositoryProvider);
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: contacts.map((c) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 10),
+                              child: GestureDetector(
+                                onTap: () async {
+                                  final messenger = ScaffoldMessenger.of(ctx);
+                                  Navigator.pop(ctx);
+                                  try {
+                                    await repo.sendMessage(
+                                      receiverId: c.id,
+                                      attachmentType: 'track',
+                                      attachmentId: trackId,
+                                    );
+                                    messenger.showSnackBar(SnackBar(
+                                      content: Text('Sent to ${c.displayName}'),
+                                      backgroundColor: const Color(0xFF333333),
+                                      behavior: SnackBarBehavior.floating,
+                                    ));
+                                  } catch (_) {
+                                    messenger.showSnackBar(const SnackBar(
+                                      content: Text('Failed to send'),
+                                      backgroundColor: Color(0xFFCC3333),
+                                      behavior: SnackBarBehavior.floating,
+                                    ));
+                                  }
+                                },
+                                child: _SendToAvatar(
+                                  name: c.displayName,
+                                  avatarUrl: c.avatarUrl,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 22, 16, 8),
@@ -217,23 +305,44 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
-                  children: const [
-                    _ShareButton(icon: Icons.send_outlined, label: 'Message'),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.content_copy_outlined, label: 'Copy Link'),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.chat, label: 'WhatsApp', green: true),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.check_circle_outline, label: 'Status', green: true),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
+                  children: [
+                    _ShareButton(
+                      icon: Icons.send_outlined,
+                      label: 'Message',
+                      onTap: () {
+                        Navigator.pop(context);
+                        showSendToSheet(context, ShareableTrack(trackId));
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    const _ShareButton(
+                        icon: Icons.content_copy_outlined, label: 'Copy Link'),
+                    const SizedBox(width: 10),
+                    const _ShareButton(
+                        icon: Icons.chat, label: 'WhatsApp', green: true),
+                    const SizedBox(width: 10),
+                    const _ShareButton(
+                        icon: Icons.check_circle_outline,
+                        label: 'Status',
+                        green: true),
+                    const SizedBox(width: 10),
+                    const _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              _OptionTile(icon: Icons.favorite_border, label: 'Like', onTap: () => showSoon('Like coming soon')),
-              _OptionTile(icon: Icons.format_list_bulleted, label: 'Play Next', onTap: playNext),
-              _OptionTile(icon: Icons.format_list_numbered, label: 'Play Last', onTap: playLast),
+              _OptionTile(
+                  icon: Icons.favorite_border,
+                  label: 'Like',
+                  onTap: () => showSoon('Like coming soon')),
+              _OptionTile(
+                  icon: Icons.format_list_bulleted,
+                  label: 'Play Next',
+                  onTap: playNext),
+              _OptionTile(
+                  icon: Icons.format_list_numbered,
+                  label: 'Play Last',
+                  onTap: playLast),
               _OptionTile(
                 icon: Icons.playlist_add_outlined,
                 label: 'Add to playlist',
@@ -242,20 +351,26 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => AddToPlaylistPage(trackId: widget.trackId),
+                      builder: (_) =>
+                          AddToPlaylistPage(trackId: widget.trackId),
                     ),
                   );
                 },
               ),
-              _OptionTile(icon: Icons.wifi_tethering_outlined, label: 'Start station', onTap: () => showSoon('Start station coming soon')),
+              _OptionTile(
+                  icon: Icons.wifi_tethering_outlined,
+                  label: 'Start station',
+                  onTap: () => showSoon('Start station coming soon')),
               _isDownloading
                   ? const ListTile(
                       leading: SizedBox(
                         width: 24,
                         height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.orange),
                       ),
-                      title: Text('Downloading...', style: TextStyle(color: Colors.white70)),
+                      title: Text('Downloading...',
+                          style: TextStyle(color: Colors.white70)),
                     )
                   : _OptionTile(
                       icon: Icons.download_outlined,
@@ -267,7 +382,9 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                 icon: Icons.person_outline,
                 label: 'Go to artist profile',
                 onTap: () {
-                  if (widget.artistId != null && widget.artistPermalink != null && widget.artistName != null) {
+                  if (widget.artistId != null &&
+                      widget.artistPermalink != null &&
+                      widget.artistName != null) {
                     Navigator.pop(context);
                     navigateToUserProfile(
                       context,
@@ -324,13 +441,20 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RepostersListPage(trackId: widget.trackId),
+                      builder: (_) =>
+                          RepostersListPage(trackId: widget.trackId),
                     ),
                   );
                 },
               ),
-              _OptionTile(icon: Icons.graphic_eq, label: 'Behind this track', onTap: () => showSoon('Behind this track coming soon')),
-              _OptionTile(icon: Icons.outlined_flag, label: 'Report', onTap: () => showSoon('Report coming soon')),
+              _OptionTile(
+                  icon: Icons.graphic_eq,
+                  label: 'Behind this track',
+                  onTap: () => showSoon('Behind this track coming soon')),
+              _OptionTile(
+                  icon: Icons.outlined_flag,
+                  label: 'Report',
+                  onTap: () => showSoon('Report coming soon')),
               const SizedBox(height: 10),
             ],
           ),
@@ -375,7 +499,8 @@ class _TrackSheetHeader extends StatelessWidget {
                   : CachedNetworkImage(
                       imageUrl: artworkUrl!,
                       fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => const _SheetArtworkPlaceholder(),
+                      errorWidget: (_, __, ___) =>
+                          const _SheetArtworkPlaceholder(),
                     ),
             ),
           ),
@@ -414,19 +539,33 @@ class _TrackSheetHeader extends StatelessWidget {
 
 class _SendToAvatar extends StatelessWidget {
   final String name;
+  final String? avatarUrl;
 
-  const _SendToAvatar({required this.name});
+  const _SendToAvatar({required this.name, this.avatarUrl});
 
   @override
   Widget build(BuildContext context) {
+    final isValid = avatarUrl != null &&
+        avatarUrl!.isNotEmpty &&
+        avatarUrl!.startsWith('http');
     return SizedBox(
       width: 54,
       child: Column(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 22,
-            backgroundColor: Color(0xFF3A3A3A),
-            child: Icon(Icons.person, color: Colors.white70),
+            backgroundColor: const Color(0xFF3A3A3A),
+            backgroundImage:
+                isValid ? CachedNetworkImageProvider(avatarUrl!) : null,
+            child: !isValid
+                ? Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(height: 6),
           Text(
@@ -445,36 +584,42 @@ class _ShareButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool green;
+  final VoidCallback? onTap;
 
   const _ShareButton({
     required this.icon,
     required this.label,
     this.green = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 54,
-      child: Column(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: green ? const Color(0xFF28D366) : const Color(0xFF2F2F2F),
-              shape: BoxShape.circle,
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 54,
+        child: Column(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color:
+                    green ? const Color(0xFF28D366) : const Color(0xFF2F2F2F),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.white, size: 22),
             ),
-            child: Icon(icon, color: Colors.white, size: 22),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }
