@@ -553,7 +553,8 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
             ? sentAttachment.referenceId
             : optimisticAttachment.referenceId,
         title: sentAttachment.title ?? optimisticAttachment.title,
-        artworkUrl: sentAttachment.artworkUrl ?? optimisticAttachment.artworkUrl,
+        artworkUrl:
+            sentAttachment.artworkUrl ?? optimisticAttachment.artworkUrl,
         permalink: sentAttachment.permalink ?? optimisticAttachment.permalink,
         artistName:
             sentAttachment.artistName ?? optimisticAttachment.artistName,
@@ -823,8 +824,9 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                             onDelete: canEditDelete
                                 ? () => _deleteMessage(msg)
                                 : null,
-                            onAttachmentTap:
-                                msg.attachment != null ? _onAttachmentTap : null,
+                            onAttachmentTap: msg.attachment != null
+                                ? _onAttachmentTap
+                                : null,
                           ),
                         ),
                       );

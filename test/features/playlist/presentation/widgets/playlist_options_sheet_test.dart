@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -81,6 +82,59 @@ Future<void> _pumpSheet(
   await tester.pumpAndSettle();
 }
 
+/// Pumps the sheet inside a minimal GoRouter so that context.push() works.
+/// Used only by navigation-asserting tests.
+Future<void> _pumpSheetWithRouter(
+  WidgetTester tester,
+  MockPlaylistRepository mockRepo, {
+  Playlist? playlist,
+}) async {
+  tester.view.physicalSize = const Size(414, 900);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+
+  SharedPreferences.setMockInitialValues({});
+  when(() => mockRepo.fetchById(any())).thenAnswer((_) async => {});
+
+  final p = playlist ?? _testPlaylist;
+
+  final router = GoRouter(
+    initialLocation: '/',
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, __) => Builder(
+          builder: (ctx) => Scaffold(
+            body: TextButton(
+              onPressed: () => showModalBottomSheet(
+                context: ctx,
+                builder: (_) => PlaylistOptionsSheet(playlist: p),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/playlist/privacy',
+        builder: (_, __) => const Scaffold(body: Text('Privacy Page')),
+      ),
+    ],
+  );
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        playlistRepositoryProvider.overrideWithValue(mockRepo),
+      ],
+      child: MaterialApp.router(routerConfig: router),
+    ),
+  );
+
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 void main() {
@@ -100,11 +154,12 @@ void main() {
       expect(find.text('Test User'), findsOneWidget);
     });
 
-    testWidgets('renders Edit, Make private, Delete, Share rows', (tester) async {
+    testWidgets('renders Edit, Privacy settings, Delete, Share rows',
+        (tester) async {
       await _pumpSheet(tester, mockRepo);
 
       expect(find.text('Edit'), findsOneWidget);
-      expect(find.text('Make private'), findsOneWidget); // isPublic: true
+      expect(find.text('Privacy settings'), findsOneWidget);
       expect(find.text('Delete'), findsOneWidget);
       expect(find.text('Share'), findsOneWidget);
     });
@@ -119,19 +174,6 @@ void main() {
       await _pumpSheet(tester, mockRepo, showCopyOption: true);
 
       expect(find.text('Copy playlist'), findsOneWidget);
-    });
-
-    testWidgets('shows Make public when playlist is private', (tester) async {
-      final privatePlaylist = Playlist(
-        id: 'p2',
-        title: 'Private',
-        ownerName: 'User',
-        isPublic: false,
-      );
-      await _pumpSheet(tester, mockRepo, playlist: privatePlaylist);
-
-      expect(find.text('Make public'), findsOneWidget);
-      expect(find.text('Make private'), findsNothing);
     });
   });
 
@@ -160,60 +202,31 @@ void main() {
     });
   });
 
-  // ── Make private / Make public ────────────────────────────────────────────
+  // ── Privacy settings ──────────────────────────────────────────────────────
 
-  group('PlaylistOptionsSheet — Make private/public', () {
-    testWidgets('tapping Make private calls repository.updatePrivacy with false',
-        (tester) async {
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
-
-      await _pumpSheet(tester, mockRepo); // playlist.isPublic = true
-
-      await tester.tap(find.text('Make private'));
-      await tester.pumpAndSettle();
-
-      verify(() => mockRepo.updatePrivacy('test-id', false)).called(1);
-    });
-
-    testWidgets('tapping Make public calls repository.updatePrivacy with true',
-        (tester) async {
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
-      final privatePlaylist = Playlist(
-        id: 'test-id',
-        title: 'Test',
-        ownerName: 'User',
-        isPublic: false,
-      );
-
-      await _pumpSheet(tester, mockRepo, playlist: privatePlaylist);
-
-      await tester.tap(find.text('Make public'));
-      await tester.pumpAndSettle();
-
-      verify(() => mockRepo.updatePrivacy('test-id', true)).called(1);
-    });
-
-    testWidgets('shows success snackbar after toggling privacy', (tester) async {
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
-
+  group('PlaylistOptionsSheet — Privacy settings', () {
+    testWidgets('Privacy settings row is visible', (tester) async {
       await _pumpSheet(tester, mockRepo);
 
-      await tester.tap(find.text('Make private'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Playlist is now private'), findsOneWidget);
+      expect(find.text('Privacy settings'), findsOneWidget);
     });
 
-    testWidgets('shows error snackbar when repository throws', (tester) async {
-      when(() => mockRepo.updatePrivacy(any(), any()))
-          .thenThrow(Exception('network error'));
+    testWidgets('tapping Privacy settings closes the sheet and navigates to privacy page',
+        (tester) async {
+      await _pumpSheetWithRouter(tester, mockRepo);
 
-      await _pumpSheet(tester, mockRepo);
-
-      await tester.tap(find.text('Make private'));
+      await tester.tap(find.text('Privacy settings'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Failed to update playlist privacy'), findsOneWidget);
+      // Sheet is gone and privacy page is visible
+      expect(find.text('Privacy settings'), findsNothing);
+      expect(find.text('Privacy Page'), findsOneWidget);
+    });
+
+    testWidgets('does not call updatePrivacy directly', (tester) async {
+      await _pumpSheet(tester, mockRepo);
+
+      verifyNever(() => mockRepo.updatePrivacy(any(), any()));
     });
   });
 

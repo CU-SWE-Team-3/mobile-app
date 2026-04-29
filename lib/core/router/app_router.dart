@@ -80,6 +80,7 @@ import '../../features/engagement/presentation/pages/comments_sheet.dart';
 import '../../features/engagement/presentation/pages/likers_list_page.dart';
 import '../../features/engagement/presentation/pages/reposters_list_page.dart';
 
+import '../../features/playlist/domain/entities/playlist.dart';
 import '../../features/playlist/presentation/pages/playlist_details_page.dart';
 import '../../features/playlist/presentation/pages/create_playlist_page.dart';
 import '../../features/playlist/presentation/pages/edit_playlist_page.dart';
@@ -518,7 +519,12 @@ final appRouter = GoRouter(
         GoRoute(path: 'create', builder: (_, __) => const CreatePlaylistPage()),
         GoRoute(path: 'edit', builder: (_, __) => const EditPlaylistPage()),
         GoRoute(
-            path: 'privacy', builder: (_, __) => const PlaylistPrivacyPage()),
+          path: 'privacy',
+          builder: (_, state) {
+            final playlist = state.extra as Playlist;
+            return PlaylistPrivacyPage(playlist: playlist);
+          },
+        ),
         GoRoute(path: 'share', builder: (_, __) => const SharePlaylistPage()),
         GoRoute(
           path: 'add-track',

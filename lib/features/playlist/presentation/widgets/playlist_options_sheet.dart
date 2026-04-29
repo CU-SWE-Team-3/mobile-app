@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../domain/entities/playlist.dart';
 import '../pages/share_playlist_page.dart';
@@ -110,32 +111,13 @@ class PlaylistOptionsSheet extends ConsumerWidget {
                 );
               },
             ),
-            // Make private / Make public
+            // Privacy settings — navigates to full privacy page
             _optionRow(
-              icon: Icons.lock_outline,
-              label: playlist.isPublic ? 'Make private' : 'Make public',
-              onTap: () async {
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                final notifier = ref.read(playlistsProvider.notifier);
-                final newIsPublic = !playlist.isPublic;
-                nav.pop();
-                try {
-                  await notifier.updateVisibility(playlist.id, newIsPublic);
-                  messenger.showSnackBar(SnackBar(
-                    content: Text(newIsPublic
-                        ? 'Playlist is now public'
-                        : 'Playlist is now private'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                } catch (_) {
-                  messenger.showSnackBar(const SnackBar(
-                    content: Text('Failed to update playlist privacy'),
-                    backgroundColor: Color(0xFF3A1A1A),
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                }
+              icon: Icons.shield_outlined,
+              label: 'Privacy settings',
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/playlist/privacy', extra: playlist);
               },
             ),
             // Delete
