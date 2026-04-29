@@ -44,13 +44,23 @@ class SubscriptionState {
   }
 }
 
+/// Maps the raw backend planType ("Pro", "Go+") to a display name.
+String planDisplayName(String? planType) {
+  if (planType == 'Pro') return 'Artist Pro';
+  if (planType == 'Go+') return 'Go+';
+  return 'Premium';
+}
+
 class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   final DioClient _dioClient;
   final Ref _ref;
 
   SubscriptionNotifier(this._dioClient, this._ref)
       : super(const SubscriptionState()) {
-    loadFromLocal();
+    // Load cached state first, then immediately fetch live state from backend.
+    // This ensures isPremium and planType are always up-to-date even in cold
+    // sessions where the user never triggered an app-resume cycle.
+    loadFromLocal().then((_) => refreshFromProfile());
   }
 
   Future<void> loadFromLocal() async {
@@ -100,6 +110,11 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         await prefs.setString('subscriptionPlanType', remotePlanType);
       }
 
+      debugPrint(
+        '[Subscription] refreshFromProfile — isPremium: $isPremium, '
+        'planType: $remotePlanType',
+      );
+
       state = state.copyWith(
         isPremium: isPremium,
         isLoading: false,
@@ -111,18 +126,23 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
   }
 
   Future<void> checkout(String planType) async {
-    // Already subscribed and not canceling — caller should navigate to management
-    // UI instead of calling checkout. Return silently; do not set an error.
+    // Already subscribed and not canceling — navigate to management UI.
     if (state.isPremium && !state.cancelAtPeriodEnd) {
       return;
     }
-    final hasAuth = (_dioClient.dio.options.headers['Authorization'] as String?)?.isNotEmpty ?? false;
+    final hasAuth =
+        (_dioClient.dio.options.headers['Authorization'] as String?)
+                ?.isNotEmpty ??
+            false;
     debugPrint('[Subscription] checkout — token exists: $hasAuth');
     if (!hasAuth) {
       state = state.copyWith(error: 'Please log in again.');
       return;
     }
-    debugPrint('[Subscription] checkout — planType: $planType, endpoint: POST /subscriptions/checkout');
+    debugPrint(
+      '[Subscription] checkout — planType: $planType, '
+      'endpoint: POST /subscriptions/checkout',
+    );
     // Store plan type now so success page can display it even before API refresh
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('subscriptionPlanType', planType);
@@ -131,29 +151,41 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       final service = SubscriptionService(_dioClient);
       final url = await service.checkout(planType);
       if (url.isEmpty) {
-        state = state.copyWith(isLoading: false, error: 'Invalid checkout URL received.');
+        state = state.copyWith(
+            isLoading: false, error: 'Invalid checkout URL received.');
         return;
       }
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
+        // Mark that a checkout was started so app-resume knows to show
+        // PaymentSuccessPage only when returning from Stripe, not from any
+        // other background event (file picker, login, etc.).
+        await prefs.setBool('pendingCheckout', true);
       } else {
-        state = state.copyWith(isLoading: false, error: 'Could not open checkout URL.');
+        state = state.copyWith(
+            isLoading: false, error: 'Could not open checkout URL.');
         return;
       }
       state = state.copyWith(isLoading: false);
       // Profile refresh is handled on app resume (WidgetsBindingObserver in main).
     } catch (e) {
-      // Backend 400 "already subscribed/premium" means the user IS subscribed.
-      // Treat it as a subscribed state, not a failure: refresh and clear error.
+      // On any 400, refresh profile first — the user may already be subscribed
+      // (backend may return 400 for already-subscribed state with various messages).
       if (e is DioException && e.response?.statusCode == 400) {
-        final body = e.response?.data;
-        final msg = body is Map ? (body['message'] as String? ?? '') : '';
-        if (msg.toLowerCase().contains('already')) {
-          state = state.copyWith(isLoading: false);
-          await refreshFromProfile();
+        state = state.copyWith(isLoading: false);
+        await refreshFromProfile();
+        if (state.isPremium) {
+          // Confirmed: user is already subscribed — treat as success.
           return;
         }
+        // Not subscribed — show the backend message.
+        final msg = _bodyMessage(e.response?.data);
+        state = state.copyWith(
+          isLoading: false,
+          error: msg.isNotEmpty ? msg : 'Checkout failed. Please try again.',
+        );
+        return;
       }
       state = state.copyWith(isLoading: false, error: _mapError(e));
     }
@@ -164,8 +196,14 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       state = state.copyWith(error: 'No active subscription to cancel.');
       return;
     }
-    final hasAuth = (_dioClient.dio.options.headers['Authorization'] as String?)?.isNotEmpty ?? false;
-    debugPrint('[Subscription] cancel — token exists: $hasAuth, endpoint: DELETE /subscriptions/cancel');
+    final hasAuth =
+        (_dioClient.dio.options.headers['Authorization'] as String?)
+                ?.isNotEmpty ??
+            false;
+    debugPrint(
+      '[Subscription] cancel — token exists: $hasAuth, '
+      'endpoint: DELETE /subscriptions/cancel',
+    );
     if (!hasAuth) {
       state = state.copyWith(error: 'Please log in again.');
       return;
@@ -173,9 +211,6 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     state = state.copyWith(isLoading: true);
     try {
       final service = SubscriptionService(_dioClient);
-      // No explicit token arg — DioClient global Bearer header handles auth
-      // (same mechanism as checkout(), which works correctly).
-      // Items [1–5] are logged inside SubscriptionService.cancel().
       final expiresAt = await service.cancel();
 
       final prefs = await SharedPreferences.getInstance();
@@ -184,7 +219,6 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       }
       await prefs.setBool('cancelAtPeriodEnd', true);
 
-      // [6] Final UI message — success path
       final uiMsg = expiresAt != null
           ? 'Your subscription will remain active until $expiresAt'
           : 'Subscription cancelled. Access continues until your billing period ends.';
@@ -198,13 +232,12 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     } catch (e) {
       final status = e is DioException ? e.response?.statusCode : null;
       final body = e is DioException ? e.response?.data : null;
-      // Detect backend "route not found" (endpoint not deployed yet)
       String errMsg = _mapError(e);
-      if (errMsg.toLowerCase().contains('route') && errMsg.toLowerCase().contains('not found')) {
+      if (errMsg.toLowerCase().contains('route') &&
+          errMsg.toLowerCase().contains('not found')) {
         errMsg = 'Cancellation is not available from backend yet.';
       }
 
-      // [6] Final UI message — failure path
       debugPrint(
         '[Cancel] FAILED — status: $status, body: $body, '
         'errorType: ${e.runtimeType}\n'
@@ -215,14 +248,14 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     }
   }
 
-  /// DEV ONLY — resets all local premium state so the subscribe flow can be re-tested
-  /// without waiting for a real billing period to expire.
+  /// DEV ONLY — resets all local premium state for re-testing the subscribe flow.
   Future<void> devReset() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isPremium', false);
     await prefs.remove('subscriptionPlanType');
     await prefs.remove('subscriptionExpiresAt');
     await prefs.setBool('cancelAtPeriodEnd', false);
+    await prefs.setBool('pendingCheckout', false);
     debugPrint('[Subscription] devReset — local premium state cleared');
     state = const SubscriptionState();
   }
@@ -232,9 +265,8 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       final status = e.response?.statusCode;
       if (status == 401) return 'Session expired. Please log in again.';
       if (status == 400) {
-        // "already subscribed" 400s are intercepted in checkout() before reaching here.
         final msg = _bodyMessage(e.response?.data);
-        return msg.isNotEmpty ? msg : 'No active subscription found.';
+        return msg.isNotEmpty ? msg : 'Checkout failed. Please try again.';
       }
       if (status == 403) return 'This feature requires a premium plan.';
       if (status == 404) return 'Cancellation is not available from backend yet.';
@@ -251,20 +283,28 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     return 'Something went wrong. Please try again.';
   }
 
-  /// Extracts the `message` field from a Dio response body (Map or String).
+  /// Extracts a human-readable message from a Dio response body.
+  /// Checks 'message', 'error', 'msg' fields in order.
   String _bodyMessage(dynamic data) {
     try {
-      if (data is Map) return (data['message'] as String?) ?? '';
+      if (data is Map) {
+        return (data['message'] as String?) ??
+            (data['error'] as String?) ??
+            (data['msg'] as String?) ??
+            '';
+      }
       if (data is String && data.isNotEmpty) {
-        // Avoid importing dart:convert — do a simple substring search.
-        final start = data.indexOf('"message"');
-        if (start != -1) {
-          final colon = data.indexOf(':', start);
-          if (colon != -1) {
-            final q1 = data.indexOf('"', colon + 1);
-            if (q1 != -1) {
-              final q2 = data.indexOf('"', q1 + 1);
-              if (q2 != -1) return data.substring(q1 + 1, q2);
+        // Check 'message' key first, then 'error'
+        for (final key in ['message', 'error', 'msg']) {
+          final start = data.indexOf('"$key"');
+          if (start != -1) {
+            final colon = data.indexOf(':', start);
+            if (colon != -1) {
+              final q1 = data.indexOf('"', colon + 1);
+              if (q1 != -1) {
+                final q2 = data.indexOf('"', q1 + 1);
+                if (q2 != -1) return data.substring(q1 + 1, q2);
+              }
             }
           }
         }
@@ -286,7 +326,8 @@ final myPlaylistCountProvider = FutureProvider.autoDispose<int>((ref) async {
   final userId = prefs.getString('userId') ?? '';
   if (userId.isEmpty) return 0;
   final dio = ref.watch(dioClientProvider).dio;
-  final response = await dio.get('/playlists', queryParameters: {'creator': userId});
+  final response =
+      await dio.get('/playlists', queryParameters: {'creator': userId});
   final results = response.data['results'];
   if (results is int) return results;
   final data = response.data['data'];

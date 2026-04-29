@@ -128,18 +128,6 @@ class UploadNotifier extends StateNotifier<UploadState> {
       return;
     }
 
-    // Role pre-check: only Artist accounts can upload
-    final prefs = await SharedPreferences.getInstance();
-    final role = prefs.getString('role') ?? '';
-    if (role.toLowerCase() != 'artist') {
-      state = state.copyWith(
-        isUploading: false,
-        needsRoleUpgrade: true,
-        error: 'Artist role required to upload tracks.',
-      );
-      return;
-    }
-
     state = state.copyWith(
       isUploading: true,
       uploadProgress: 0.0,
@@ -170,7 +158,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
               isUploading: false,
               needsRoleUpgrade: true,
               error:
-                  'Upload limit reached. Upgrade to Artist Pro for unlimited uploads.',
+                  'Upload limit reached. Free and Go+ accounts are limited to 3 tracks. Upgrade to Artist Pro for unlimited uploads.',
             );
             return;
           }

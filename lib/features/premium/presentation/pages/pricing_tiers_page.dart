@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../providers/subscription_provider.dart';
+import '../providers/subscription_provider.dart' show subscriptionProvider, planDisplayName;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan data model
@@ -207,7 +207,7 @@ class _PricingTiersPageState extends ConsumerState<PricingTiersPage> {
                             color: Color(0xFF00C853), size: 16),
                         const SizedBox(width: 8),
                         Text(
-                          'Active: ${sub.planType}',
+                          'Active: ${planDisplayName(sub.planType)}',
                           style: const TextStyle(
                             color: Color(0xFF00C853),
                             fontWeight: FontWeight.w600,

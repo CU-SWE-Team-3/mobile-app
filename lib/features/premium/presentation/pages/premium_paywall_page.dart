@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../providers/subscription_provider.dart';
+import '../providers/subscription_provider.dart' show subscriptionProvider, planDisplayName;
 
 class PremiumPaywallPage extends ConsumerWidget {
   const PremiumPaywallPage({super.key});
@@ -271,7 +271,7 @@ class _SubscribedView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sub = ref.watch(subscriptionProvider);
-    final planName = sub.planType ?? 'Premium';
+    final planName = planDisplayName(sub.planType);
 
     return Scaffold(
       backgroundColor: Colors.black,

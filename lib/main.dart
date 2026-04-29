@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/network/dio_client.dart';
 import 'core/router/app_router.dart';
@@ -51,6 +52,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   Future<void> _onResume() async {
     try {
       await ref.read(subscriptionProvider.notifier).refreshFromProfile();
+      // Only navigate to PaymentSuccessPage when a checkout was explicitly
+      // started from this app (pendingCheckout flag). Without this gate every
+      // app-resume event — file picker close, login, keyboard dismiss — would
+      // wrongly open PaymentSuccessPage for any already-subscribed user.
+      final prefs = await SharedPreferences.getInstance();
+      final pending = prefs.getBool('pendingCheckout') ?? false;
+      if (!pending) return;
+      await prefs.setBool('pendingCheckout', false); // consume — one-shot
       final sub = ref.read(subscriptionProvider);
       if (sub.isPremium) {
         try {

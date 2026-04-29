@@ -79,7 +79,9 @@ class _StatusBody extends ConsumerWidget {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      sub.isPremium ? 'Premium Active' : 'Free Plan',
+                      sub.isPremium
+                          ? 'You are on ${planDisplayName(sub.planType)}'
+                          : 'Free Plan',
                       style: TextStyle(
                         color: sub.isPremium
                             ? const Color(0xFF4CAF50)
@@ -92,10 +94,12 @@ class _StatusBody extends ConsumerWidget {
                 ),
 
                 if (sub.isPremium && sub.planType != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    'Plan: ${sub.planType}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    sub.planType == 'Pro'
+                        ? 'Unlimited uploads · Offline downloads · Ad-free'
+                        : 'Offline downloads · Ad-free listening',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ],
 
@@ -211,11 +215,21 @@ class _StatusBody extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            const _PerkTile(Icons.cloud_upload_outlined, 'Unlimited uploads'),
-            const _PerkTile(Icons.bar_chart, 'Advanced audience insights'),
-            const _PerkTile(Icons.download_outlined, 'Track downloads'),
-            const _PerkTile(Icons.attach_money, 'Revenue sharing'),
-            const _PerkTile(Icons.push_pin_outlined, 'Pin favorite tracks'),
+            if (sub.planType == 'Pro') ...[
+              const _PerkTile(Icons.cloud_upload_outlined, 'Unlimited uploads'),
+              const _PerkTile(Icons.download_outlined, 'Offline downloads'),
+              const _PerkTile(Icons.music_off, 'Ad-free listening'),
+              const _PerkTile(Icons.cancel_outlined, 'Cancel anytime'),
+            ] else if (sub.planType == 'Go+') ...[
+              const _PerkTile(Icons.download_outlined, 'Offline downloads'),
+              const _PerkTile(Icons.music_off, 'Ad-free listening'),
+              const _PerkTile(Icons.upload_outlined, '3 uploads included'),
+              const _PerkTile(Icons.cancel_outlined, 'Cancel anytime'),
+            ] else ...[
+              const _PerkTile(Icons.download_outlined, 'Offline downloads'),
+              const _PerkTile(Icons.music_off, 'Ad-free listening'),
+              const _PerkTile(Icons.cancel_outlined, 'Cancel anytime'),
+            ],
           ],
 
           const SizedBox(height: 48),

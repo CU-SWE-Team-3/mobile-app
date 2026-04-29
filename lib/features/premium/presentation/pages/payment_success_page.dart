@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../providers/subscription_provider.dart';
+import '../providers/subscription_provider.dart' show subscriptionProvider, planDisplayName;
 
 class PaymentSuccessPage extends ConsumerStatefulWidget {
   const PaymentSuccessPage({super.key});
@@ -24,7 +24,7 @@ class _PaymentSuccessPageState extends ConsumerState<PaymentSuccessPage> {
   @override
   Widget build(BuildContext context) {
     final sub = ref.watch(subscriptionProvider);
-    final planName = sub.planType ?? 'Premium';
+    final planName = planDisplayName(sub.planType);
 
     return Scaffold(
       backgroundColor: Colors.black,

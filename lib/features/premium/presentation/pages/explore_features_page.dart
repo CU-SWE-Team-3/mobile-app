@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../providers/subscription_provider.dart';
+import '../providers/subscription_provider.dart' show subscriptionProvider, planDisplayName;
 
 class ExploreFeaturesPage extends ConsumerWidget {
   const ExploreFeaturesPage({super.key});
@@ -12,6 +12,7 @@ class ExploreFeaturesPage extends ConsumerWidget {
     final sub = ref.watch(subscriptionProvider);
     final planType = sub.planType ?? 'Pro';
     final features = _featuresForPlan(planType);
+    final displayName = planDisplayName(planType);
 
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
@@ -19,7 +20,7 @@ class ExploreFeaturesPage extends ConsumerWidget {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         title: Text(
-          '$planType — Your Features',
+          '$displayName — Your Features',
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
