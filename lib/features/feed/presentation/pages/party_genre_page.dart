@@ -5,21 +5,21 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/network/dio_client.dart';
 
-class ChillGenrePage extends ConsumerStatefulWidget {
-  const ChillGenrePage({super.key});
+class PartyGenrePage extends ConsumerStatefulWidget {
+  const PartyGenrePage({super.key});
 
   @override
-  ConsumerState<ChillGenrePage> createState() => _ChillGenrePageState();
+  ConsumerState<PartyGenrePage> createState() => _PartyGenrePageState();
 }
 
-class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
+class _PartyGenrePageState extends ConsumerState<PartyGenrePage>
     with TickerProviderStateMixin {
   static const _pageBackground = Color(0xFF111111);
   static const _panelBackground = Color(0xFF1A1A1A);
-  static const _chillQuery = 'Chill';
-  static const _chillGenreQueries = [
-    'Chill',
-    'chill',
+  static const _partyQuery = 'Party';
+  static const _partyGenreQueries = [
+    'Party',
+    'party',
   ];
 
   late final TabController _tabController;
@@ -51,7 +51,7 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
 
     try {
       final responses = await Future.wait(
-        _chillGenreQueries.map(
+        _partyGenreQueries.map(
           (genre) => dioClient.dio
               .get(
                 '/playlists',
@@ -152,7 +152,7 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
                   fit: StackFit.expand,
                   children: [
                     Image.asset(
-                      'assets/images/Chill_bg.png',
+                      'assets/images/Party_bg.png',
                       fit: BoxFit.cover,
                       alignment: Alignment.topCenter,
                     ),
@@ -175,7 +175,7 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
                       right: 24,
                       bottom: 54,
                       child: Text(
-                        'Chill',
+                        'Party',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 36,
@@ -247,7 +247,7 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           children: const [
             Text(
-              'No Chill playlists available right now.',
+              'No Party playlists available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 15),
             ),
           ],
@@ -379,7 +379,7 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Failed to load Chill playlists.',
+            'Failed to load Party playlists.',
             style: TextStyle(color: Colors.grey[400], fontSize: 15),
           ),
           const SizedBox(height: 12),
