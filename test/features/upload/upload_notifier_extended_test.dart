@@ -78,8 +78,8 @@ void main() {
       const s = UploadState(
           track: UploadTrack(title: '', artist: ''),
           processingState: 'Processing');
-      expect(s.copyWith(processingState: 'Finished').processingState,
-          'Finished');
+      expect(
+          s.copyWith(processingState: 'Finished').processingState, 'Finished');
     });
 
     test('copyWith with null clears processingState', () {
@@ -95,8 +95,8 @@ void main() {
           'Processing');
       expect(base.copyWith(processingState: 'Finished').processingState,
           'Finished');
-      expect(base.copyWith(processingState: 'Failed').processingState,
-          'Failed');
+      expect(
+          base.copyWith(processingState: 'Failed').processingState, 'Failed');
     });
   });
 
@@ -115,15 +115,13 @@ void main() {
 
     test('copyWith resets needsRoleUpgrade to false', () {
       const s = UploadState(
-          track: UploadTrack(title: '', artist: ''),
-          needsRoleUpgrade: true);
+          track: UploadTrack(title: '', artist: ''), needsRoleUpgrade: true);
       expect(s.copyWith(needsRoleUpgrade: false).needsRoleUpgrade, isFalse);
     });
 
     test('unrelated copyWith call preserves needsRoleUpgrade', () {
       const s = UploadState(
-          track: UploadTrack(title: '', artist: ''),
-          needsRoleUpgrade: true);
+          track: UploadTrack(title: '', artist: ''), needsRoleUpgrade: true);
       expect(s.copyWith(isLoading: true).needsRoleUpgrade, isTrue);
     });
   });
@@ -166,8 +164,8 @@ void main() {
     });
 
     test('processingState stored on entity', () {
-      const t = UploadTrack(
-          title: 'T', artist: 'A', processingState: 'Processing');
+      const t =
+          UploadTrack(title: 'T', artist: 'A', processingState: 'Processing');
       expect(t.processingState, 'Processing');
     });
 
@@ -183,10 +181,10 @@ void main() {
     });
 
     test('copyWith updates processingState from Processing to Finished', () {
-      const t = UploadTrack(
-          title: 'T', artist: 'A', processingState: 'Processing');
-      expect(t.copyWith(processingState: 'Finished').processingState,
-          'Finished');
+      const t =
+          UploadTrack(title: 'T', artist: 'A', processingState: 'Processing');
+      expect(
+          t.copyWith(processingState: 'Finished').processingState, 'Finished');
     });
   });
 
@@ -257,8 +255,7 @@ void main() {
 
     test('clears processingState to null', () {
       final (:notifier, :mockDio) = buildNotifier();
-      notifier.state =
-          notifier.state.copyWith(processingState: 'Processing');
+      notifier.state = notifier.state.copyWith(processingState: 'Processing');
       notifier.clearUploadStatus();
       expect(notifier.state.processingState, isNull);
     });
@@ -312,25 +309,24 @@ void main() {
       expect(notifier.state.isUploading, isFalse);
     });
 
-    test('sets needsRoleUpgrade when role is listener', () async {
+    test('does not set needsRoleUpgrade when role is listener', () async {
       SharedPreferences.setMockInitialValues({'role': 'listener'});
       final (:notifier, :mockDio) = buildNotifier();
       notifier.updateTrackField(audioFilePath: '/any/path.mp3');
 
       await notifier.uploadTrack();
 
-      expect(notifier.state.needsRoleUpgrade, isTrue);
+      expect(notifier.state.needsRoleUpgrade, isFalse);
     });
 
-    test('sets descriptive error when role is listener', () async {
+    test('does not show artist-role error when role is listener', () async {
       SharedPreferences.setMockInitialValues({'role': 'listener'});
       final (:notifier, :mockDio) = buildNotifier();
       notifier.updateTrackField(audioFilePath: '/any/path.mp3');
 
       await notifier.uploadTrack();
 
-      expect(notifier.state.error,
-          contains('Artist role required'));
+      expect(notifier.state.error, isNot(contains('Artist role required')));
     });
 
     test('does not set needsRoleUpgrade when no file path', () async {
@@ -366,8 +362,7 @@ void main() {
     test('calls PATCH /profile/tier with tier:artist', () async {
       SharedPreferences.setMockInitialValues({});
       final (:notifier, :mockDio) = buildNotifier();
-      when(() =>
-              mockDio.patch('/profile/tier', data: any(named: 'data')))
+      when(() => mockDio.patch('/profile/tier', data: any(named: 'data')))
           .thenAnswer((_) async => ok({}));
 
       await notifier.upgradeToArtist();
@@ -382,8 +377,7 @@ void main() {
     test('clears isLoading on success', () async {
       SharedPreferences.setMockInitialValues({});
       final (:notifier, :mockDio) = buildNotifier();
-      when(() =>
-              mockDio.patch('/profile/tier', data: any(named: 'data')))
+      when(() => mockDio.patch('/profile/tier', data: any(named: 'data')))
           .thenAnswer((_) async => ok({}));
 
       await notifier.upgradeToArtist();
@@ -394,10 +388,8 @@ void main() {
     test('clears needsRoleUpgrade on success', () async {
       SharedPreferences.setMockInitialValues({'role': 'listener'});
       final (:notifier, :mockDio) = buildNotifier();
-      notifier.state =
-          notifier.state.copyWith(needsRoleUpgrade: true);
-      when(() =>
-              mockDio.patch('/profile/tier', data: any(named: 'data')))
+      notifier.state = notifier.state.copyWith(needsRoleUpgrade: true);
+      when(() => mockDio.patch('/profile/tier', data: any(named: 'data')))
           .thenAnswer((_) async => ok({}));
 
       await notifier.upgradeToArtist();
@@ -408,8 +400,7 @@ void main() {
     test('saves artist role to SharedPreferences on success', () async {
       SharedPreferences.setMockInitialValues({});
       final (:notifier, :mockDio) = buildNotifier();
-      when(() =>
-              mockDio.patch('/profile/tier', data: any(named: 'data')))
+      when(() => mockDio.patch('/profile/tier', data: any(named: 'data')))
           .thenAnswer((_) async => ok({}));
 
       await notifier.upgradeToArtist();
@@ -421,8 +412,7 @@ void main() {
     test('sets error on API failure', () async {
       SharedPreferences.setMockInitialValues({});
       final (:notifier, :mockDio) = buildNotifier();
-      when(() =>
-              mockDio.patch('/profile/tier', data: any(named: 'data')))
+      when(() => mockDio.patch('/profile/tier', data: any(named: 'data')))
           .thenThrow(Exception('network error'));
 
       await notifier.upgradeToArtist();
@@ -433,8 +423,7 @@ void main() {
     test('clears isLoading on API failure', () async {
       SharedPreferences.setMockInitialValues({});
       final (:notifier, :mockDio) = buildNotifier();
-      when(() =>
-              mockDio.patch('/profile/tier', data: any(named: 'data')))
+      when(() => mockDio.patch('/profile/tier', data: any(named: 'data')))
           .thenThrow(Exception('timeout'));
 
       await notifier.upgradeToArtist();
@@ -445,10 +434,8 @@ void main() {
     test('does not clear needsRoleUpgrade on failure', () async {
       SharedPreferences.setMockInitialValues({});
       final (:notifier, :mockDio) = buildNotifier();
-      notifier.state =
-          notifier.state.copyWith(needsRoleUpgrade: true);
-      when(() =>
-              mockDio.patch('/profile/tier', data: any(named: 'data')))
+      notifier.state = notifier.state.copyWith(needsRoleUpgrade: true);
+      when(() => mockDio.patch('/profile/tier', data: any(named: 'data')))
           .thenThrow(Exception('server down'));
 
       await notifier.upgradeToArtist();
@@ -478,10 +465,10 @@ void main() {
 
     test('appends to existing list', () {
       final notifier = UploadedTracksNotifier();
-      notifier.addTrack(
-          const UploadTrack(title: 'One', artist: 'A', audioFilePath: '/1.mp3'));
-      notifier.addTrack(
-          const UploadTrack(title: 'Two', artist: 'A', audioFilePath: '/2.mp3'));
+      notifier.addTrack(const UploadTrack(
+          title: 'One', artist: 'A', audioFilePath: '/1.mp3'));
+      notifier.addTrack(const UploadTrack(
+          title: 'Two', artist: 'A', audioFilePath: '/2.mp3'));
       expect(notifier.state.length, 2);
       expect(notifier.state[1].title, 'Two');
     });
@@ -500,10 +487,10 @@ void main() {
   group('UploadedTracksNotifier — removeTrack', () {
     test('removes track by audioFilePath', () {
       final notifier = UploadedTracksNotifier();
-      notifier.addTrack(const UploadTrack(
-          title: 'A', artist: 'X', audioFilePath: '/a.mp3'));
-      notifier.addTrack(const UploadTrack(
-          title: 'B', artist: 'X', audioFilePath: '/b.mp3'));
+      notifier.addTrack(
+          const UploadTrack(title: 'A', artist: 'X', audioFilePath: '/a.mp3'));
+      notifier.addTrack(
+          const UploadTrack(title: 'B', artist: 'X', audioFilePath: '/b.mp3'));
 
       notifier.removeTrack('/a.mp3');
 
@@ -513,8 +500,8 @@ void main() {
 
     test('no-op when audioFilePath does not match any track', () {
       final notifier = UploadedTracksNotifier();
-      notifier.addTrack(const UploadTrack(
-          title: 'A', artist: 'X', audioFilePath: '/a.mp3'));
+      notifier.addTrack(
+          const UploadTrack(title: 'A', artist: 'X', audioFilePath: '/a.mp3'));
 
       notifier.removeTrack('/does-not-exist.mp3');
 
@@ -541,10 +528,10 @@ void main() {
   group('UploadedTracksNotifier — clearAll', () {
     test('empties a populated list', () {
       final notifier = UploadedTracksNotifier();
-      notifier.addTrack(const UploadTrack(
-          title: 'A', artist: 'X', audioFilePath: '/a.mp3'));
-      notifier.addTrack(const UploadTrack(
-          title: 'B', artist: 'X', audioFilePath: '/b.mp3'));
+      notifier.addTrack(
+          const UploadTrack(title: 'A', artist: 'X', audioFilePath: '/a.mp3'));
+      notifier.addTrack(
+          const UploadTrack(title: 'B', artist: 'X', audioFilePath: '/b.mp3'));
 
       notifier.clearAll();
 

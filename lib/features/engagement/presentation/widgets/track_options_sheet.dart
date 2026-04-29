@@ -1,19 +1,14 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 import '../pages/likers_list_page.dart';
 import '../pages/reposters_list_page.dart';
 import '../../../playlist/presentation/pages/add_to_playlist_page.dart';
-import '../../../premium/data/models/offline_downloaded_track.dart';
-import '../../../premium/data/services/offline_downloads_repository.dart';
-import '../../../premium/presentation/providers/subscription_provider.dart';
+import '../../../premium/data/services/track_download_service.dart';
 
 class TrackOptionsSheet extends ConsumerStatefulWidget {
   final String trackId;
@@ -43,88 +38,49 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
   bool _isDownloading = false;
 
   Future<void> _handleDownload() async {
-    debugPrint('[Download] tapped from options sheet, trackId=${widget.trackId}');
-
-    var sub = ref.read(subscriptionProvider);
-    debugPrint('[Download] isPremium=${sub.isPremium}, currentPlan=${sub.planType}');
-
-    if (!sub.isPremium) {
-      await ref.read(subscriptionProvider.notifier).refreshFromProfile();
-      sub = ref.read(subscriptionProvider);
-      debugPrint('[Download] after refresh — isPremium=${sub.isPremium}');
-    }
-
-    if (!sub.isPremium) {
-      if (!mounted) return;
-      final scaffold = ScaffoldMessenger.of(context);
-      Navigator.pop(context);
-      scaffold.showSnackBar(
-        const SnackBar(
-          content: Text('Offline downloads require Go+ or Artist Pro.'),
-          backgroundColor: Color(0xFF333333),
-        ),
-      );
-      return;
-    }
-
     setState(() => _isDownloading = true);
-    debugPrint('[Download] calling GET /tracks/${widget.trackId}/download');
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final localPath = '${dir.path}/offline_${widget.trackId}.mp3';
-      final dioClient = ref.read(dioClientProvider);
-      await dioClient.dio.download(
-          '/tracks/${widget.trackId}/download', localPath);
-      debugPrint('[Download] backend responded 200 — saving metadata');
 
-      final repo = ref.read(offlineDownloadsRepositoryProvider);
-      await repo.save(OfflineDownloadedTrack(
-        trackId: widget.trackId,
-        title: widget.title ?? 'Unknown',
-        artistName: widget.artistName ?? 'Unknown',
-        artworkUrl: widget.artworkUrl,
-        downloadedAt: DateTime.now(),
-        localPath: localPath,
-        planType: sub.planType,
-      ));
-      ref.invalidate(offlineDownloadsProvider);
+    final result = await downloadTrack(
+      ref: ref,
+      trackId: widget.trackId,
+      title: widget.title ?? 'Unknown',
+      artistName: widget.artistName ?? 'Unknown',
+      artworkUrl: widget.artworkUrl,
+      source: 'options_sheet',
+    );
 
-      if (!mounted) return;
-      final scaffold = ScaffoldMessenger.of(context);
-      Navigator.pop(context);
-      scaffold.showSnackBar(
-        const SnackBar(
-          content: Text('Track saved for offline listening.'),
+    if (!mounted) return;
+    setState(() => _isDownloading = false);
+
+    final scaffold = ScaffoldMessenger.of(context);
+    switch (result) {
+      case TrackDownloadSuccess():
+        Navigator.pop(context);
+        scaffold.showSnackBar(const SnackBar(
+          content: Text('Track saved to Offline Downloads.'),
           backgroundColor: Color(0xFF333333),
-        ),
-      );
-    } on DioException catch (e) {
-      debugPrint('[Download] failed — status: ${e.response?.statusCode}, '
-          'body: ${e.response?.data}');
-      if (!mounted) return;
-      setState(() => _isDownloading = false);
-      String msg;
-      if (e.response?.statusCode == 401) {
-        msg = 'Please log in again.';
-      } else if (e.response?.statusCode == 403) {
-        final data = e.response?.data;
-        msg = (data is Map ? data['message'] as String? : null) ??
-            'Offline downloads require Go+ or Artist Pro.';
-      } else {
-        msg = 'Download failed. Please try again.';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: Colors.red),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _isDownloading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Download failed. Please try again.'),
+        ));
+      case TrackDownloadMetadataOnly():
+        Navigator.pop(context);
+        scaffold.showSnackBar(const SnackBar(
+          content: Text(
+            'Direct download is disabled for this track. '
+            'Saved to Offline Downloads preview.',
+          ),
+          backgroundColor: Color(0xFF333333),
+          duration: Duration(seconds: 4),
+        ));
+      case TrackDownloadPlanGated():
+        Navigator.pop(context);
+        scaffold.showSnackBar(const SnackBar(
+          content: Text('Requires a Go+ Subscription for offline listening.'),
+          backgroundColor: Color(0xFF333333),
+        ));
+      case TrackDownloadError(:final message):
+        scaffold.showSnackBar(SnackBar(
+          content: Text(message),
           backgroundColor: Colors.red,
-        ),
-      );
+        ));
     }
   }
 
@@ -177,7 +133,11 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (hasDetails) _TrackSheetHeader(title: widget.title!, artist: widget.artistName!, artworkUrl: widget.artworkUrl),
+              if (hasDetails)
+                _TrackSheetHeader(
+                    title: widget.title!,
+                    artist: widget.artistName!,
+                    artworkUrl: widget.artworkUrl),
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 18, 16, 8),
                 child: Text(
@@ -190,10 +150,10 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
-                  children: const [
+                  children: [
                     _SendToAvatar(name: 'Mohamed Hany'),
                     SizedBox(width: 10),
                     _SendToAvatar(name: 'Marwan Pablo'),
@@ -214,26 +174,40 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
-                  children: const [
+                  children: [
                     _ShareButton(icon: Icons.send_outlined, label: 'Message'),
                     SizedBox(width: 10),
-                    _ShareButton(icon: Icons.content_copy_outlined, label: 'Copy Link'),
+                    _ShareButton(
+                        icon: Icons.content_copy_outlined, label: 'Copy Link'),
                     SizedBox(width: 10),
-                    _ShareButton(icon: Icons.chat, label: 'WhatsApp', green: true),
+                    _ShareButton(
+                        icon: Icons.chat, label: 'WhatsApp', green: true),
                     SizedBox(width: 10),
-                    _ShareButton(icon: Icons.check_circle_outline, label: 'Status', green: true),
+                    _ShareButton(
+                        icon: Icons.check_circle_outline,
+                        label: 'Status',
+                        green: true),
                     SizedBox(width: 10),
                     _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              _OptionTile(icon: Icons.favorite_border, label: 'Like', onTap: () => showSoon('Like coming soon')),
-              _OptionTile(icon: Icons.format_list_bulleted, label: 'Play Next', onTap: playNext),
-              _OptionTile(icon: Icons.format_list_numbered, label: 'Play Last', onTap: playLast),
+              _OptionTile(
+                  icon: Icons.favorite_border,
+                  label: 'Like',
+                  onTap: () => showSoon('Like coming soon')),
+              _OptionTile(
+                  icon: Icons.format_list_bulleted,
+                  label: 'Play Next',
+                  onTap: playNext),
+              _OptionTile(
+                  icon: Icons.format_list_numbered,
+                  label: 'Play Last',
+                  onTap: playLast),
               _OptionTile(
                 icon: Icons.playlist_add_outlined,
                 label: 'Add to playlist',
@@ -242,22 +216,29 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => AddToPlaylistPage(trackId: widget.trackId),
+                      builder: (_) =>
+                          AddToPlaylistPage(trackId: widget.trackId),
                     ),
                   );
                 },
               ),
-              _OptionTile(icon: Icons.wifi_tethering_outlined, label: 'Start station', onTap: () => showSoon('Start station coming soon')),
+              _OptionTile(
+                  icon: Icons.wifi_tethering_outlined,
+                  label: 'Start station',
+                  onTap: () => showSoon('Start station coming soon')),
               _isDownloading
                   ? const ListTile(
                       leading: SizedBox(
                         width: 24,
                         height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.orange),
                       ),
-                      title: Text('Downloading...', style: TextStyle(color: Colors.white70)),
+                      title: Text('Downloading...',
+                          style: TextStyle(color: Colors.white70)),
                     )
                   : _OptionTile(
+                      key: const ValueKey('premium_download_button'),
                       icon: Icons.download_outlined,
                       label: 'Download',
                       onTap: _handleDownload,
@@ -267,7 +248,9 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                 icon: Icons.person_outline,
                 label: 'Go to artist profile',
                 onTap: () {
-                  if (widget.artistId != null && widget.artistPermalink != null && widget.artistName != null) {
+                  if (widget.artistId != null &&
+                      widget.artistPermalink != null &&
+                      widget.artistName != null) {
                     Navigator.pop(context);
                     navigateToUserProfile(
                       context,
@@ -324,13 +307,20 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RepostersListPage(trackId: widget.trackId),
+                      builder: (_) =>
+                          RepostersListPage(trackId: widget.trackId),
                     ),
                   );
                 },
               ),
-              _OptionTile(icon: Icons.graphic_eq, label: 'Behind this track', onTap: () => showSoon('Behind this track coming soon')),
-              _OptionTile(icon: Icons.outlined_flag, label: 'Report', onTap: () => showSoon('Report coming soon')),
+              _OptionTile(
+                  icon: Icons.graphic_eq,
+                  label: 'Behind this track',
+                  onTap: () => showSoon('Behind this track coming soon')),
+              _OptionTile(
+                  icon: Icons.outlined_flag,
+                  label: 'Report',
+                  onTap: () => showSoon('Report coming soon')),
               const SizedBox(height: 10),
             ],
           ),
@@ -375,7 +365,8 @@ class _TrackSheetHeader extends StatelessWidget {
                   : CachedNetworkImage(
                       imageUrl: artworkUrl!,
                       fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => const _SheetArtworkPlaceholder(),
+                      errorWidget: (_, __, ___) =>
+                          const _SheetArtworkPlaceholder(),
                     ),
             ),
           ),
@@ -486,6 +477,7 @@ class _OptionTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _OptionTile({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,

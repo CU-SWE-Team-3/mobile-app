@@ -14,6 +14,7 @@ import 'core/services/local_notification_service.dart';
 import 'core/themes/app_theme.dart';
 import 'features/messaging/presentation/providers/messaging_providers.dart';
 import 'features/notifications/presentation/providers/notification_provider.dart';
+import 'features/player/presentation/widgets/mock_audio_ad_overlay.dart';
 import 'features/premium/presentation/providers/subscription_provider.dart';
 import 'injection_container.dart';
 
@@ -153,6 +154,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       routerConfig: appRouter,
+      builder: (context, child) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (child != null) child,
+            const MockAudioAdOverlay(),
+          ],
+        );
+      },
     );
   }
 }

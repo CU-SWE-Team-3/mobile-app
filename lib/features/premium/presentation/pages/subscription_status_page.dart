@@ -79,8 +79,11 @@ class _StatusBody extends ConsumerWidget {
                     ),
                     const SizedBox(width: 12),
                     Text(
+                      key: const ValueKey('premium_current_plan_label'),
                       sub.isPremium
-                          ? 'You are on ${planDisplayName(sub.planType)}'
+                          ? sub.isPlanKnown
+                              ? 'You are on ${sub.displayPlanName}'
+                              : 'Subscribed — plan loading…'
                           : 'Free Plan',
                       style: TextStyle(
                         color: sub.isPremium
@@ -92,22 +95,18 @@ class _StatusBody extends ConsumerWidget {
                     ),
                   ],
                 ),
-
-                if (sub.isPremium && sub.planType != null) ...[
+                if (sub.isPremium) ...[
                   const SizedBox(height: 6),
                   Text(
-                    sub.planType == 'Pro'
-                        ? 'Unlimited uploads · Offline downloads · Ad-free'
-                        : 'Offline downloads · Ad-free listening',
+                    sub.featureSummary,
                     style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ],
-
                 if (sub.cancelAtPeriodEnd && sub.expiresAt != null) ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: Colors.orange.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(8),
@@ -143,6 +142,7 @@ class _StatusBody extends ConsumerWidget {
               width: double.infinity,
               height: 52,
               child: OutlinedButton(
+                key: const ValueKey('premium_cancel_subscription_button'),
                 onPressed: () => _confirmCancel(context, ref),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.redAccent,
@@ -170,6 +170,7 @@ class _StatusBody extends ConsumerWidget {
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
+                key: const ValueKey('premium_subscribe_button'),
                 onPressed: () => context.go('/upgrade'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFF5500),
@@ -217,7 +218,6 @@ class _StatusBody extends ConsumerWidget {
             const SizedBox(height: 16),
             if (sub.planType == 'Pro') ...[
               const _PerkTile(Icons.cloud_upload_outlined, 'Unlimited uploads'),
-              const _PerkTile(Icons.download_outlined, 'Offline downloads'),
               const _PerkTile(Icons.music_off, 'Ad-free listening'),
               const _PerkTile(Icons.cancel_outlined, 'Cancel anytime'),
             ] else if (sub.planType == 'Go+') ...[
@@ -226,8 +226,28 @@ class _StatusBody extends ConsumerWidget {
               const _PerkTile(Icons.upload_outlined, '3 uploads included'),
               const _PerkTile(Icons.cancel_outlined, 'Cancel anytime'),
             ] else ...[
-              const _PerkTile(Icons.download_outlined, 'Offline downloads'),
-              const _PerkTile(Icons.music_off, 'Ad-free listening'),
+              // Plan type unknown — do not show plan-specific perks.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        color: Colors.orange, size: 18),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Plan details are still loading. Tap refresh to update.',
+                        style: TextStyle(color: Colors.orange, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
               const _PerkTile(Icons.cancel_outlined, 'Cancel anytime'),
             ],
           ],
@@ -239,9 +259,7 @@ class _StatusBody extends ConsumerWidget {
           const SizedBox(height: 8),
           TextButton(
             onPressed: () async {
-              await ref
-                  .read(subscriptionProvider.notifier)
-                  .devReset();
+              await ref.read(subscriptionProvider.notifier).devReset();
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -301,8 +319,18 @@ class _StatusBody extends ConsumerWidget {
     try {
       final dt = DateTime.parse(iso).toLocal();
       const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ];
       return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
     } catch (_) {

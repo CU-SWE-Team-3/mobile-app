@@ -270,11 +270,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           .whereType<Map<String, dynamic>>()
           .map(_ProfilePlaylist.fromJson)
           .toList();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _playlists = playlists;
           _playlistsLoading = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _playlistsLoading = false);
     }
@@ -301,11 +302,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       final String userId = prefs.getString('userId') ?? '';
 
       if (userId.isEmpty) {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _username = prefs.getString('displayName') ?? '';
             _isLoading = false;
           });
+        }
         return;
       }
 
@@ -378,11 +380,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           return;
         }
         // No cached data at all — surface the error so the retry button appears.
-        if (mounted)
+        if (mounted) {
           setState(() {
             _isLoading = false;
             _hasError = true;
           });
+        }
         return;
       }
 
@@ -436,11 +439,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } catch (e, st) {
       // ignore: avoid_print
       print('=== PROFILE FETCH ERROR: $e\n$st');
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoading = false;
           _hasError = true;
         });
+      }
     }
   }
 

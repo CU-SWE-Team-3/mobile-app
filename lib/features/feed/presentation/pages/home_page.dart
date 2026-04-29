@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,7 @@ import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/library/presentation/providers/upload_provider.dart';
 
 class _FeedTrack {
   final String id;
@@ -516,6 +518,34 @@ class _HomePageState extends ConsumerState<HomePage> {
         );
   }
 
+  Future<void> _pickUploadFromHome() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav'],
+        allowMultiple: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final filePath = result.files.first.path;
+      if (filePath == null || filePath.isEmpty) return;
+
+      await ref
+          .read(uploadProvider.notifier)
+          .initializeUpload(audioFilePath: filePath);
+
+      if (mounted) context.push('/upload');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking file: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   Widget _buildSectionHeader(
     String title, {
     bool showSeeAll = false,
@@ -660,7 +690,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: _SmallTrackTile(track: visibleLikedTracks[0])),
+                      Expanded(
+                          child: _SmallTrackTile(track: visibleLikedTracks[0])),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _SmallTrackTile(
@@ -940,7 +971,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
           IconButton(
             key: const ValueKey('home_upload_button'),
-            onPressed: () => context.push('/library/uploads'),
+            onPressed: _pickUploadFromHome,
             icon: const Icon(Icons.arrow_circle_up_outlined, size: 23),
           ),
           IconButton(

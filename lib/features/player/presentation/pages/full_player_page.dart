@@ -1,13 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path_provider/path_provider.dart';
 
-import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
-import '../../../../core/utils/profile_navigation.dart';
 import '../providers/follow_provider.dart';
 import '../providers/player_provider.dart';
 import '../../../engagement/data/models/comment_model.dart';
@@ -16,7 +12,6 @@ import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../premium/data/services/track_download_service.dart';
-import '../../../premium/presentation/providers/subscription_provider.dart';
 import '../../../../core/themes/app_theme.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
@@ -56,6 +51,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
     required String title,
     required String artistName,
     String? artworkUrl,
+    String? audioUrl,
   }) async {
     debugPrint('[Download] tapped trackId=$trackId');
     setState(() {
@@ -71,6 +67,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
         title: title,
         artistName: artistName,
         artworkUrl: artworkUrl,
+        audioUrl: audioUrl,
+        source: 'full_player',
         onProgress: (p) {
           if (mounted) setState(() => _downloadProgress = p);
         },
@@ -93,7 +91,10 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
             if (mounted) setState(() => _downloadSuccess = false);
           });
         case TrackDownloadMetadataOnly():
-          setState(() { _isDownloading = false; _downloadProgress = 0.0; });
+          setState(() {
+            _isDownloading = false;
+            _downloadProgress = 0.0;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -105,22 +106,31 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
             ),
           );
         case TrackDownloadPlanGated():
-          setState(() { _isDownloading = false; _downloadProgress = 0.0; });
+          setState(() {
+            _isDownloading = false;
+            _downloadProgress = 0.0;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Offline downloads require Go+ or Artist Pro.'),
+              content: Text('Requires a Go+ Subscription for offline listening.'),
               backgroundColor: Color(0xFF333333),
             ),
           );
         case TrackDownloadError(:final message):
-          setState(() { _isDownloading = false; _downloadProgress = 0.0; });
+          setState(() {
+            _isDownloading = false;
+            _downloadProgress = 0.0;
+          });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(message), backgroundColor: Colors.red),
           );
       }
     } finally {
       if (mounted && _isDownloading) {
-        setState(() { _isDownloading = false; _downloadProgress = 0.0; });
+        setState(() {
+          _isDownloading = false;
+          _downloadProgress = 0.0;
+        });
       }
     }
   }
@@ -180,7 +190,6 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
         ? ref.watch(commentsProvider(trackId))
         : const CommentsState();
 
-
     return Scaffold(
       backgroundColor: Colors.transparent,
       extendBodyBehindAppBar: true,
@@ -232,8 +241,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
               children: [
                 // ── Top bar ─────────────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -277,8 +286,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                             ),
                             const SizedBox(height: 8),
                             GestureDetector(
-                              key: const ValueKey(
-                                  'player_behind_track_button'),
+                              key: const ValueKey('player_behind_track_button'),
                               onTap: () {},
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
@@ -314,8 +322,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                             icon: Icons.keyboard_arrow_down,
                             onTap: () => context.pop(),
                           ),
-                          if (artistId != null &&
-                              artistId != _myUserId) ...[
+                          if (artistId != null && artistId != _myUserId) ...[
                             const SizedBox(height: 8),
                             _CircleButton(
                               key: const ValueKey('player_follow_button'),
@@ -325,12 +332,14 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               iconColor: followState.isFollowing
                                   ? AppTheme.primary
                                   : Colors.white,
-                              onTap: (followState.isLoading || followState.isChecking)
+                              onTap: (followState.isLoading ||
+                                      followState.isChecking)
                                   ? null
                                   : () => ref
                                       .read(followProvider(artistId).notifier)
                                       .toggle(artistId),
-                              loading: followState.isLoading || followState.isChecking,
+                              loading: followState.isLoading ||
+                                  followState.isChecking,
                             ),
                           ],
                           const SizedBox(height: 8),
@@ -346,8 +355,16 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                   borderRadius: BorderRadius.vertical(
                                       top: Radius.circular(16)),
                                 ),
-                                builder: (_) =>
-                                    TrackOptionsSheet(trackId: trackId),
+                                builder: (_) => TrackOptionsSheet(
+                                  trackId: trackId,
+                                  title: playerState.currentTrack?.title,
+                                  artistName: playerState.currentTrack?.artist,
+                                  artworkUrl:
+                                      playerState.currentTrackArtworkUrl,
+                                  artistId: playerState.currentTrack?.artistId,
+                                  artistPermalink:
+                                      playerState.currentTrack?.artistPermalink,
+                                ),
                               );
                             },
                           ),
@@ -384,10 +401,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                     color: Colors.black.withOpacity(0.55),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(
-                                      Icons.skip_previous_rounded,
-                                      color: Colors.white,
-                                      size: 30),
+                                  child: const Icon(Icons.skip_previous_rounded,
+                                      color: Colors.white, size: 30),
                                 ),
                               ),
                               const SizedBox(width: 28),
@@ -412,8 +427,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               ),
                               const SizedBox(width: 28),
                               GestureDetector(
-                                key: const ValueKey(
-                                    'player_skip_next_button'),
+                                key: const ValueKey('player_skip_next_button'),
                                 onTap: () => ref
                                     .read(playerProvider.notifier)
                                     .skipNext(),
@@ -439,16 +453,15 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                 // ── Time pill (above waveform) ───────────────────────
                 Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.black54,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
                       '${_formatDuration(playerState.position)}  |  ${_formatDuration(playerState.duration)}',
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 12),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ),
                 ),
@@ -463,23 +476,23 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       return GestureDetector(
                         key: const ValueKey('player_waveform_seek'),
                         onTapDown: (details) {
-                          final pct = (details.localPosition.dx /
-                                  constraints.maxWidth)
-                              .clamp(0.0, 1.0);
+                          final pct =
+                              (details.localPosition.dx / constraints.maxWidth)
+                                  .clamp(0.0, 1.0);
                           notifier.seekTo(Duration(
-                            milliseconds: (pct *
-                                    playerState.duration.inMilliseconds)
-                                .round(),
+                            milliseconds:
+                                (pct * playerState.duration.inMilliseconds)
+                                    .round(),
                           ));
                         },
                         onHorizontalDragUpdate: (details) {
-                          final pct = (details.localPosition.dx /
-                                  constraints.maxWidth)
-                              .clamp(0.0, 1.0);
+                          final pct =
+                              (details.localPosition.dx / constraints.maxWidth)
+                                  .clamp(0.0, 1.0);
                           notifier.seekTo(Duration(
-                            milliseconds: (pct *
-                                    playerState.duration.inMilliseconds)
-                                .round(),
+                            milliseconds:
+                                (pct * playerState.duration.inMilliseconds)
+                                    .round(),
                           ));
                         },
                         child: SizedBox(
@@ -493,16 +506,15 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 child: CustomPaint(
                                   painter: _WaveformPainter(
                                       progress: progress,
-                                      waveform: playerState
-                                          .currentTrack?.waveform,
+                                      waveform:
+                                          playerState.currentTrack?.waveform,
                                       isPlaying: playerState.isPlaying),
                                 ),
                               ),
                               if (playerState.duration.inSeconds > 0)
                                 ..._buildCommentAvatars(
                                   comments: commentsState.comments,
-                                  totalSeconds:
-                                      playerState.duration.inSeconds,
+                                  totalSeconds: playerState.duration.inSeconds,
                                   width: constraints.maxWidth,
                                   currentSec: currentSec,
                                 ),
@@ -513,7 +525,6 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                     },
                   ),
                 ),
-
 
                 const SizedBox(height: 12),
 
@@ -531,8 +542,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       children: [
                         Expanded(
                           child: TextField(
-                            key: const ValueKey(
-                                'player_comment_input_field'),
+                            key: const ValueKey('player_comment_input_field'),
                             controller: _commentController,
                             focusNode: _commentFocus,
                             style: const TextStyle(
@@ -555,15 +565,12 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               if (text.trim().isEmpty || trackId == null) {
                                 return;
                               }
-                              if (trackId != null) {
-                                await ref
-                                    .read(
-                                        commentsProvider(trackId).notifier)
-                                    .postComment(
-                                      content: text.trim(),
-                                      timestamp: currentSec,
-                                    );
-                              }
+                              await ref
+                                  .read(commentsProvider(trackId).notifier)
+                                  .postComment(
+                                    content: text.trim(),
+                                    timestamp: currentSec,
+                                  );
                               _commentController.clear();
                               _commentFocus.unfocus();
                             },
@@ -577,8 +584,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 _commentController.text += '🔥';
                                 _commentController.selection =
                                     TextSelection.collapsed(
-                                        offset:
-                                            _commentController.text.length);
+                                        offset: _commentController.text.length);
                                 _commentFocus.requestFocus();
                               },
                             ),
@@ -589,8 +595,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 _commentController.text += '👏';
                                 _commentController.selection =
                                     TextSelection.collapsed(
-                                        offset:
-                                            _commentController.text.length);
+                                        offset: _commentController.text.length);
                                 _commentFocus.requestFocus();
                               },
                             ),
@@ -601,8 +606,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 _commentController.text += '🤩';
                                 _commentController.selection =
                                     TextSelection.collapsed(
-                                        offset:
-                                            _commentController.text.length);
+                                        offset: _commentController.text.length);
                                 _commentFocus.requestFocus();
                               },
                             ),
@@ -692,17 +696,15 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       _ActionButton(
                         key: const ValueKey('player_repost_button'),
                         icon: Icons.repeat,
-                        iconColor: engState.isReposted
-                            ? Colors.orange
-                            : Colors.white,
+                        iconColor:
+                            engState.isReposted ? Colors.orange : Colors.white,
                         label: engState.repostCount > 0
                             ? '${engState.repostCount}'
                             : '',
                         onTap: engState.isLoadingRepost || trackId == null
                             ? () {}
                             : () => ref
-                                .read(
-                                    engagementProvider(engParams).notifier)
+                                .read(engagementProvider(engParams).notifier)
                                 .toggleRepost(),
                       ),
                       _ActionButton(
@@ -717,8 +719,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                           trackId: trackId,
                           trackTitle: playerState.currentTrackTitle,
                           trackArtist: playerState.currentTrackArtist,
-                          trackArtworkUrl:
-                              playerState.currentTrackArtworkUrl,
+                          trackArtworkUrl: playerState.currentTrackArtworkUrl,
                         ),
                       ),
                       _ActionButton(
@@ -735,13 +736,19 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                       ),
                       GestureDetector(
                         key: const ValueKey('player_download_button'),
-                        onTap: _isDownloading || _downloadSuccess || trackId == null
+                        onTap: _isDownloading ||
+                                _downloadSuccess ||
+                                trackId == null
                             ? null
                             : () => _downloadCurrentTrack(
                                   trackId,
                                   title: playerState.currentTrack?.title ?? '',
-                                  artistName: playerState.currentTrack?.artist ?? '',
-                                  artworkUrl: playerState.currentTrackArtworkUrl,
+                                  artistName:
+                                      playerState.currentTrack?.artist ?? '',
+                                  artworkUrl:
+                                      playerState.currentTrackArtworkUrl,
+                                  audioUrl:
+                                      playerState.currentTrack?.audioUrl,
                                 ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -765,6 +772,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                         )
                                       : const Icon(
                                           Icons.download_outlined,
+                                          key: ValueKey(
+                                            'premium_download_button',
+                                          ),
                                           color: Colors.white,
                                           size: 26,
                                         ),
@@ -813,27 +823,24 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
       buckets.putIfAbsent(bucket, () => c);
     }
 
-    return buckets.entries
-        .where((entry) {
-          final diff = (currentSec - entry.value.timestamp).abs();
-          return diff <= visibleWindow;
-        })
-        .map((entry) {
-          final comment = entry.value;
-          final xFraction = comment.timestamp / totalSeconds;
-          final xPos = (xFraction * width).clamp(0.0, width - 200.0);
-          return Positioned(
-            left: xPos,
-            top: 0,
-            child: _WaveformCommentPin(
-              avatarUrl: comment.user.avatarUrl,
-              displayName: comment.user.displayName,
-              content: comment.content,
-              timestamp: comment.timestamp,
-            ),
-          );
-        })
-        .toList();
+    return buckets.entries.where((entry) {
+      final diff = (currentSec - entry.value.timestamp).abs();
+      return diff <= visibleWindow;
+    }).map((entry) {
+      final comment = entry.value;
+      final xFraction = comment.timestamp / totalSeconds;
+      final xPos = (xFraction * width).clamp(0.0, width - 200.0);
+      return Positioned(
+        left: xPos,
+        top: 0,
+        child: _WaveformCommentPin(
+          avatarUrl: comment.user.avatarUrl,
+          displayName: comment.user.displayName,
+          content: comment.content,
+          timestamp: comment.timestamp,
+        ),
+      );
+    }).toList();
   }
 }
 
@@ -931,7 +938,11 @@ class _CircleButton extends StatelessWidget {
   final bool loading;
   final Color iconColor;
   const _CircleButton(
-      {super.key, required this.icon, this.onTap, this.loading = false, this.iconColor = Colors.white});
+      {super.key,
+      required this.icon,
+      this.onTap,
+      this.loading = false,
+      this.iconColor = Colors.white});
 
   @override
   Widget build(BuildContext context) {
@@ -940,8 +951,8 @@ class _CircleButton extends StatelessWidget {
       child: Container(
         width: 40,
         height: 40,
-        decoration: const BoxDecoration(
-            color: Colors.black38, shape: BoxShape.circle),
+        decoration:
+            const BoxDecoration(color: Colors.black38, shape: BoxShape.circle),
         child: loading
             ? const Center(
                 child: SizedBox(
@@ -982,8 +993,7 @@ class _ActionButton extends StatelessWidget {
           if (label.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(label,
-                style:
-                    const TextStyle(color: Colors.white, fontSize: 11)),
+                style: const TextStyle(color: Colors.white, fontSize: 11)),
           ],
         ],
       ),

@@ -95,7 +95,7 @@ class _FeedTrackCardState extends ConsumerState<FeedTrackCard> {
         // ── Background artwork ───────────────────────────────────────────
         hasArtwork
             ? CachedNetworkImage(
-                imageUrl: resolvedArtwork!,
+                imageUrl: resolvedArtwork,
                 fit: BoxFit.cover,
                 placeholder: (_, __) =>
                     const ColoredBox(color: Color(0xFF1A1A1A)),
@@ -534,7 +534,7 @@ class _ActivityHeader extends StatelessWidget {
               child: ClipOval(
                 child: isValidAvatar
                     ? CachedNetworkImage(
-                        imageUrl: avatarUrl!,
+                        imageUrl: avatarUrl,
                         fit: BoxFit.cover,
                         placeholder: (_, __) => _avatarFallback(),
                         errorWidget: (_, __, ___) => _avatarFallback(),

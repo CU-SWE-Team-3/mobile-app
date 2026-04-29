@@ -141,7 +141,7 @@ class _RecommendedTracksPageState extends ConsumerState<RecommendedTracksPage> {
       );
     }
     if (_error != null) {
-      return Center(
+      return const Center(
         child: Text(
           'Failed to load tracks',
           style: TextStyle(color: Colors.white54, fontSize: 14),

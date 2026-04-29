@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../providers/subscription_provider.dart' show subscriptionProvider, planDisplayName;
+import '../providers/subscription_provider.dart'
+    show SubscriptionEntitlements, subscriptionProvider;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan data model
@@ -11,12 +12,13 @@ import '../providers/subscription_provider.dart' show subscriptionProvider, plan
 class _PlanData {
   final String displayName;
   final String backendPlanType; // sent to checkout(); billingCycle is UI-only
-  final String billingCycle;   // "Yearly" | "Monthly" — NOT sent to backend
+  final String billingCycle; // "Yearly" | "Monthly" — NOT sent to backend
   final String badge;
   final String titleIcon;
   final String price;
   final String? priceSecondary;
   final List<String> features;
+  final Key? tileKey;
 
   const _PlanData({
     required this.displayName,
@@ -27,6 +29,7 @@ class _PlanData {
     required this.price,
     this.priceSecondary,
     required this.features,
+    this.tileKey,
   });
 }
 
@@ -42,11 +45,12 @@ const _kPlans = [
     titleIcon: '✦',
     price: 'EGP 1,055.00/year',
     priceSecondary: 'or EGP 175.00/month',
+    tileKey: ValueKey('premium_plan_tile_pro_yearly'),
     features: [
       'Unlimited audio uploads',
       'Unlimited playlists',
       'Ad-free listening',
-      'Offline downloads',
+      'Creator analytics',
     ],
   ),
   _PlanData(
@@ -57,11 +61,12 @@ const _kPlans = [
     titleIcon: '✦',
     price: 'EGP 175.00/month',
     priceSecondary: null,
+    tileKey: ValueKey('premium_plan_tile_pro_monthly'),
     features: [
       'Unlimited audio uploads',
       'Unlimited playlists',
       'Ad-free listening',
-      'Offline downloads',
+      'Creator analytics',
     ],
   ),
   _PlanData(
@@ -72,6 +77,7 @@ const _kPlans = [
     titleIcon: '♦',
     price: 'EGP 790.00/year',
     priceSecondary: 'or EGP 99.00/month',
+    tileKey: ValueKey('premium_plan_tile_go_plus_yearly'),
     features: [
       'Ad-free listening',
       'Offline downloads',
@@ -86,6 +92,7 @@ const _kPlans = [
     titleIcon: '♦',
     price: 'EGP 99.00/month',
     priceSecondary: null,
+    tileKey: ValueKey('premium_plan_tile_go_plus_monthly'),
     features: [
       'Ad-free listening',
       'Offline downloads',
@@ -108,8 +115,7 @@ class PricingTiersPage extends ConsumerStatefulWidget {
 class _PricingTiersPageState extends ConsumerState<PricingTiersPage> {
   // viewportFraction < 1 lets neighboring cards peek in from the sides.
   // clipBehavior: Clip.none on the PageView is required to actually show them.
-  final PageController _pageController =
-      PageController(viewportFraction: 0.86);
+  final PageController _pageController = PageController(viewportFraction: 0.86);
   int _currentPage = 0;
 
   @override
@@ -154,6 +160,7 @@ class _PricingTiersPageState extends ConsumerState<PricingTiersPage> {
               Align(
                 alignment: Alignment.topRight,
                 child: IconButton(
+                  key: const ValueKey('paywall_dismiss_button'),
                   icon: const Icon(Icons.close, color: Colors.white, size: 26),
                   onPressed: () => context.pop(),
                 ),
@@ -191,7 +198,9 @@ class _PricingTiersPageState extends ConsumerState<PricingTiersPage> {
               const SizedBox(height: 16),
 
               // ── Active plan banner ──────────────────────────────────────
-              if (sub.isPremium && sub.planType != null && !sub.cancelAtPeriodEnd)
+              if (sub.isPremium &&
+                  sub.planType != null &&
+                  !sub.cancelAtPeriodEnd)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
                   child: Container(
@@ -207,7 +216,8 @@ class _PricingTiersPageState extends ConsumerState<PricingTiersPage> {
                             color: Color(0xFF00C853), size: 16),
                         const SizedBox(width: 8),
                         Text(
-                          'Active: ${planDisplayName(sub.planType)}',
+                          key: const ValueKey('premium_current_plan_label'),
+                          'Active: ${sub.displayPlanName}',
                           style: const TextStyle(
                             color: Color(0xFF00C853),
                             fontWeight: FontWeight.w600,
@@ -301,11 +311,53 @@ class _PlanCard extends StatelessWidget {
     this.error,
   });
 
+  void _showPlanAdFreeDialog(BuildContext context, _PlanData plan) {
+    final message = plan.backendPlanType == 'Go+'
+        ? 'Go+ removes mock audio ads from playback.'
+        : 'Artist Pro removes mock audio ads from playback.';
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.music_off, color: Color(0xFFFF5500), size: 22),
+            SizedBox(width: 10),
+            Text(
+              'Ad-free listening',
+              style: TextStyle(color: Colors.white, fontSize: 17),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Got it',
+              style: TextStyle(color: Color(0xFFFF5500)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Container(
+        key: plan.tileKey,
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(20),
@@ -371,8 +423,7 @@ class _PlanCard extends StatelessWidget {
               if (plan.priceSecondary != null)
                 Text(
                   plan.priceSecondary!,
-                  style:
-                      const TextStyle(color: Colors.white54, fontSize: 13),
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
                 ),
 
               const SizedBox(height: 20),
@@ -381,23 +432,35 @@ class _PlanCard extends StatelessWidget {
               ...plan.features.map(
                 (f) => Padding(
                   padding: const EdgeInsets.only(bottom: 14),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.check,
-                          color: Color(0xFFFF5500), size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          f,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            height: 1.4,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: f == 'Ad-free listening'
+                        ? () => _showPlanAdFreeDialog(context, plan)
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.check,
+                              color: Color(0xFFFF5500), size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              f,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                height: 1.4,
+                              ),
+                            ),
                           ),
-                        ),
+                          if (f == 'Ad-free listening')
+                            const Icon(Icons.info_outline,
+                                color: Colors.white38, size: 18),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -409,6 +472,7 @@ class _PlanCard extends StatelessWidget {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
+                  key: const ValueKey('premium_subscribe_button'),
                   onPressed: isCurrentPlan || isLoading ? null : onSubscribe,
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
@@ -457,8 +521,7 @@ class _PlanCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   error!,
-                  style: const TextStyle(
-                      color: Colors.redAccent, fontSize: 12),
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
                 ),
               ],
             ],

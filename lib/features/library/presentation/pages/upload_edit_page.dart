@@ -36,6 +36,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
     'Deep House',
     'Drum & Bass',
     'Electronic',
+    'Folk',
     'Hip-hop & Rap',
     'House',
     'Indie',

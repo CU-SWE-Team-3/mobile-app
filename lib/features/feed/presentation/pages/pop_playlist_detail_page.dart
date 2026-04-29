@@ -87,10 +87,10 @@ class _DetailTrack {
 
   factory _DetailTrack.fromJson(Map<String, dynamic> json) {
     final track = (json['target'] is Map<String, dynamic>
-            ? json['target'] as Map<String, dynamic>
-            : json['track'] is Map<String, dynamic>
-                ? json['track'] as Map<String, dynamic>
-                : json);
+        ? json['target'] as Map<String, dynamic>
+        : json['track'] is Map<String, dynamic>
+            ? json['track'] as Map<String, dynamic>
+            : json);
     final artist = track['artist'] as Map<String, dynamic>? ??
         track['user'] as Map<String, dynamic>?;
     final media = track['media'] as Map<String, dynamic>?;
@@ -104,14 +104,15 @@ class _DetailTrack {
         break;
       }
     }
-    final trackId =
-        track['_id']?.toString() ?? track['id']?.toString() ?? '';
+    final trackId = track['_id']?.toString() ?? track['id']?.toString() ?? '';
     return _DetailTrack(
       id: trackId,
       title: (track['title'] ?? '').toString(),
-      artistName:
-          (artist?['displayName'] ?? artist?['username'] ?? artist?['name'] ?? '')
-              .toString(),
+      artistName: (artist?['displayName'] ??
+              artist?['username'] ??
+              artist?['name'] ??
+              '')
+          .toString(),
       artistId: artist?['_id'] as String?,
       artistPermalink: artist?['permalink'] as String?,
       permalink: track['permalink'] as String?,
@@ -229,8 +230,8 @@ class _PopPlaylistDetailPageState extends ConsumerState<PopPlaylistDetailPage> {
       final playlistBody = responses[1].data as Map<String, dynamic>;
       final playlist =
           ((playlistBody['data'] as Map<String, dynamic>?)?['playlist'])
-              as Map<String, dynamic>? ??
-          {};
+                  as Map<String, dynamic>? ??
+              {};
       playlistLikeCount = (playlist['likeCount'] as num?)?.toInt();
     }
     final prefs = await SharedPreferences.getInstance();
@@ -267,8 +268,7 @@ class _PopPlaylistDetailPageState extends ConsumerState<PopPlaylistDetailPage> {
     try {
       final resp = await dioClient.dio.get('/playlists/${widget.playlistId}');
       final data = resp.data as Map<String, dynamic>;
-      final playlist =
-          ((data['data'] as Map<String, dynamic>?)?['playlist'])
+      final playlist = ((data['data'] as Map<String, dynamic>?)?['playlist'])
               as Map<String, dynamic>? ??
           {};
       final meta = _PlaylistMeta.fromJson(playlist);
@@ -426,7 +426,7 @@ class _PopPlaylistDetailPageState extends ConsumerState<PopPlaylistDetailPage> {
               ),
               const SizedBox(height: 4),
               const Text(
-                              'Buzzing Pop',
+                'Buzzing Pop',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 20,
@@ -570,7 +570,8 @@ class _PopPlaylistDetailPageState extends ConsumerState<PopPlaylistDetailPage> {
         itemBuilder: (_, i) {
           if (i == 0) return _buildHeaderItem(meta);
           if (i == 1) return _buildActionRow(meta);
-          if (hasDesc && i == 2) return _buildDescriptionItem(meta.description!);
+          if (hasDesc && i == 2)
+            return _buildDescriptionItem(meta.description!);
           if (_tracks.isEmpty) {
             return const Padding(
               padding: EdgeInsets.all(32),
@@ -705,9 +706,8 @@ class _PopPlaylistDetailPageState extends ConsumerState<PopPlaylistDetailPage> {
               children: [
                 Icon(
                   meta.isLiked ? Icons.favorite : Icons.favorite_border,
-                  color: meta.isLiked
-                      ? const Color(0xFFFF5500)
-                      : Colors.white54,
+                  color:
+                      meta.isLiked ? const Color(0xFFFF5500) : Colors.white54,
                   size: 28,
                 ),
                 if (meta.likeCount > 0) ...[
@@ -884,7 +884,8 @@ class _PopPlaylistDetailPageState extends ConsumerState<PopPlaylistDetailPage> {
             ),
             IconButton(
               onPressed: () => _showTrackOptionsSheet(track.id),
-              icon: const Icon(Icons.more_vert, color: Colors.white38, size: 24),
+              icon:
+                  const Icon(Icons.more_vert, color: Colors.white38, size: 24),
               padding: const EdgeInsets.only(top: 8),
               constraints: const BoxConstraints(minWidth: 32, minHeight: 40),
               splashRadius: 18,
@@ -972,7 +973,7 @@ class _PopPlaylistDetailPageState extends ConsumerState<PopPlaylistDetailPage> {
               right: 0,
               bottom: 7,
               child: Text(
-                          'Pop',
+                'Pop',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,

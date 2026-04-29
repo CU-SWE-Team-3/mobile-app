@@ -152,10 +152,10 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
 
     // Resolve artwork image: playlist artwork → first track artwork → user avatar
     // Only treat a URL as valid if it's a real HTTPS URL (not a default/relative path).
-    bool _isValidArtwork(String? url) =>
+    bool isValidArtwork(String? url) =>
         url != null && url.startsWith('https://') && !url.contains('default');
-    final hasArtwork = _isValidArtwork(p.artworkUrl);
-    final hasFirstTrack = _isValidArtwork(_firstTrackArtworkUrl);
+    final hasArtwork = isValidArtwork(p.artworkUrl);
+    final hasFirstTrack = isValidArtwork(_firstTrackArtworkUrl);
     final hasValidAvatar = resolvedAvatarUrl.isNotEmpty &&
         !resolvedAvatarUrl.contains('default-avatar');
 

@@ -11,6 +11,7 @@ import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
+import '../../../premium/data/services/track_download_service.dart';
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
@@ -456,52 +457,108 @@ class _SortSheet extends StatelessWidget {
 
 // ── Like Tile ──────────────────────────────────────────────────────────────────
 
-class _LikeTile extends ConsumerWidget {
+class _LikeTile extends ConsumerStatefulWidget {
   final TrackSummary track;
   final VoidCallback onRemove;
 
   const _LikeTile({required this.track, required this.onRemove});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LikeTile> createState() => _LikeTileState();
+}
+
+class _LikeTileState extends ConsumerState<_LikeTile> {
+  bool _isDownloading = false;
+  bool _downloadSuccess = false;
+
+  Future<void> _download() async {
+    setState(() {
+      _isDownloading = true;
+      _downloadSuccess = false;
+    });
+
+    final result = await downloadTrack(
+      ref: ref,
+      trackId: widget.track.id,
+      title: widget.track.title,
+      artistName: widget.track.artistName,
+      artworkUrl: widget.track.artworkUrl,
+      audioUrl: widget.track.audioUrl,
+      source: 'likes_tile',
+    );
+
+    if (!mounted) return;
+    setState(() => _isDownloading = false);
+
+    switch (result) {
+      case TrackDownloadSuccess():
+        setState(() => _downloadSuccess = true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Track saved to Offline Downloads.'),
+          backgroundColor: Color(0xFF333333),
+        ));
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) setState(() => _downloadSuccess = false);
+        });
+      case TrackDownloadMetadataOnly():
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+            'Direct download is disabled for this track. '
+            'Saved to Offline Downloads preview.',
+          ),
+          backgroundColor: Color(0xFF333333),
+          duration: Duration(seconds: 4),
+        ));
+      case TrackDownloadPlanGated():
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Requires a Go+ Subscription for offline listening.'),
+          backgroundColor: Color(0xFF333333),
+        ));
+      case TrackDownloadError(:final message):
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final params = EngagementParams(
-      trackId: track.id,
+      trackId: widget.track.id,
       isLiked: true,
-      likeCount: track.likeCount,
-      repostCount: track.repostCount,
+      likeCount: widget.track.likeCount,
+      repostCount: widget.track.repostCount,
     );
     ref.watch(engagementProvider(params));
 
-    // Seed authoritative liked state. Only isLiked is seeded — we don't know
-    // isReposted from this API, so we leave it untouched. No-op if user has
-    // already toggled this track in the current session.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(engagementProvider(params).notifier).seed(
             isLiked: true,
-            likeCount: track.likeCount,
-            repostCount: track.repostCount,
+            likeCount: widget.track.likeCount,
+            repostCount: widget.track.repostCount,
           );
     });
 
     final sub = Colors.white.withValues(alpha: 0.55);
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        track.artworkUrl!.startsWith('http');
+    final hasArtwork = widget.track.artworkUrl != null &&
+        widget.track.artworkUrl!.isNotEmpty &&
+        widget.track.artworkUrl!.startsWith('http');
 
     return GestureDetector(
       key: const ValueKey('library_likes_track_tile'),
       onTap: () {
-        if (track.audioUrl != null) {
+        if (widget.track.audioUrl != null) {
           ref.read(playerProvider.notifier).playTrack(
                 PlayerTrack(
-                  id: track.id,
-                  title: track.title,
-                  artist: track.artistName,
-                  artistId: track.artistId,
-                  audioUrl: track.audioUrl!,
-                  coverUrl: track.artworkUrl,
-                  waveform: track.waveform,
-                  artistPermalink: track.artistPermalink,
+                  id: widget.track.id,
+                  title: widget.track.title,
+                  artist: widget.track.artistName,
+                  artistId: widget.track.artistId,
+                  audioUrl: widget.track.audioUrl!,
+                  coverUrl: widget.track.artworkUrl,
+                  waveform: widget.track.waveform,
+                  artistPermalink: widget.track.artistPermalink,
                 ),
               );
         }
@@ -517,7 +574,7 @@ class _LikeTile extends ConsumerWidget {
                 height: 56,
                 child: hasArtwork
                     ? CachedNetworkImage(
-                        imageUrl: track.artworkUrl!,
+                        imageUrl: widget.track.artworkUrl!,
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => _placeholder(),
                       )
@@ -530,7 +587,7 @@ class _LikeTile extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    track.title,
+                    widget.track.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -542,18 +599,18 @@ class _LikeTile extends ConsumerWidget {
                   const SizedBox(height: 3),
                   GestureDetector(
                     onTap: () {
-                      final id = track.artistId;
-                      final permalink = track.artistPermalink;
+                      final id = widget.track.artistId;
+                      final permalink = widget.track.artistPermalink;
                       if (id != null && permalink != null) {
                         navigateToUserProfile(
                           context,
                           userId: id,
                           permalink: permalink,
-                          displayName: track.artistName,
+                          displayName: widget.track.artistName,
                         );
                       }
                     },
-                    child: Text(track.artistName,
+                    child: Text(widget.track.artistName,
                         style: TextStyle(color: sub, fontSize: 13)),
                   ),
                   const SizedBox(height: 3),
@@ -561,7 +618,7 @@ class _LikeTile extends ConsumerWidget {
                     children: [
                       Icon(Icons.play_arrow_rounded, size: 13, color: sub),
                       Text(
-                        '  ${_formatCount(track.playCount)}',
+                        '  ${_formatCount(widget.track.playCount)}',
                         style: TextStyle(color: sub, fontSize: 11),
                       ),
                     ],
@@ -569,8 +626,29 @@ class _LikeTile extends ConsumerWidget {
                 ],
               ),
             ),
+            // Per-track download button
             GestureDetector(
-              onTap: () => _showTrackMenu(context, ref, params),
+              onTap: (_isDownloading || _downloadSuccess) ? null : _download,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: _downloadSuccess
+                      ? const Icon(Icons.check_circle,
+                          color: Color(0xFF00C853), size: 20)
+                      : _isDownloading
+                          ? const CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.orange,
+                            )
+                          : Icon(Icons.download_rounded,
+                              color: sub, size: 20),
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _showTrackMenu(context, params),
               child: Padding(
                 padding: const EdgeInsets.all(8),
                 child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
@@ -582,8 +660,7 @@ class _LikeTile extends ConsumerWidget {
     );
   }
 
-  void _showTrackMenu(
-      BuildContext context, WidgetRef ref, EngagementParams params) {
+  void _showTrackMenu(BuildContext context, EngagementParams params) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1E1E1E),
@@ -614,7 +691,6 @@ class _LikeTile extends ConsumerWidget {
                 final playerState = ref.read(playerProvider);
                 final notifier = ref.read(playerProvider.notifier);
                 notifier.addToQueue(_buildPlayerTrack());
-                // Move the appended track to right after the current index.
                 final endIndex = playerState.queue.length;
                 final insertAt = playerState.currentQueueIndex + 1;
                 if (endIndex > insertAt) {
@@ -651,14 +727,14 @@ class _LikeTile extends ConsumerWidget {
                   style: TextStyle(color: Colors.white)),
               onTap: () {
                 Navigator.pop(ctx);
-                final id = track.artistId;
-                final permalink = track.artistPermalink;
+                final id = widget.track.artistId;
+                final permalink = widget.track.artistPermalink;
                 if (id != null && permalink != null) {
                   navigateToUserProfile(
                     context,
                     userId: id,
                     permalink: permalink,
-                    displayName: track.artistName,
+                    displayName: widget.track.artistName,
                   );
                 }
               },
@@ -674,7 +750,7 @@ class _LikeTile extends ConsumerWidget {
                     .read(engagementProvider(params).notifier)
                     .removeLike();
                 if (removed && context.mounted) {
-                  onRemove();
+                  widget.onRemove();
                 }
               },
             ),
@@ -686,14 +762,14 @@ class _LikeTile extends ConsumerWidget {
   }
 
   PlayerTrack _buildPlayerTrack() => PlayerTrack(
-        id: track.id,
-        title: track.title,
-        artist: track.artistName,
-        artistId: track.artistId,
-        audioUrl: track.audioUrl ?? '',
-        coverUrl: track.artworkUrl,
-        waveform: track.waveform,
-        artistPermalink: track.artistPermalink,
+        id: widget.track.id,
+        title: widget.track.title,
+        artist: widget.track.artistName,
+        artistId: widget.track.artistId,
+        audioUrl: widget.track.audioUrl ?? '',
+        coverUrl: widget.track.artworkUrl,
+        waveform: widget.track.waveform,
+        artistPermalink: widget.track.artistPermalink,
       );
 
   Widget _placeholder() => const ColoredBox(

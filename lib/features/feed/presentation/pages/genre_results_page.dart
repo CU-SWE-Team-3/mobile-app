@@ -3,7 +3,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
-import '../../../player/domain/entities/player_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
 class GenreResultsPage extends ConsumerStatefulWidget {

@@ -12,7 +12,7 @@ class OfflineDownloadPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sub = ref.watch(subscriptionProvider);
-    final isPremium = sub.isPremium;
+    final canDownload = sub.canDownload;
     final downloadsAsync = ref.watch(offlineDownloadsProvider);
 
     return Scaffold(
@@ -26,8 +26,8 @@ class OfflineDownloadPage extends ConsumerWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: !isPremium
-          ? _nonPremiumBody(context)
+      body: !canDownload
+          ? _goPlusRequiredBody(context)
           : Column(
               children: [
                 // Plan + download availability banner
@@ -58,7 +58,7 @@ class OfflineDownloadPage extends ConsumerWidget {
     );
   }
 
-  Widget _nonPremiumBody(BuildContext context) {
+  Widget _goPlusRequiredBody(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -90,7 +90,7 @@ class OfflineDownloadPage extends ConsumerWidget {
           const SizedBox(height: 12),
           const Center(
             child: Text(
-              'Download your favorite tracks and listen without an internet connection. Available with Artist Pro and Go+ plans.',
+              'Requires a Go+ Subscription for offline listening.',
               style: TextStyle(
                   color: Colors.white60, fontSize: 15, height: 1.6),
               textAlign: TextAlign.center,
@@ -128,7 +128,7 @@ class OfflineDownloadPage extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(32)),
                 elevation: 0,
               ),
-              child: const Text('Upgrade to unlock downloads',
+              child: const Text('Upgrade to Go+',
                   style: TextStyle(
                       fontSize: 15, fontWeight: FontWeight.w700)),
             ),
@@ -209,7 +209,8 @@ class _PlanBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isGoPlus = planType == 'Go+';
-    final label = isGoPlus ? 'Unlimited downloads' : 'Limited monthly downloads';
+    final label =
+        isGoPlus ? 'Offline listening enabled' : 'Offline entitlement enabled';
     final plan = planType ?? 'Pro';
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -313,23 +314,46 @@ class _DownloadedTrackTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.download_done,
-                          color: Color(0xFF4CAF50), size: 12),
+                      Icon(
+                        (track.downloadMode as String? ?? 'file') ==
+                                'metadataOnly'
+                            ? Icons.info_outline
+                            : Icons.download_done,
+                        color:
+                            (track.downloadMode as String? ?? 'file') ==
+                                    'metadataOnly'
+                                ? Colors.orange
+                                : const Color(0xFF4CAF50),
+                        size: 12,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         _formatDate(track.downloadedAt as DateTime),
                         style: const TextStyle(
                             color: Colors.white38, fontSize: 11),
                       ),
-                      if (track.localPath != null) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.storage,
-                            color: Colors.white24, size: 11),
-                        const SizedBox(width: 2),
-                        const Text('Saved',
+                      const SizedBox(width: 8),
+                      if ((track.downloadMode as String? ?? 'file') ==
+                          'metadataOnly')
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: const Text(
+                            'Preview saved',
                             style: TextStyle(
-                                color: Colors.white24, fontSize: 11)),
-                      ],
+                                color: Colors.orange, fontSize: 10),
+                          ),
+                        )
+                      else if (track.localPath != null)
+                        const Text(
+                          'Saved file',
+                          style: TextStyle(
+                              color: Colors.white24, fontSize: 11),
+                        ),
                     ],
                   ),
                 ],

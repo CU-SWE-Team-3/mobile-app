@@ -1,19 +1,16 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/dio_client.dart';
 import '../../domain/entities/upload_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
-import '../../../premium/data/models/offline_downloaded_track.dart';
-import '../../../premium/data/services/offline_downloads_repository.dart';
+import '../../../premium/data/services/track_download_service.dart';
 import '../../../premium/presentation/providers/subscription_provider.dart';
 import '../providers/upload_provider.dart';
 import '../providers/my_tracks_provider.dart';
@@ -78,12 +75,17 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   }
 
   Future<void> _pickAndUpload(BuildContext context) async {
-    // Module 12: Free users can upload up to 3 tracks; Artist Pro is unlimited.
-    // The backend enforces its own auth/role rules — client only enforces the
-    // free-plan track count limit. No client-side role check is applied here.
+    // Module 12: Free/Go+ users can upload up to 3 tracks; Artist Pro/Pro is
+    // unlimited. Download permission is separate and belongs to Go+ only.
+    await ref.read(subscriptionProvider.notifier).refreshFromProfile();
     final sub = ref.read(subscriptionProvider);
-    final unlockedUploads = sub.isPremium && sub.planType == 'Pro';
-    if (!unlockedUploads && _allTracks.length >= 3) {
+    debugPrint(
+      '[Upload] entitlement — isPremium=${sub.isPremium}, '
+      'planType=${sub.planType ?? "null"}, '
+      'canUploadUnlimited=${sub.canUploadUnlimited}, '
+      'canDownload=${sub.canDownload}',
+    );
+    if (!sub.canUploadUnlimited && _allTracks.length >= 3) {
       if (context.mounted) _showUploadLimitDialog(context);
       return;
     }
@@ -117,10 +119,11 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
 
   void _showUploadLimitDialog(BuildContext context) {
     final sub = ref.read(subscriptionProvider);
-    final isGoPlus = sub.isPremium && sub.planType == 'Go+';
+    final isGoPlus = sub.planType == 'Go+';
+    final planLabel = sub.planType == null ? 'Free' : sub.displayPlanName;
     final limitMessage = isGoPlus
         ? 'Go+ includes offline downloads, but unlimited uploads require Artist Pro.'
-        : 'Free accounts can upload up to 3 tracks. Upgrade to Artist Pro for unlimited uploads.';
+        : '$planLabel accounts can upload up to 3 tracks. Upgrade to Artist Pro for unlimited uploads.';
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -256,94 +259,56 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
 
   Future<void> _downloadTrack(UploadTrack track) async {
     final trackId = track.id;
-    debugPrint('[Download] tapped from uploads page, trackId=$trackId');
-
     if (trackId == null || trackId.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+          content:
+              Text('Track cannot be downloaded because its ID is missing.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final result = await downloadTrack(
+      ref: ref,
+      trackId: trackId,
+      title: track.title,
+      artistName: track.artist.isNotEmpty ? track.artist : _currentDisplayName,
+      artworkUrl: track.artworkUrl,
+      audioUrl: track.hlsUrl,
+      genre: track.genre,
+      duration: track.duration,
+      source: 'uploads_page',
+    );
+
+    if (!mounted) return;
+    switch (result) {
+      case TrackDownloadSuccess():
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Track saved to Offline Downloads.'),
+          backgroundColor: Color(0xFF333333),
+        ));
+      case TrackDownloadMetadataOnly():
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text(
-              'Track cannot be downloaded because its ID is missing.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    var sub = ref.read(subscriptionProvider);
-    debugPrint(
-        '[Download] isPremium=${sub.isPremium}, currentPlan=${sub.planType}');
-
-    if (!sub.isPremium) {
-      await ref.read(subscriptionProvider.notifier).refreshFromProfile();
-      sub = ref.read(subscriptionProvider);
-      debugPrint('[Download] after refresh — isPremium=${sub.isPremium}');
-    }
-
-    if (!sub.isPremium) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Offline downloads require Go+ or Artist Pro.'),
+            'Direct download is disabled for this track. '
+            'Saved to Offline Downloads preview.',
+          ),
           backgroundColor: Color(0xFF333333),
-        ),
-      );
-      return;
-    }
-
-    debugPrint('[Download] calling GET /tracks/$trackId/download');
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final localPath = '${dir.path}/offline_$trackId.mp3';
-      final dioClient = ref.read(dioClientProvider);
-      await dioClient.dio.download('/tracks/$trackId/download', localPath);
-      debugPrint('[Download] backend responded 200 — saving metadata');
-
-      final repo = ref.read(offlineDownloadsRepositoryProvider);
-      await repo.save(OfflineDownloadedTrack(
-        trackId: trackId,
-        title: track.title,
-        artistName:
-            track.artist.isNotEmpty ? track.artist : _currentDisplayName,
-        artworkUrl: track.artworkUrl,
-        downloadedAt: DateTime.now(),
-        localPath: localPath,
-        planType: sub.planType,
-      ));
-      ref.invalidate(offlineDownloadsProvider);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Track saved for offline listening.'),
+          duration: Duration(seconds: 4),
+        ));
+      case TrackDownloadPlanGated():
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Requires a Go+ Subscription for offline listening.'),
           backgroundColor: Color(0xFF333333),
-        ),
-      );
-    } on DioException catch (e) {
-      debugPrint('[Download] failed — status: ${e.response?.statusCode}, '
-          'body: ${e.response?.data}');
-      if (!mounted) return;
-      String msg;
-      if (e.response?.statusCode == 401) {
-        msg = 'Please log in again.';
-      } else if (e.response?.statusCode == 403) {
-        final data = e.response?.data;
-        msg = (data is Map ? data['message'] as String? : null) ??
-            'Offline downloads require Go+ or Artist Pro.';
-      } else {
-        msg = 'Download failed. Please try again.';
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: Colors.red),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Download failed. Please try again.'),
+        ));
+      case TrackDownloadError(:final message):
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(message),
           backgroundColor: Colors.red,
-        ),
-      );
+        ));
     }
   }
 
@@ -441,14 +406,6 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   Widget build(BuildContext context) {
     final playerState = ref.watch(playerProvider);
     final myTracksAsync = ref.watch(myTracksProvider);
-
-    // Sync fetched tracks into local state whenever the provider resolves
-    ref.listen<AsyncValue<List<UploadTrack>>>(myTracksProvider, (_, next) {
-      next.whenData((tracks) {
-        _allTracks = tracks;
-        _applyFilter();
-      });
-    });
 
     // Both empty and populated states have the same structure now
     return Scaffold(
@@ -662,171 +619,181 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                   ),
                 );
               },
-              data: (_) => _filteredTracks.isEmpty
-                  ? Center(
-                      child: Text(
-                        _allTracks.isEmpty
-                            ? ''
-                            : 'No results for "${_searchController.text}"',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
-                          fontSize: 14,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: _filteredTracks.length,
-                      itemBuilder: (context, index) {
-                        final track = _filteredTracks[index];
-                        final isDeleting = track.id != null &&
-                            _deletingTrackIds.contains(track.id);
-                        final isCurrentTrack = track.id != null &&
-                            playerState.currentTrack?.id == track.id;
+              data: (tracks) {
+                _allTracks = tracks;
+                final query = _searchController.text.toLowerCase().trim();
+                final visibleTracks = query.isEmpty
+                    ? tracks
+                    : tracks
+                        .where((track) =>
+                            track.title.toLowerCase().contains(query) ||
+                            track.artist.toLowerCase().contains(query))
+                        .toList();
+                _filteredTracks = List.from(visibleTracks);
 
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          child: GestureDetector(
-                            key: const ValueKey('uploads_track_tile'),
-                            onTap: () => _playTrack(track),
-                            onLongPress: () => _showTrackOptionsSheet(track),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isCurrentTrack
-                                    ? const Color(0xFF2C2C2E)
-                                    : const Color(0xFF1C1C1E),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  // Track thumbnail
-                                  Container(
-                                    width: 56,
-                                    height: 56,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF3A3A3C),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: track.artworkUrl != null &&
-                                            track.artworkUrl!.isNotEmpty
-                                        ? ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                            child: CachedNetworkImage(
-                                              imageUrl: track.artworkUrl!,
-                                              fit: BoxFit.cover,
-                                              errorWidget: (_, __, ___) =>
-                                                  const Icon(
-                                                Icons.graphic_eq,
-                                                color: Colors.white,
-                                                size: 24,
-                                              ),
-                                            ),
-                                          )
-                                        : track.coverImagePath != null
-                                            ? Image.file(
-                                                File(track.coverImagePath!),
-                                                fit: BoxFit.cover,
-                                              )
-                                            : const Icon(
-                                                Icons.graphic_eq,
-                                                color: Colors.white,
-                                                size: 24,
-                                              ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  // Track info
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          track.title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
+                if (visibleTracks.isEmpty) {
+                  return Center(
+                    child: Text(
+                      tracks.isEmpty
+                          ? 'No uploads yet'
+                          : 'No results for "${_searchController.text}"',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: visibleTracks.length,
+                  itemBuilder: (context, index) {
+                    final track = visibleTracks[index];
+                    final isDeleting = track.id != null &&
+                        _deletingTrackIds.contains(track.id);
+                    final isCurrentTrack = track.id != null &&
+                        playerState.currentTrack?.id == track.id;
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      child: GestureDetector(
+                        key: const ValueKey('uploads_track_tile'),
+                        onTap: () => _playTrack(track),
+                        onLongPress: () => _showTrackOptionsSheet(track),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isCurrentTrack
+                                ? const Color(0xFF2C2C2E)
+                                : const Color(0xFF1C1C1E),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              // Track thumbnail
+                              Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF3A3A3C),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: track.artworkUrl != null &&
+                                        track.artworkUrl!.isNotEmpty
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(4),
+                                        child: CachedNetworkImage(
+                                          imageUrl: track.artworkUrl!,
+                                          fit: BoxFit.cover,
+                                          errorWidget: (_, __, ___) =>
+                                              const Icon(
+                                            Icons.graphic_eq,
                                             color: Colors.white,
-                                            fontSize: 14,
-                                            fontWeight: isCurrentTrack
-                                                ? FontWeight.w600
-                                                : FontWeight.w400,
+                                            size: 24,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _resolvedArtistName(track),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color:
-                                                Colors.white.withOpacity(0.6),
-                                            fontSize: 12,
+                                      )
+                                    : track.coverImagePath != null
+                                        ? Image.file(
+                                            File(track.coverImagePath!),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : const Icon(
+                                            Icons.graphic_eq,
+                                            color: Colors.white,
+                                            size: 24,
                                           ),
-                                        ),
-                                        if (track.processingState != null &&
-                                            track.processingState != 'Finished')
-                                          const Padding(
-                                            padding: EdgeInsets.only(top: 4),
-                                            child: Row(
-                                              children: [
-                                                SizedBox(
-                                                  width: 10,
-                                                  height: 10,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color: Color(0xFFFF5500),
-                                                  ),
-                                                ),
-                                                SizedBox(width: 4),
-                                                Text(
-                                                  'Processing',
-                                                  style: TextStyle(
-                                                    color: Color(0xFFFF5500),
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                      ],
+                              ),
+                              const SizedBox(width: 12),
+                              // Track info
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      track.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: isCurrentTrack
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                      ),
                                     ),
-                                  ),
-                                  // Options menu
-                                  GestureDetector(
-                                    key: const ValueKey(
-                                        'uploads_track_options_button'),
-                                    onTap: isDeleting
-                                        ? null
-                                        : () => _showTrackOptionsSheet(track),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8),
-                                      child: isDeleting
-                                          ? const SizedBox(
-                                              width: 20,
-                                              height: 20,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _resolvedArtistName(track),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.6),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    if (track.processingState != null &&
+                                        track.processingState != 'Finished')
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 4),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 10,
+                                              height: 10,
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 2,
                                                 color: Color(0xFFFF5500),
                                               ),
-                                            )
-                                          : Icon(
-                                              Icons.more_vert,
-                                              color:
-                                                  Colors.white.withOpacity(0.5),
                                             ),
-                                    ),
-                                  ),
-                                ],
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Processing',
+                                              style: TextStyle(
+                                                color: Color(0xFFFF5500),
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
+                              // Options menu
+                              GestureDetector(
+                                key: const ValueKey(
+                                    'uploads_track_options_button'),
+                                onTap: isDeleting
+                                    ? null
+                                    : () => _showTrackOptionsSheet(track),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: isDeleting
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Color(0xFFFF5500),
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.more_vert,
+                                          color: Colors.white.withOpacity(0.5),
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           ),
         ],

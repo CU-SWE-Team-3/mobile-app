@@ -8,6 +8,7 @@ import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../player/domain/entities/player_track.dart';
 import '../../data/services/player_api_service.dart';
+import 'mock_audio_ad_provider.dart';
 
 export '../../../player/domain/entities/player_track.dart';
 
@@ -102,18 +103,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   final AppAudioHandler _audioHandler;
   final PlayerApiService _api;
   final EngagementRemoteDataSource _engagementApi;
-  
+  final Ref _ref;
 
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration?> _durationSub;
   late final StreamSubscription<PlaybackState> _playbackStateSub;
-  
 
   /// Fires PUT /player/state every 5 seconds while a track is playing.
   Timer? _heartbeatTimer;
   Timer? _seekSyncTimer;
 
-  PlayerNotifier(this._api, this._audioHandler, this._engagementApi)
+  PlayerNotifier(this._api, this._audioHandler, this._engagementApi, this._ref)
       : super(const PlayerState()) {
     _audioHandler.onSkipNextRequested = skipToNext;
     _audioHandler.onSkipPreviousRequested = skipToPrevious;
@@ -180,6 +180,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   Future<void> playTrack(PlayerTrack track) async {
     try {
       state = state.copyWith(isLoading: true, clearError: true);
+      await _ref
+          .read(mockAudioAdProvider.notifier)
+          .maybeShowPreRollAd(track.id);
 
       // Report progress for the outgoing track before switching.
       final outgoing = state.currentTrack;
@@ -367,9 +370,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     _audioHandler.pause();
   }
 
-  void resume() {
+  Future<void> resume() async {
     if (state.currentTrack != null) {
-      _audioHandler.play();
+      await _ref
+          .read(mockAudioAdProvider.notifier)
+          .maybeShowPreRollAd(state.currentTrack!.id);
+      await _audioHandler.play();
     }
   }
 
@@ -377,7 +383,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     if (state.isPlaying) {
       pause();
     } else {
-      resume();
+      unawaited(resume());
     }
   }
 
@@ -467,7 +473,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
       currentTrack: current.copyWith(
         title: details.title.isNotEmpty ? details.title : current.title,
         artist: details.artist.isNotEmpty ? details.artist : current.artist,
-        audioUrl: details.audioUrl.isNotEmpty ? details.audioUrl : current.audioUrl,
+        audioUrl:
+            details.audioUrl.isNotEmpty ? details.audioUrl : current.audioUrl,
         coverUrl: (current.coverUrl == null || current.coverUrl!.isEmpty)
             ? details.coverUrl
             : current.coverUrl,
@@ -515,5 +522,6 @@ final playerProvider =
     ref.read(playerApiServiceProvider),
     appAudioHandler!,
     sl<EngagementRemoteDataSource>(),
+    ref,
   );
 });

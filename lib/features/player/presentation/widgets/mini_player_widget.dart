@@ -17,6 +17,7 @@ class MiniPlayerWidget extends ConsumerStatefulWidget {
 }
 
 class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
+  @override
   Widget build(BuildContext context) {
     final playerState = ref.watch(playerProvider);
     final currentTrack = playerState.currentTrack;

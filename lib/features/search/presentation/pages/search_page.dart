@@ -236,7 +236,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Widget _body(SearchState state) {
     return switch (state.mode) {
-      SearchMode.idle => _VibesGrid(genres: _genres),
+      SearchMode.idle => const _VibesGrid(genres: _genres),
       SearchMode.history => _historyPanel(state.history),
       SearchMode.results => _resultsBody(state),
     };
