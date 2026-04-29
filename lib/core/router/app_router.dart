@@ -23,9 +23,15 @@ import '../../features/feed/presentation/pages/search_results_tracks_page.dart';
 import '../../features/feed/presentation/pages/search_results_users_page.dart';
 import '../../features/feed/presentation/pages/search_results_playlists_page.dart';
 import '../../features/feed/presentation/pages/electronic_genre_page.dart';
+import '../../features/feed/presentation/pages/folk_genre_page.dart';
 import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
+import '../../features/feed/presentation/pages/indie_genre_page.dart';
+import '../../features/feed/presentation/pages/house_genre_page.dart';
 import '../../features/feed/presentation/pages/electronic_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/folk_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/indie_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/house_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/chill_genre_page.dart';
 import '../../features/feed/presentation/pages/party_genre_page.dart';
 import '../../features/feed/presentation/pages/workout_genre_page.dart';
@@ -180,11 +186,20 @@ final appRouter = GoRouter(
                     builder: (_, __) => const RecommendedTracksPage()),
                 GoRoute(path: 'cast', builder: (_, __) => const CastPage()),
                 GoRoute(
+                    path: 'genre/folk',
+                    builder: (_, __) => const FolkGenrePage()),
+                GoRoute(
                     path: 'genre/electronic',
                     builder: (_, __) => const ElectronicGenrePage()),
                 GoRoute(
                     path: 'genre/hiphop',
                     builder: (_, __) => const HiphopGenrePage()),
+                GoRoute(
+                    path: 'genre/indie',
+                    builder: (_, __) => const IndieGenrePage()),
+                GoRoute(
+                    path: 'genre/house',
+                    builder: (_, __) => const HouseGenrePage()),
                 GoRoute(
                     path: 'genre/pop',
                     builder: (_, __) => const PopGenrePage()),
@@ -234,13 +249,34 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'playlists',
                     builder: (_, __) => const SearchResultsPlaylistsPage()),
-                 GoRoute(
+                GoRoute(
+                    path: 'folk/introducing',
+                    builder: (_, state) => FolkPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
                      path: 'hiphop/introducing',
                      builder: (_, state) => HiphopPlaylistDetailPage(
                            playlistId:
                                state.uri.queryParameters['playlistId'] ?? '',
                            useBuzzingPreset: true,
                          )),
+                GoRoute(
+                    path: 'indie/introducing',
+                    builder: (_, state) => IndiePlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
+                    path: 'house/introducing',
+                    builder: (_, state) => HousePlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
                 GoRoute(
                     path: 'electronic/introducing',
                     builder: (_, state) => ElectronicPlaylistDetailPage(
