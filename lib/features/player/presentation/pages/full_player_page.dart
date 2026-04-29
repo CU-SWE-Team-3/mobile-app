@@ -1,8 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 
+import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 import '../../../../core/utils/profile_navigation.dart';
 import '../providers/follow_provider.dart';
@@ -12,6 +15,8 @@ import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/comments_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
+import '../../../premium/data/services/track_download_service.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
 import '../../../../core/themes/app_theme.dart';
 
 class FullPlayerPage extends ConsumerStatefulWidget {
@@ -25,6 +30,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
   late final TextEditingController _commentController;
   late final FocusNode _commentFocus;
   String? _myUserId;
+  bool _isDownloading = false;
+  double _downloadProgress = 0.0;
+  bool _downloadSuccess = false;
 
   @override
   void initState() {
@@ -41,6 +49,80 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
     _commentController.dispose();
     _commentFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _downloadCurrentTrack(
+    String trackId, {
+    required String title,
+    required String artistName,
+    String? artworkUrl,
+  }) async {
+    debugPrint('[Download] tapped trackId=$trackId');
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+      _downloadSuccess = false;
+    });
+
+    try {
+      final result = await downloadTrack(
+        ref: ref,
+        trackId: trackId,
+        title: title,
+        artistName: artistName,
+        artworkUrl: artworkUrl,
+        onProgress: (p) {
+          if (mounted) setState(() => _downloadProgress = p);
+        },
+      );
+      if (!mounted) return;
+      switch (result) {
+        case TrackDownloadSuccess():
+          setState(() {
+            _isDownloading = false;
+            _downloadProgress = 0.0;
+            _downloadSuccess = true;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Track saved for offline listening.'),
+              backgroundColor: Color(0xFF333333),
+            ),
+          );
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) setState(() => _downloadSuccess = false);
+          });
+        case TrackDownloadMetadataOnly():
+          setState(() { _isDownloading = false; _downloadProgress = 0.0; });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Direct file download is disabled for this track. '
+                'Saved to Offline Downloads for app preview.',
+              ),
+              backgroundColor: Color(0xFF333333),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        case TrackDownloadPlanGated():
+          setState(() { _isDownloading = false; _downloadProgress = 0.0; });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Offline downloads require Go+ or Artist Pro.'),
+              backgroundColor: Color(0xFF333333),
+            ),
+          );
+        case TrackDownloadError(:final message):
+          setState(() { _isDownloading = false; _downloadProgress = 0.0; });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message), backgroundColor: Colors.red),
+          );
+      }
+    } finally {
+      if (mounted && _isDownloading) {
+        setState(() { _isDownloading = false; _downloadProgress = 0.0; });
+      }
+    }
   }
 
   String _formatDuration(Duration d) {
@@ -650,6 +732,55 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                         icon: Icons.queue_music,
                         label: '',
                         onTap: () => context.push('/player/queue'),
+                      ),
+                      GestureDetector(
+                        key: const ValueKey('player_download_button'),
+                        onTap: _isDownloading || _downloadSuccess || trackId == null
+                            ? null
+                            : () => _downloadCurrentTrack(
+                                  trackId,
+                                  title: playerState.currentTrack?.title ?? '',
+                                  artistName: playerState.currentTrack?.artist ?? '',
+                                  artworkUrl: playerState.currentTrackArtworkUrl,
+                                ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: _downloadSuccess
+                                  ? const Icon(
+                                      Icons.check_circle,
+                                      color: Color(0xFF00C853),
+                                      size: 26,
+                                    )
+                                  : _isDownloading
+                                      ? CircularProgressIndicator(
+                                          value: _downloadProgress > 0
+                                              ? _downloadProgress
+                                              : null,
+                                          strokeWidth: 2,
+                                          color: Colors.orange,
+                                        )
+                                      : const Icon(
+                                          Icons.download_outlined,
+                                          color: Colors.white,
+                                          size: 26,
+                                        ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _isDownloading
+                                  ? '${(_downloadProgress * 100).toInt()}%'
+                                  : '',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

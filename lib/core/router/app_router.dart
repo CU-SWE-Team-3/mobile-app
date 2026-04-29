@@ -89,6 +89,8 @@ import '../../features/premium/presentation/pages/premium_paywall_page.dart';
 import '../../features/premium/presentation/pages/pricing_tiers_page.dart';
 import '../../features/premium/presentation/pages/subscription_status_page.dart';
 import '../../features/premium/presentation/pages/offline_download_page.dart';
+import '../../features/premium/presentation/pages/payment_success_page.dart';
+import '../../features/premium/presentation/pages/explore_features_page.dart';
 
 import '../../features/settings/presentation/pages/settings_main_page.dart';
 import '../../features/settings/presentation/pages/account_settings_page.dart';
@@ -315,11 +317,20 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'offline',
                     builder: (_, __) => const OfflineDownloadPage()),
+                GoRoute(
+                    path: 'features',
+                    builder: (_, __) => const ExploreFeaturesPage()),
               ],
             ),
           ],
         ),
       ],
+    ),
+
+    // ── PAYMENT SUCCESS (global, shown after Stripe return) ───────────
+    GoRoute(
+      path: '/payment-success',
+      builder: (_, __) => const PaymentSuccessPage(),
     ),
 
     // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─

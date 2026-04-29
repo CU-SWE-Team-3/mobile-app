@@ -385,11 +385,11 @@ class _EmojiReactionRow extends StatelessWidget {
       child: Row(
         children: [
           // Emoji stacked chips
-          _EmojiChip(emoji: '🔥'),
+          const _EmojiChip(emoji: '🔥'),
           const SizedBox(width: 6),
-          _EmojiChip(emoji: '👏'),
+          const _EmojiChip(emoji: '👏'),
           const SizedBox(width: 6),
-          _EmojiChip(emoji: '🤩'),
+          const _EmojiChip(emoji: '🤩'),
           const SizedBox(width: 10),
           Text(
             '$totalCount',
@@ -423,8 +423,8 @@ class _EmojiChip extends StatelessWidget {
     return Container(
       width: 36,
       height: 36,
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2A2A),
+      decoration: const BoxDecoration(
+        color: Color(0xFF2A2A2A),
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
@@ -510,9 +510,9 @@ class _CommentTileState extends State<_CommentTile> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
+                        const Text(
                           'at',
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: Colors.white54, fontSize: 13),
                         ),
                         const SizedBox(width: 6),
@@ -841,9 +841,9 @@ class _InputBar extends StatelessWidget {
                       focusNode: focusNode,
                       style: const TextStyle(
                           color: Colors.white, fontSize: 14),
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: 'Comment at',
-                        hintStyle: const TextStyle(
+                        hintStyle: TextStyle(
                             color: Colors.white38, fontSize: 14),
                         border: InputBorder.none,
                         isDense: true,
