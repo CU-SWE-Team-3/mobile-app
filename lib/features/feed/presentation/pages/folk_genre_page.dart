@@ -8,27 +8,23 @@ import '../../../../core/utils/profile_navigation.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/providers/follow_provider.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
-class RnbGenrePage extends ConsumerStatefulWidget {
-  const RnbGenrePage({super.key});
+class FolkGenrePage extends ConsumerStatefulWidget {
+  const FolkGenrePage({super.key});
 
   @override
-  ConsumerState<RnbGenrePage> createState() => _RnbGenrePageState();
+  ConsumerState<FolkGenrePage> createState() => _FolkGenrePageState();
 }
 
-class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
+class _FolkGenrePageState extends ConsumerState<FolkGenrePage>
     with TickerProviderStateMixin {
   static const _pageBackground = Color(0xFF111111);
   static const _panelBackground = Color(0xFF1A1A1A);
-  static const _rnbQuery = 'R&B';
-  static const _rnbGenreQueries = [
-    'R&B',
-    'RnB',
-    'Rnb',
-    'R & B',
-    'R&B & Soul',
-    'R and B',
+  static const _folkQuery = 'Folk';
+  static const _folkGenreQueries = [
+    'Folk',
+    'folk',
   ];
-  static const _buzzingLikeKey = 'buzzing_rnb_liked';
+  static const _buzzingLikeKey = 'buzzing_folk_liked';
 
   late final TabController _tabController;
 
@@ -48,13 +44,11 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
   bool _isAlbumsLoading = true;
   bool _albumsError = false;
   bool _isRecentCollectionLiked = false;
-  _SessionIdentity? _currentUserIdentity;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _loadCurrentUserIdentity();
     _loadBuzzingLikeState();
     _fetchAll();
   }
@@ -87,9 +81,8 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Future<void> _fetchGenreTracks() async {
     try {
-      final currentUser = await _loadCurrentUserIdentity();
       final discoveryResponses = await Future.wait(
-        _rnbGenreQueries.map(
+        _folkGenreQueries.map(
           (genre) => dioClient.dio
               .get('/discovery/genre/${Uri.encodeComponent(genre)}')
               .then<dynamic>((resp) => resp.data)
@@ -102,48 +95,11 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
         mergedTracks.addAll(_extractTracks(body));
       }
 
-      var dedupedTracks = _dedupeTracks(mergedTracks);
-
-      if (dedupedTracks.isEmpty) {
-        final fallbackResponses = await Future.wait(
-          _rnbGenreQueries.map(
-            (query) => dioClient.dio
-                .get(
-                  '/tracks/search',
-                  queryParameters: {'q': query, 'page': 1, 'limit': 24},
-                )
-                .then<dynamic>((resp) => resp.data)
-                .catchError((_) => null),
-          ),
-        );
-
-        final fallbackTracks = <_Track>[];
-        for (final body in fallbackResponses) {
-          fallbackTracks.addAll(_extractSearchTracks(body));
-        }
-        dedupedTracks = _dedupeTracks(fallbackTracks);
-      }
-
-      if (dedupedTracks.isEmpty) {
-        final myTracksBody = await dioClient.dio
-            .get('/tracks/my-tracks')
-            .then<dynamic>((resp) => resp.data)
-            .catchError((_) => null);
-        final myTracks = _extractMyTracks(myTracksBody);
-        dedupedTracks = _dedupeTracks(
-          myTracks
-              .where((track) => _matchesRnbGenre(track.genre))
-              .map((track) => _applyCurrentUserIdentity(track, currentUser))
-              .toList(),
-        );
-      }
+      final dedupedTracks = _dedupeTracks(mergedTracks);
 
       if (!mounted) return;
       setState(() {
-        _tracks = dedupedTracks
-            .map((track) => _applyCurrentUserIdentity(track, currentUser))
-            .toList();
-        _hasError = false;
+        _tracks = dedupedTracks;
         _isLoading = false;
       });
     } catch (_) {
@@ -157,10 +113,9 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Future<void> _fetchTrendingTracks() async {
     try {
-      final currentUser = await _loadCurrentUserIdentity();
       final resp = await dioClient.dio.get(
         '/discovery/trending',
-        queryParameters: {'genre': _rnbQuery},
+        queryParameters: {'genre': _folkQuery},
       );
       final data = resp.data as Map<String, dynamic>;
       final raw = ((data['data'] as Map<String, dynamic>?) ?? {})['trending']
@@ -172,7 +127,6 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
             .whereType<Map<String, dynamic>>()
             .map(_Track.fromJson)
             .where((t) => t.id.isNotEmpty)
-            .map((track) => _applyCurrentUserIdentity(track, currentUser))
             .toList();
         _isTrendingLoading = false;
       });
@@ -187,32 +141,15 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Future<void> _fetchPlaylists() async {
     try {
-      final responses = await Future.wait(
-        _rnbGenreQueries.map(
-          (genre) => dioClient.dio
-              .get(
-                '/playlists',
-                queryParameters: {'genre': genre, 'limit': 10},
-              )
-              .then<dynamic>((resp) => resp.data)
-              .catchError((_) => null),
-        ),
+      debugPrint('[FolkGenrePage] _fetchPlaylists: requesting genre="Folk"');
+      final resp = await dioClient.dio.get(
+        '/playlists',
+        queryParameters: {'genre': _folkQuery, 'limit': 10},
       );
-
-      final merged = <_PlaylistInfo>[];
-      for (final body in responses) {
-        merged.addAll(_extractPlaylists(body));
-      }
-
-      final byId = <String, _PlaylistInfo>{};
-      for (final playlist in merged) {
-        if (playlist.id.isEmpty) continue;
-        byId.putIfAbsent(playlist.id, () => playlist);
-      }
-
+      debugPrint('[FolkGenrePage] _fetchPlaylists raw: ${resp.data}');
       if (!mounted) return;
       setState(() {
-        _playlists = byId.values.toList();
+        _playlists = _extractPlaylists(resp.data);
         _isPlaylistsLoading = false;
       });
     } catch (_) {
@@ -226,36 +163,17 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Future<void> _fetchAlbums() async {
     try {
-      final responses = await Future.wait(
-        _rnbGenreQueries.map(
-          (genre) => dioClient.dio
-              .get(
-                '/playlists',
-                queryParameters: {
-                  'genre': genre,
-                  'releaseType': 'album',
-                  'limit': 10,
-                },
-              )
-              .then<dynamic>((resp) => resp.data)
-              .catchError((_) => null),
-        ),
+      final resp = await dioClient.dio.get(
+        '/playlists',
+        queryParameters: {
+          'genre': _folkQuery,
+          'releaseType': 'album',
+          'limit': 10,
+        },
       );
-
-      final merged = <_PlaylistInfo>[];
-      for (final body in responses) {
-        merged.addAll(_extractPlaylists(body));
-      }
-
-      final byId = <String, _PlaylistInfo>{};
-      for (final playlist in merged) {
-        if (playlist.id.isEmpty) continue;
-        byId.putIfAbsent(playlist.id, () => playlist);
-      }
-
       if (!mounted) return;
       setState(() {
-        _albumPlaylists = byId.values.toList();
+        _albumPlaylists = _extractPlaylists(resp.data);
         _isAlbumsLoading = false;
       });
     } catch (_) {
@@ -270,131 +188,17 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
   List<_Track> _extractTracks(dynamic body) {
     if (body is! Map<String, dynamic>) return [];
     final data = body['data'];
-    final raw = _coerceList(
-      data,
-      candidateKeys: const ['tracks', 'trending', 'items', 'results'],
-    );
+    final raw = data is List
+        ? data
+        : data is Map<String, dynamic>
+            ? (data['tracks'] ?? data['trending'] ?? data['items'] ?? [])
+                as List<dynamic>
+            : <dynamic>[];
     return raw
         .whereType<Map<String, dynamic>>()
         .map(_Track.fromJson)
         .where((t) => t.id.isNotEmpty)
         .toList();
-  }
-
-  List<_Track> _extractSearchTracks(dynamic body) {
-    if (body is! Map<String, dynamic>) return [];
-    final raw = _coerceList(
-      body['data'],
-      candidateKeys: const ['tracks', 'items', 'results'],
-    );
-    return raw
-        .whereType<Map<String, dynamic>>()
-        .map(_Track.fromJson)
-        .where((track) => track.id.isNotEmpty)
-        .toList();
-  }
-
-  List<_Track> _extractMyTracks(dynamic body) {
-    if (body is! Map<String, dynamic>) return [];
-    final raw = _coerceList(
-      body['data'],
-      candidateKeys: const ['tracks', 'items', 'results'],
-    );
-    return raw
-        .whereType<Map<String, dynamic>>()
-        .map(_Track.fromJson)
-        .where((track) => track.id.isNotEmpty)
-        .toList();
-  }
-
-  Future<_SessionIdentity?> _loadCurrentUserIdentity() async {
-    if (_currentUserIdentity != null) return _currentUserIdentity;
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString('userId') ?? '';
-    final displayName = (prefs.getString('displayName') ??
-            prefs.getString('username') ??
-            prefs.getString('name') ??
-            '')
-        .trim();
-    final avatarUrl = (prefs.getString('avatarUrl') ?? '').trim();
-    final permalink = (prefs.getString('permalink') ?? '').trim();
-    if (userId.isEmpty &&
-        displayName.isEmpty &&
-        avatarUrl.isEmpty &&
-        permalink.isEmpty) {
-      return null;
-    }
-    _currentUserIdentity = _SessionIdentity(
-      userId: userId,
-      displayName: displayName,
-      avatarUrl: avatarUrl,
-      permalink: permalink,
-    );
-    return _currentUserIdentity;
-  }
-
-  _Track _applyCurrentUserIdentity(
-    _Track track,
-    _SessionIdentity? currentUser,
-  ) {
-    if (currentUser == null) return track;
-    return _Track(
-      id: track.id,
-      title: track.title,
-      genre: track.genre,
-      artistName: currentUser.displayName.isNotEmpty
-          ? currentUser.displayName
-          : track.artistName,
-      artistId:
-          currentUser.userId.isNotEmpty ? currentUser.userId : track.artistId,
-      artistPermalink: currentUser.permalink.isNotEmpty
-          ? currentUser.permalink
-          : track.artistPermalink,
-      artistAvatarUrl: currentUser.avatarUrl.isNotEmpty
-          ? currentUser.avatarUrl
-          : track.artistAvatarUrl,
-      artworkUrl: track.artworkUrl,
-      hlsUrl: track.hlsUrl,
-      permalink: track.permalink,
-      waveform: track.waveform,
-      playCount: track.playCount,
-      createdAt: track.createdAt,
-    );
-  }
-
-  List<dynamic> _coerceList(
-    dynamic value, {
-    List<String> candidateKeys = const [],
-  }) {
-    if (value is List<dynamic>) return value;
-    if (value is Map<String, dynamic>) {
-      for (final key in candidateKeys) {
-        final nested = value[key];
-        if (nested is List<dynamic>) return nested;
-      }
-      for (final nested in value.values) {
-        if (nested is List<dynamic>) return nested;
-      }
-    }
-    return const <dynamic>[];
-  }
-
-  bool _matchesRnbGenre(String? genre) {
-    final normalized = _normalizeGenre(genre);
-    return normalized.contains('rnb') ||
-        normalized.contains('rb') ||
-        normalized.contains('r and b') ||
-        normalized.contains('soul');
-  }
-
-  String _normalizeGenre(String? value) {
-    if (value == null) return '';
-    return value
-        .toLowerCase()
-        .replaceAll('&', 'and')
-        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
   }
 
   List<_Track> _dedupeTracks(List<_Track> tracks) {
@@ -433,11 +237,9 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
         );
   }
 
-  List<_Track> get _effectiveTrendingTracks =>
-      _trendingTracks.isNotEmpty ? _trendingTracks : _tracks;
-
-  List<_Track> get _previewTrendingTracks =>
-      _effectiveTrendingTracks.take(3).toList();
+  List<_Track> get _previewTrendingTracks => _trendingTracks.isNotEmpty
+      ? _trendingTracks.take(3).toList()
+      : _tracks.take(3).toList();
 
   List<_Track> get _recentGenreTracks {
     final tracks = List<_Track>.from(_tracks);
@@ -546,7 +348,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
                 fit: StackFit.expand,
                 children: [
                   Image.asset(
-                    'assets/images/R&B_bg.png',
+                    'assets/images/Folk_bg.png',
                     fit: BoxFit.cover,
                     alignment: Alignment.topCenter,
                   ),
@@ -569,7 +371,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
                     right: 24,
                     bottom: 54,
                     child: Text(
-                      'R&B',
+                      'Folk',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 36,
@@ -632,7 +434,10 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Widget _buildAllTab() {
     final previewTracks = _previewTrendingTracks;
-    final trendingSlides = _chunkTracks(_effectiveTrendingTracks, 3);
+    final trendingSlides = _chunkTracks(
+      _trendingTracks.isNotEmpty ? _trendingTracks : _tracks,
+      3,
+    );
     final recentTracks = _recentGenreTracks;
     final isLoading =
         (_isLoading || _isTrendingLoading) &&
@@ -703,31 +508,20 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
             ),
             const SizedBox(height: 10),
             _buildRecentTracksCard(recentTracks),
-          ],
-          const SizedBox(height: 20),
-          _buildHomePlaylistsSection(),
-          const SizedBox(height: 20),
-          _buildHomeAlbumsSection(),
-          if (_isLoading || _hasError || _artistProfiles.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _buildHomePlaylistsSection(),
+            const SizedBox(height: 20),
+            _buildHomeAlbumsSection(),
             const SizedBox(height: 20),
             _buildProfilesSection(),
-          ],
-          if (recentTracks.isNotEmpty) ...[
             const SizedBox(height: 20),
             _buildDiscoverMoreTracksSection(),
           ],
-          if (previewTracks.isEmpty &&
-              recentTracks.isEmpty &&
-              _playlists.isEmpty &&
-              _albumPlaylists.isEmpty &&
-              _artistProfiles.isEmpty &&
-              !_isPlaylistsLoading &&
-              !_isAlbumsLoading &&
-              !_isLoading)
+          if (previewTracks.isEmpty && recentTracks.isEmpty && _playlists.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 24, vertical: 40),
               child: Text(
-                'No R&B content available right now.',
+                'No Folk content available right now.',
                 style: TextStyle(color: Colors.white54, fontSize: 15),
               ),
             ),
@@ -737,7 +531,6 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
   }
 
   Widget _buildTrendingTab() {
-    final trendingTracks = _effectiveTrendingTracks;
     if (_isTrendingLoading) {
       return const Center(
         child: CircularProgressIndicator(color: Color(0xFFFF5500)),
@@ -754,7 +547,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
         },
       );
     }
-    if (trendingTracks.isEmpty) {
+    if (_trendingTracks.isEmpty) {
       return const Center(
         child: Text(
           'No trending tracks found',
@@ -770,8 +563,8 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(top: 12, bottom: 32),
-        itemCount: trendingTracks.length,
-        itemBuilder: (_, i) => _buildTrackListTile(trendingTracks, i),
+        itemCount: _trendingTracks.length,
+        itemBuilder: (_, i) => _buildTrackListTile(_trendingTracks, i),
       ),
     );
   }
@@ -994,44 +787,35 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   void _openIntroducingPlaylist() {
     if (_playlists.isEmpty) {
-      _pushIntroducingPlaylist('/search/rnb/introducing');
+      _pushIntroducingPlaylist('/search/folk/introducing');
       return;
     }
 
     final selectedPlaylist = _playlists.firstWhere(
       (playlist) {
         final title = playlist.title.toLowerCase();
-        return title.contains('buzzing r&b') ||
-            title.contains('buzzing rnb') ||
-            title.contains('buzzing');
+        return title.contains('buzzing folk') || title == 'buzzing';
       },
       orElse: () => _playlists.first,
     );
 
     if (selectedPlaylist.id.isEmpty) {
-      _pushIntroducingPlaylist('/search/rnb/introducing');
+      _pushIntroducingPlaylist('/search/folk/introducing');
       return;
     }
 
     final playlistId = Uri.encodeComponent(selectedPlaylist.id);
-    _pushIntroducingPlaylist('/search/rnb/introducing?playlistId=$playlistId');
+    _pushIntroducingPlaylist('/search/folk/introducing?playlistId=$playlistId');
   }
 
   Widget _buildRecentTracksCard(List<_Track> recentTracks) {
-    if (recentTracks.isEmpty) {
-      return const SizedBox.shrink();
-    }
     final playerState = ref.watch(playerProvider);
     final previewTracks = recentTracks.take(2).toList();
-    final heroTrack = recentTracks.firstWhere(
-      (track) =>
-          track.artworkUrl.isNotEmpty &&
-          !track.artworkUrl.contains('default-artwork'),
-      orElse: () => recentTracks.first,
-    );
+    final heroTrack = previewTracks.isNotEmpty ? previewTracks.first : recentTracks.first;
     const heroArtworkSize = 152.0;
-    final hasArtwork = heroTrack.artworkUrl.isNotEmpty &&
-        !heroTrack.artworkUrl.contains('default-artwork');
+    final hasArtwork = heroTrack.artworkUrl != null &&
+        heroTrack.artworkUrl!.isNotEmpty &&
+        !heroTrack.artworkUrl!.contains('default-artwork');
     final buzzingQueue = _buzzingQueue();
     final hasPlayablePlaylistTrack = buzzingQueue.isNotEmpty;
     final currentTrackId = playerState.currentTrack?.id;
@@ -1062,11 +846,11 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
                     center: const Alignment(0, -0.1),
                     radius: 1.22,
                     colors: [
-                      const Color(0xFFB8F2EE).withValues(alpha: 0.96),
-                      const Color(0xFF72D6CF).withValues(alpha: 0.88),
-                      const Color(0xFF2FA7A3).withValues(alpha: 0.68),
-                      const Color(0xFF156768).withValues(alpha: 0.46),
-                      const Color(0xFF0B2426).withValues(alpha: 0.24),
+                      const Color(0xFFD6B8FF).withValues(alpha: 0.96),
+                      const Color(0xFFB58CFF).withValues(alpha: 0.88),
+                      const Color(0xFF8D68D8).withValues(alpha: 0.68),
+                      const Color(0xFF5E4686).withValues(alpha: 0.46),
+                      const Color(0xFF352744).withValues(alpha: 0.24),
                     ],
                     stops: const [0.0, 0.22, 0.48, 0.76, 1.0],
                   ),
@@ -1078,7 +862,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
                       borderRadius: BorderRadius.circular(10),
                       child: hasArtwork
                           ? CachedNetworkImage(
-                              imageUrl: heroTrack.artworkUrl,
+                              imageUrl: heroTrack.artworkUrl!,
                               width: heroArtworkSize,
                               height: heroArtworkSize,
                               fit: BoxFit.cover,
@@ -1094,7 +878,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
                         children: [
                           const SizedBox(height: 18),
                           const Text(
-                            'Buzzing R&B',
+                            'Buzzing Folk',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1350,7 +1134,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
     return GestureDetector(
       onTap: () => context.push(
-                '/search/rnb/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+                '/search/folk/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
               ),
       child: Container(
         padding: const EdgeInsets.all(12),
@@ -1362,7 +1146,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
           children: [
             GestureDetector(
               onTap: () => context.push(
-                '/search/rnb/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+                '/search/folk/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
@@ -1491,7 +1275,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'No R&B playlists available right now.',
+              'No Folk playlists available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
           )
@@ -1522,7 +1306,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: _buildInlineRetryCard(
-              message: 'Failed to load R&B albums.',
+              message: 'Failed to load Folk albums.',
               onRetry: _fetchAlbums,
             ),
           )
@@ -1530,7 +1314,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'No R&B albums available right now.',
+              'No Folk albums available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
           )
@@ -1558,7 +1342,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: _buildInlineRetryCard(
-              message: 'Failed to load R&B artist profiles.',
+              message: 'Failed to load Folk artist profiles.',
               onRetry: _fetchGenreTracks,
             ),
           )
@@ -1566,7 +1350,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'No R&B artist profiles available right now.',
+              'No Folk artist profiles available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
           )
@@ -1603,7 +1387,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: _buildInlineRetryCard(
-              message: 'Failed to load more R&B tracks.',
+              message: 'Failed to load more Folk tracks.',
               onRetry: _fetchGenreTracks,
             ),
           )
@@ -1611,7 +1395,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text(
-              'No more R&B tracks available right now.',
+              'No more Folk tracks available right now.',
               style: TextStyle(color: Colors.white54, fontSize: 14),
             ),
           )
@@ -1750,7 +1534,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
         !playlist.artworkUrl.contains('default-artwork');
     return GestureDetector(
       onTap: () => context.push(
-        '/search/rnb/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
+        '/search/folk/introducing?playlistId=${Uri.encodeComponent(playlist.id)}',
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1835,7 +1619,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Widget _buildInlineRetryCard({
     required Future<void> Function() onRetry,
-    String message = 'Failed to load R&B playlists.',
+    String message = 'Failed to load Folk playlists.',
   }) {
     return Container(
       width: double.infinity,
@@ -1888,7 +1672,6 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 class _Track {
   final String id;
   final String title;
-  final String genre;
   final String artistName;
   final String artistId;
   final String artistPermalink;
@@ -1903,7 +1686,6 @@ class _Track {
   const _Track({
     required this.id,
     required this.title,
-    required this.genre,
     required this.artistName,
     required this.artistId,
     required this.artistPermalink,
@@ -1916,100 +1698,36 @@ class _Track {
     this.createdAt,
   });
 
-  _Track copyWith({
-    String? artistName,
-  }) => _Track(
-        id: id,
-        title: title,
-        genre: genre,
-        artistName: artistName ?? this.artistName,
-        artistId: artistId,
-        artistPermalink: artistPermalink,
-        artistAvatarUrl: artistAvatarUrl,
-        artworkUrl: artworkUrl,
-        hlsUrl: hlsUrl,
-        permalink: permalink,
-        waveform: waveform,
-        playCount: playCount,
-        createdAt: createdAt,
-      );
-
   factory _Track.fromJson(dynamic json) {
-    final root = json is Map<String, dynamic> ? json : const <String, dynamic>{};
-    final target = root['target'];
-    final nestedTrack = root['track'];
-    final track = target is Map<String, dynamic>
-        ? target
-        : nestedTrack is Map<String, dynamic>
-            ? nestedTrack
-            : root;
-    final user = _pickEntityMap(
-          [track, root],
-          const [
-            'user',
-            'artist',
-            'creator',
-            'owner',
-            'uploadedBy',
-            'uploader',
-          ],
-        ) ??
-        const <String, dynamic>{};
-
-    final media = track['media'] is Map<String, dynamic>
-        ? track['media'] as Map<String, dynamic>
-        : null;
-    final rawTranscodings = media == null ? null : media['transcodings'];
-    final transcodings =
-        rawTranscodings is List ? rawTranscodings.cast<dynamic>() : const <dynamic>[];
+    final track = (json['target'] is Map<String, dynamic>
+            ? json['target'] as Map<String, dynamic>
+            : json['track'] is Map<String, dynamic>
+                ? json['track'] as Map<String, dynamic>
+                : json as Map<String, dynamic>);
+    final user = track['user'] as Map<String, dynamic>? ??
+        track['artist'] as Map<String, dynamic>? ??
+        const {};
+    final media = track['media'] as Map<String, dynamic>?;
+    final transcodings = media?['transcodings'] as List<dynamic>? ?? const [];
     Map<String, dynamic>? hlsTranscoding;
     for (final item in transcodings) {
       if (item is! Map<String, dynamic>) continue;
-      final format = item['format'] is Map<String, dynamic>
-          ? item['format'] as Map<String, dynamic>
-          : null;
+      final format = item['format'] as Map<String, dynamic>?;
       if (format?['protocol'] == 'hls') {
         hlsTranscoding = item;
         break;
       }
     }
-
-    final rawGenres = track['genres'];
-    final genres = rawGenres is List
-        ? rawGenres.whereType<Object>().map((e) => e.toString()).join(', ')
-        : rawGenres?.toString() ?? '';
     final artworkValue =
         (track['artworkUrl'] ?? track['artwork_url'] ?? '').toString();
     final trackId =
         track['_id']?.toString() ?? track['id']?.toString() ?? '';
-
-    final rawWaveform = track['waveform'];
-    final waveform = rawWaveform is List
-        ? rawWaveform.whereType<num>().map((e) => e.toInt()).toList()
-        : null;
-
-    final permalinkValue = track['permalink'];
-    final uploaderName = _pickDisplayName(
-      [user, track, root],
-      const [
-        'displayName',
-        'username',
-        'name',
-        'fullName',
-        'userName',
-        'artist',
-        'ownerName',
-        'artistName',
-        'uploadedByName',
-        'uploaderName',
-        'creatorName',
-      ],
-    );
     return _Track(
       id: trackId,
       title: (track['title'] ?? '').toString(),
-      genre: (track['genre'] ?? genres).toString(),
-      artistName: uploaderName,
+      artistName:
+          (user['displayName'] ?? user['username'] ?? user['name'] ?? '')
+              .toString(),
       artistId: user['_id']?.toString() ?? user['id']?.toString() ?? '',
       artistPermalink: (user['permalink'] ?? '').toString(),
       artistAvatarUrl: (user['avatarUrl'] ?? '').toString(),
@@ -2025,20 +1743,22 @@ class _Track {
                   : '') ??
               '')
           .toString(),
-      permalink: permalinkValue?.toString() ?? '',
-      waveform: waveform,
+      permalink: track['permalink'] as String? ?? '',
+      waveform: (track['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
       playCount: (track['playback_count'] as num?)?.toInt() ??
           (track['playCount'] as num?)?.toInt() ??
           0,
       createdAt: track['created_at'] != null
-          ? DateTime.tryParse(track['created_at'].toString())
+          ? DateTime.tryParse(track['created_at'])
           : track['createdAt'] != null
-              ? DateTime.tryParse(track['createdAt'].toString())
-              : null,
+              ? DateTime.tryParse(track['createdAt'])
+          : null,
     );
   }
 
-  PlayerTrack toPlayerTrack() => PlayerTrack(
+ PlayerTrack toPlayerTrack() => PlayerTrack(
       id: id,
       title: title,
       artist: artistName,
@@ -2049,34 +1769,6 @@ class _Track {
       waveform: waveform,
       trackPermalink: permalink.isEmpty ? null : permalink,
     );
-
-  static Map<String, dynamic>? _pickEntityMap(
-    List<Map<String, dynamic>> sources,
-    List<String> keys,
-  ) {
-    for (final source in sources) {
-      for (final key in keys) {
-        final value = source[key];
-        if (value is Map<String, dynamic>) return value;
-      }
-    }
-    return null;
-  }
-
-  static String _pickDisplayName(
-    List<Map<String, dynamic>> sources,
-    List<String> keys,
-  ) {
-    for (final source in sources) {
-      for (final key in keys) {
-        final rawValue = source[key];
-        if (rawValue is Map || rawValue is List) continue;
-        final value = rawValue?.toString().trim() ?? '';
-        if (value.isNotEmpty) return value;
-      }
-    }
-    return '';
-  }
   }
 
 class _ArtistProfile {
@@ -2120,34 +1812,9 @@ class _PlaylistInfo {
 
   factory _PlaylistInfo.fromJson(dynamic json) => _PlaylistInfo(
         id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-        title: (json['title'] ?? '').toString(),
-        artworkUrl: (json['artwork_url'] ?? json['artworkUrl'] ?? '')
-            .toString()
-            .replaceAll('large', 't500x500'),
-        ownerName: ((json['user'] is Map<String, dynamic>
-                        ? json['user']['username']
-                        : null) ??
-                    (json['creator'] is Map<String, dynamic>
-                        ? json['creator']['displayName']
-                        : null) ??
-                    '')
-                .toString(),
-        trackCount: (json['track_count'] as num?)?.toInt() ??
-            (json['trackCount'] as num?)?.toInt() ??
-            0,
+        title: json['title'] ?? '',
+        artworkUrl: (json['artwork_url'] ?? json['artworkUrl'] ?? '').replaceAll('large', 't500x500'),
+        ownerName: json['user']?['username'] ?? json['creator']?['displayName'] ?? '',
+        trackCount: json['track_count'] ?? json['trackCount'] ?? 0,
       );
-}
-
-class _SessionIdentity {
-  final String userId;
-  final String displayName;
-  final String avatarUrl;
-  final String permalink;
-
-  const _SessionIdentity({
-    required this.userId,
-    required this.displayName,
-    required this.avatarUrl,
-    required this.permalink,
-  });
 }

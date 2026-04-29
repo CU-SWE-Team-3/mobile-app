@@ -650,6 +650,9 @@ class _GenreCard extends StatelessWidget {
   String get _route => switch (genre.name) {
         _ when genre.routeOverride != null => genre.routeOverride!,
         'Hip Hop & Rap' => '/home/genre/hiphop',
+        'Folk' => '/home/genre/folk',
+        'Indie' => '/home/genre/indie',
+        'House' => '/home/genre/house',
         'Electronic' => '/home/genre/electronic',
         'Pop' => '/home/genre/pop',
         'R&B' => '/home/genre/rnb',
