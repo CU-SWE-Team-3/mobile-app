@@ -28,6 +28,38 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
         _backfillArtwork();
       }
     }
+
+    // Server refresh: fetch authoritative list so fresh installs and stale
+    // caches get up-to-date data. Runs after cache so UI appears instantly.
+    final userId = prefs.getString('userId') ?? '';
+    if (userId.isEmpty) return;
+    try {
+      final serverList = await _repository.fetchAll(userId);
+      if (!mounted) return;
+      // Preserve already-backfilled firstTrackArtworkUrl from cached state so
+      // _backfillArtwork doesn't re-fetch every playlist on every startup.
+      final cached = {for (final p in state) p.id: p};
+      state = serverList.map((p) {
+        final prev = cached[p.id];
+        if (prev?.firstTrackArtworkUrl == null) return p;
+        return Playlist(
+          id: p.id,
+          title: p.title,
+          artworkUrl: p.artworkUrl,
+          firstTrackArtworkUrl: prev!.firstTrackArtworkUrl,
+          ownerName: p.ownerName,
+          trackCount: p.trackCount,
+          isPublic: p.isPublic,
+          permalink: p.permalink,
+          ownerPermalink: p.ownerPermalink,
+          secretToken: p.secretToken,
+        );
+      }).toList();
+      _backfillArtwork();
+      await _persist();
+    } catch (_) {
+      // Offline or server error — cached state is retained as-is.
+    }
   }
 
   // Fetches GET /playlists/{id} for each playlist missing firstTrackArtworkUrl.
@@ -121,10 +153,13 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
   /// PATCH /playlists/{id} title and visibility, then mirrors both changes into
   /// local state. Calls updatePrivacy unconditionally (idempotent on the server).
   /// Throws on any API failure — state is not mutated on error.
+  /// Pass [artworkUrl] when the caller has already uploaded new artwork so the
+  /// in-memory Playlist reflects the new cover without a separate reload.
   Future<void> updateMetadata(
     String id, {
     required String title,
     required bool isPublic,
+    String? artworkUrl,
   }) async {
     await _repository.updateMetadata(id, title: title);
     await _repository.updatePrivacy(id, isPublic);
@@ -133,7 +168,7 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
             ? Playlist(
                 id: p.id,
                 title: title,
-                artworkUrl: p.artworkUrl,
+                artworkUrl: artworkUrl ?? p.artworkUrl,
                 firstTrackArtworkUrl: p.firstTrackArtworkUrl,
                 ownerName: p.ownerName,
                 trackCount: p.trackCount,

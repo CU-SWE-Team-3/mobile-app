@@ -44,7 +44,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             ),
             child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
           ),
-          onPressed: () => context.canPop() ? context.pop() : context.go('/home'),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/home'),
         ),
         title: const Text(
           'Notifications',
@@ -345,9 +346,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
             right: 0,
             bottom: 0,
             child: Container(
-              key: n.isRead
-                  ? null
-                  : const ValueKey('notification_unread_dot'),
+              key: n.isRead ? null : const ValueKey('notification_unread_dot'),
               width: 18,
               height: 18,
               decoration: const BoxDecoration(
@@ -413,10 +412,8 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       case NotificationType.repost:
         return '$actor reposted your track ${n.trackTitle ?? ''}';
       case NotificationType.comment:
-        final quote =
-            n.commentText != null ? '"${n.commentText}"' : '';
-        final track =
-            n.trackTitle != null ? ' on ${n.trackTitle}' : '';
+        final quote = n.commentText != null ? '"${n.commentText}"' : '';
+        final track = n.trackTitle != null ? ' on ${n.trackTitle}' : '';
         return '$actor commented: $quote$track';
       case NotificationType.message:
         return '$actor sent you a message';
@@ -581,17 +578,13 @@ class _FilterSheet extends ConsumerWidget {
             return ListTile(
               leading: Icon(
                 opt.icon,
-                color: selected
-                    ? const Color(0xFFFF5500)
-                    : Colors.white54,
+                color: selected ? const Color(0xFFFF5500) : Colors.white54,
                 size: 22,
               ),
               title: Text(
                 opt.label,
                 style: TextStyle(
-                  color: selected
-                      ? const Color(0xFFFF5500)
-                      : Colors.white,
+                  color: selected ? const Color(0xFFFF5500) : Colors.white,
                   fontSize: 15,
                 ),
               ),
@@ -603,9 +596,7 @@ class _FilterSheet extends ConsumerWidget {
                     )
                   : null,
               onTap: () {
-                ref
-                    .read(notificationProvider.notifier)
-                    .setFilter(opt.type);
+                ref.read(notificationProvider.notifier).setFilter(opt.type);
                 Navigator.of(context).pop();
               },
             );

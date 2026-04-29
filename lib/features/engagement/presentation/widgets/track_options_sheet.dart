@@ -67,7 +67,8 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
   bool _isDownloading = false;
 
   Future<void> _handleDownload() async {
-    debugPrint('[Download] tapped from options sheet, trackId=${widget.trackId}');
+    debugPrint(
+        '[Download] tapped from options sheet, trackId=${widget.trackId}');
 
     var sub = ref.read(subscriptionProvider);
     debugPrint(
@@ -305,7 +306,8 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => AddToPlaylistPage(trackId: widget.trackId),
+                      builder: (_) =>
+                          AddToPlaylistPage(trackId: widget.trackId),
                     ),
                   );
                 },
@@ -399,7 +401,8 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => RepostersListPage(trackId: widget.trackId),
+                      builder: (_) =>
+                          RepostersListPage(trackId: widget.trackId),
                     ),
                   );
                 },

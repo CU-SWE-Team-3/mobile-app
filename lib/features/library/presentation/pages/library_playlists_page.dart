@@ -74,9 +74,7 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => _CreateSheet(
-        onSave: (title, isPublic) {
-          _addPlaylist(context, title, isPublic);
-        },
+        onSave: (title, isPublic) => _addPlaylist(context, title, isPublic),
       ),
     );
   }
@@ -102,7 +100,7 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
         backgroundColor: _surface,
         behavior: SnackBarBehavior.floating,
       ));
-      return;
+      rethrow;
     }
 
     // Save locally with the real backend ID so AddToPlaylistPage can PUT
@@ -579,7 +577,7 @@ class _PlaylistTileState extends State<_PlaylistTile> {
 // ── Create bottom sheet ───────────────────────────────────────────────────────
 
 class _CreateSheet extends StatefulWidget {
-  final void Function(String title, bool isPublic) onSave;
+  final Future<void> Function(String title, bool isPublic) onSave;
   const _CreateSheet({required this.onSave});
 
   @override
@@ -589,6 +587,7 @@ class _CreateSheet extends StatefulWidget {
 class _CreateSheetState extends State<_CreateSheet> {
   late final TextEditingController _ctrl;
   bool _isPublic = true;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -627,8 +626,10 @@ class _CreateSheetState extends State<_CreateSheet> {
                 Row(
                   children: [
                     GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Icon(Icons.close, color: Colors.white, size: 22),
+                      onTap: _saving ? null : () => Navigator.pop(context),
+                      child: Icon(Icons.close,
+                          color: _saving ? Colors.white38 : Colors.white,
+                          size: 22),
                     ),
                     const Expanded(
                       child: Text(
@@ -642,7 +643,7 @@ class _CreateSheetState extends State<_CreateSheet> {
                       ),
                     ),
                     GestureDetector(
-                      onTap: _save,
+                      onTap: _saving ? null : _save,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 7),
@@ -650,14 +651,23 @@ class _CreateSheetState extends State<_CreateSheet> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Text(
-                          'Save',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                width: 13,
+                                height: 13,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.black,
+                                ),
+                              )
+                            : const Text(
+                                'Save',
+                                style: TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
                       ),
                     ),
                   ],
@@ -667,6 +677,7 @@ class _CreateSheetState extends State<_CreateSheet> {
                 TextField(
                   controller: _ctrl,
                   autofocus: true,
+                  enabled: !_saving,
                   style: const TextStyle(color: Colors.white, fontSize: 15),
                   cursorColor: _primary,
                   decoration: InputDecoration(
@@ -696,7 +707,7 @@ class _CreateSheetState extends State<_CreateSheet> {
                     const Spacer(),
                     Switch(
                       value: _isPublic,
-                      onChanged: (v) => setState(() => _isPublic = v),
+                      onChanged: _saving ? null : (v) => setState(() => _isPublic = v),
                       activeThumbColor: Colors.white,
                       activeTrackColor: _primary,
                       inactiveThumbColor: Colors.white,
@@ -713,10 +724,16 @@ class _CreateSheetState extends State<_CreateSheet> {
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
+    if (_saving) return;
     final title = _ctrl.text.trim().isEmpty ? 'Untitled Playlist' : _ctrl.text.trim();
-    Navigator.pop(context);
-    widget.onSave(title, _isPublic);
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(title, _isPublic);
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 }
 

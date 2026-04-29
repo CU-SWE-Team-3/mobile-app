@@ -1,20 +1,4 @@
 import 'dart:math';
-
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:soundcloud_clone/core/network/dio_client.dart';
-import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
-import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
-import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
-import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
-import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
-import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
-import 'dart:math';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -163,11 +147,6 @@ class HomePage extends ConsumerStatefulWidget {
 }
 
 class _HomePageState extends ConsumerState<HomePage> {
-  static const List<String> _indieGenreQueries = [
-    'Indie',
-    'Independent',
-  ];
-
   static const List<_GenreTheme> _genres = [
     _GenreTheme(
       label: 'INDIE',
@@ -383,10 +362,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     });
 
     try {
-      final selectedGenre = _genres[_selectedGenreIndex].query;
       final response = await dioClient.dio.get(
         '/discovery/trending',
-        queryParameters: {'genre': selectedGenre},
+        queryParameters: {'genre': _genres[_selectedGenreIndex].query},
       );
       final data = response.data['data'] as Map<String, dynamic>? ?? {};
       final rawTrending = data['trending'] as List<dynamic>? ?? [];
@@ -394,10 +372,6 @@ class _HomePageState extends ConsumerState<HomePage> {
           .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
           .where((track) => track.id.isNotEmpty)
           .toList();
-
-      if (tracks.isEmpty && selectedGenre == 'Indie') {
-        tracks = await _fetchIndieGenreTracks();
-      }
 
       if (mounted) {
         setState(() {
@@ -417,56 +391,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         setState(() => _isTrendingLoading = false);
       }
     }
-  }
-
-  Future<List<_FeedTrack>> _fetchIndieGenreTracks() async {
-    final responses = await Future.wait(
-      _indieGenreQueries.map(
-        (genre) => dioClient.dio
-            .get('/discovery/genre/${Uri.encodeComponent(genre)}')
-            .then<dynamic>((resp) => resp.data)
-            .catchError((_) => null),
-      ),
-    );
-
-    final tracks = <_FeedTrack>[];
-    for (final body in responses) {
-      if (body is! Map<String, dynamic>) continue;
-      final data = body['data'];
-      final raw = _coerceTrackList(
-        data,
-        candidateKeys: const ['tracks', 'trending', 'items', 'results'],
-      );
-      tracks.addAll(
-        raw
-            .whereType<Map<String, dynamic>>()
-            .map(_FeedTrack.fromJson)
-            .where((track) => track.id.isNotEmpty),
-      );
-    }
-
-    final byId = <String, _FeedTrack>{};
-    for (final track in tracks) {
-      byId.putIfAbsent(track.id, () => track);
-    }
-    return byId.values.toList();
-  }
-
-  List<dynamic> _coerceTrackList(
-    dynamic value, {
-    List<String> candidateKeys = const [],
-  }) {
-    if (value is List<dynamic>) return value;
-    if (value is Map<String, dynamic>) {
-      for (final key in candidateKeys) {
-        final nested = value[key];
-        if (nested is List<dynamic>) return nested;
-      }
-      for (final nested in value.values) {
-        if (nested is List<dynamic>) return nested;
-      }
-    }
-    return const <dynamic>[];
   }
 
   Future<void> _fetchRecommended() async {
