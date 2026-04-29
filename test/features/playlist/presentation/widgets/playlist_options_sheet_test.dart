@@ -180,25 +180,78 @@ void main() {
   // ── Edit action ───────────────────────────────────────────────────────────
 
   group('PlaylistOptionsSheet — Edit', () {
-    testWidgets('shows Coming soon snackbar and closes the sheet', (tester) async {
-      await _pumpSheet(tester, mockRepo);
+    /// Pumps the sheet with a GoRouter so context.push('/playlist/edit') works.
+    Future<void> pumpSheetWithRouter(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(414, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      SharedPreferences.setMockInitialValues({});
+      when(() => mockRepo.fetchById(any())).thenAnswer((_) async => {});
+
+      final router = GoRouter(
+        initialLocation: '/test',
+        routes: [
+          GoRoute(
+            path: '/test',
+            builder: (_, __) => Builder(
+              builder: (ctx) => Scaffold(
+                body: TextButton(
+                  onPressed: () => showModalBottomSheet(
+                    context: ctx,
+                    builder: (_) =>
+                        PlaylistOptionsSheet(playlist: _testPlaylist),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/playlist/edit',
+            builder: (_, __) =>
+                const Scaffold(body: Text('EditPage')),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            playlistRepositoryProvider.overrideWithValue(mockRepo),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('closes sheet and navigates to the edit page', (tester) async {
+      await pumpSheetWithRouter(tester);
 
       await tester.tap(find.text('Edit'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Coming soon'), findsOneWidget);
-      // Sheet is dismissed
+      // Sheet dismissed — row text no longer visible
       expect(find.text('Edit'), findsNothing);
+      // Arrived at the edit page stub
+      expect(find.text('EditPage'), findsOneWidget);
+      // No legacy "Coming soon" snackbar
+      expect(find.text('Coming soon'), findsNothing);
     });
 
     testWidgets('does not call any repository method', (tester) async {
-      await _pumpSheet(tester, mockRepo);
+      await pumpSheetWithRouter(tester);
 
       await tester.tap(find.text('Edit'));
       await tester.pumpAndSettle();
 
       verifyNever(() => mockRepo.updatePrivacy(any(), any()));
       verifyNever(() => mockRepo.deletePlaylist(any()));
+      verifyNever(
+          () => mockRepo.updateMetadata(any(), title: any(named: 'title')));
     });
   });
 

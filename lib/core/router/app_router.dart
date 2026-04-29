@@ -517,7 +517,13 @@ final appRouter = GoRouter(
       },
       routes: [
         GoRoute(path: 'create', builder: (_, __) => const CreatePlaylistPage()),
-        GoRoute(path: 'edit', builder: (_, __) => const EditPlaylistPage()),
+        GoRoute(
+            path: 'edit',
+            builder: (_, state) => EditPlaylistPage(
+                  playlist: state.extra is Playlist
+                      ? state.extra as Playlist
+                      : null,
+                )),
         GoRoute(
           path: 'privacy',
           builder: (_, state) {

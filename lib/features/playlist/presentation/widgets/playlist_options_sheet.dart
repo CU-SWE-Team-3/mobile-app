@@ -96,19 +96,14 @@ class PlaylistOptionsSheet extends ConsumerWidget {
               ),
             ),
             const Divider(color: Colors.white12, height: 28),
-            // Edit (coming soon)
+            // Edit playlist
             _optionRow(
               icon: Icons.edit_outlined,
               label: 'Edit',
               onTap: () {
+                final router = GoRouter.of(context);
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Coming soon'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                router.push('/playlist/edit', extra: playlist);
               },
             ),
             // Privacy settings — navigates to full privacy page

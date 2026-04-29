@@ -48,6 +48,9 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
   String? _firstTrackArtworkUrl;
   bool _isShuffleActive = false;
   Playlist? _fetchedPlaylist;
+  // Locked while a reorder or remove API call is in flight.
+  // Prevents concurrent mutations that would race on the server's track array.
+  bool _isOperationInFlight = false;
 
   @override
   void initState() {
@@ -108,6 +111,129 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
       });
     }
   }
+
+  // ── Reorder ────────────────────────────────────────────────────────────────
+
+  void _onReorder(int oldIndex, int newIndex) {
+    if (_isOperationInFlight) return;
+    // SliverReorderableList passes newIndex in the list after the item is
+    // removed; adjust so removeAt + insert lands at the intended position.
+    if (newIndex > oldIndex) newIndex--;
+    if (oldIndex == newIndex) return;
+
+    final prevTracks = List<_PlaylistTrack>.from(_tracks);
+    setState(() {
+      final moved = _tracks.removeAt(oldIndex);
+      _tracks.insert(newIndex, moved);
+      _isOperationInFlight = true;
+    });
+
+    _doReorderApi(prevTracks); // fire-and-forget
+  }
+
+  Future<void> _doReorderApi(List<_PlaylistTrack> prevTracks) async {
+    final playlistId =
+        widget.playlistId ?? widget.playlist?.id ?? _fetchedPlaylist?.id;
+    if (playlistId == null || playlistId.isEmpty) {
+      if (mounted) setState(() { _tracks = prevTracks; _isOperationInFlight = false; });
+      return;
+    }
+    try {
+      await ref.read(playlistRepositoryProvider).reorderTracks(
+            playlistId,
+            _tracks.map((t) => t.id).toList(),
+          );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _tracks = prevTracks);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to reorder tracks. Please try again.'),
+          backgroundColor: Color(0xFF3A1A1A),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isOperationInFlight = false);
+    }
+  }
+
+  // ── Remove ─────────────────────────────────────────────────────────────────
+
+  void _showTrackActions(_PlaylistTrack track) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.remove_circle_outline,
+                    color: Colors.white),
+                title: const Text('Remove from playlist',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _removeTrack(track);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _removeTrack(_PlaylistTrack track) async {
+    if (_isOperationInFlight) return;
+    final playlistId =
+        widget.playlistId ?? widget.playlist?.id ?? _fetchedPlaylist?.id;
+    if (playlistId == null || playlistId.isEmpty) return;
+
+    final prevTracks = List<_PlaylistTrack>.from(_tracks);
+    setState(() {
+      _tracks.removeWhere((t) => t.id == track.id);
+      _isOperationInFlight = true;
+    });
+
+    try {
+      final newCount = await ref
+          .read(playlistRepositoryProvider)
+          .removeTrack(playlistId, track.id);
+      if (mounted) {
+        ref.read(playlistsProvider.notifier).updateTrackCount(playlistId, newCount);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _tracks = prevTracks);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to remove track. Please try again.'),
+          backgroundColor: Color(0xFF3A1A1A),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isOperationInFlight = false);
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -220,185 +346,236 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          // ── Hero artwork with title overlaid ──────────────────────────────
-          Stack(
-            children: [
-              artworkWidget,
-              // Gradient: dark at top (back button legibility) → clear → dark at bottom (title)
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black54,
-                        Colors.transparent,
-                        _bg.withValues(alpha: 0.65),
-                        _bg,
-                      ],
-                      stops: const [0.0, 0.3, 0.75, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-              // Title + privacy lock at bottom of artwork
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 14,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+      // CustomScrollView lets the header (SliverToBoxAdapter) and the
+      // reorderable track list (SliverReorderableList) share one scroll axis.
+      body: CustomScrollView(
+        slivers: [
+          // ── Header: artwork + creator row + action row ──────────────────
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Hero artwork with title overlaid ──────────────────────
+                Stack(
                   children: [
-                    Expanded(
-                      child: Text(
-                        p.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                    artworkWidget,
+                    // Gradient: dark at top (back button legibility) → clear → dark at bottom (title)
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black54,
+                              Colors.transparent,
+                              _bg.withValues(alpha: 0.65),
+                              _bg,
+                            ],
+                            stops: const [0.0, 0.3, 0.75, 1.0],
+                          ),
                         ),
                       ),
                     ),
-                    if (!p.isPublic)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 8, bottom: 2),
-                        child: Icon(Icons.lock_rounded,
-                            color: Colors.white70, size: 16),
+                    // Title + privacy lock at bottom of artwork
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 14,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              p.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                shadows: [
+                                  Shadow(color: Colors.black54, blurRadius: 4)
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (!p.isPublic)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 8, bottom: 2),
+                              child: Icon(Icons.lock_rounded,
+                                  color: Colors.white70, size: 16),
+                            ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          // ── Creator row ───────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Row(
-              children: [
-                _buildOwnerAvatar(resolvedAvatarUrl),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'By ${p.ownerName}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+                // ── Creator row ───────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Row(
+                    children: [
+                      _buildOwnerAvatar(resolvedAvatarUrl),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'By ${p.ownerName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Action row (three-dot · shuffle · play) ───────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => showModalBottomSheet(
+                          context: context,
+                          backgroundColor: _surface,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(16)),
+                          ),
+                          builder: (_) => PlaylistOptionsSheet(
+                            playlist: p,
+                            showCopyOption: true,
+                            popPageOnDelete: true,
+                          ),
+                        ),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.more_horiz_rounded,
+                              color: Colors.white, size: 20),
+                        ),
+                      ),
+                      const Spacer(),
+                      // Shuffle
+                      GestureDetector(
+                        onTap: canPlay
+                            ? () {
+                                setState(
+                                    () => _isShuffleActive = !_isShuffleActive);
+                                if (_isShuffleActive) _shufflePlay();
+                              }
+                            : null,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: _isShuffleActive
+                                ? const Color(0xFFFF5500).withValues(alpha: 0.15)
+                                : Colors.white.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.shuffle_rounded,
+                            color: !canPlay
+                                ? Colors.white30
+                                : _isShuffleActive
+                                    ? const Color(0xFFFF5500)
+                                    : Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Play
+                      GestureDetector(
+                        onTap: canPlay ? () => _playFrom(0) : null,
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: canPlay ? Colors.white : Colors.white30,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.play_arrow_rounded,
+                            color: canPlay ? Colors.black : Colors.black38,
+                            size: 36,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          // ── Action row (three-dot · shuffle · play) ───────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () => showModalBottomSheet(
-                    context: context,
-                    backgroundColor: _surface,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(16)),
-                    ),
-                    builder: (_) => PlaylistOptionsSheet(
-                      playlist: p,
-                      showCopyOption: true,
-                      popPageOnDelete: true,
-                    ),
-                  ),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.more_horiz_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                ),
-                const Spacer(),
-                // Shuffle
-                GestureDetector(
-                  onTap: canPlay
-                      ? () {
-                          setState(() => _isShuffleActive = !_isShuffleActive);
-                          if (_isShuffleActive) _shufflePlay();
-                        }
-                      : null,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: _isShuffleActive
-                          ? const Color(0xFFFF5500).withValues(alpha: 0.15)
-                          : Colors.white.withValues(alpha: 0.08),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.shuffle_rounded,
-                      color: !canPlay
-                          ? Colors.white30
-                          : _isShuffleActive
-                              ? const Color(0xFFFF5500)
-                              : Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Play
-                GestureDetector(
-                  onTap: canPlay ? () => _playFrom(0) : null,
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: canPlay ? Colors.white : Colors.white30,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: canPlay ? Colors.black : Colors.black38,
-                      size: 36,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // ── Track list ────────────────────────────────────────────────────
+
+          // ── Track list ──────────────────────────────────────────────────
           if (_isLoadingTracks)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                  child: CircularProgressIndicator(color: Colors.white54)),
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                    child:
+                        CircularProgressIndicator(color: Colors.white54)),
+              ),
             )
           else
-            ...List.generate(_tracks.length, (i) {
-              final t = _tracks[i];
-              return _TrackTile(
-                title: t.title,
-                artist: t.artistName,
-                isPaused: false,
-                playCount: _formatPlayCount(t.playCount),
-                duration: _formatDuration(t.durationSeconds),
-                artworkUrl: t.artworkUrl,
-                onTap: t.id.isNotEmpty ? () => _playFrom(i) : null,
-              );
-            }),
+            SliverReorderableList(
+              itemCount: _tracks.length,
+              itemBuilder: (_, index) {
+                final t = _tracks[index];
+                // Material wrapper ensures InkWell has a Material ancestor
+                // even when the item is lifted into a drag proxy overlay.
+                return Material(
+                  key: ValueKey(t.id.isNotEmpty ? t.id : 'track_$index'),
+                  color: Colors.transparent,
+                  child: _TrackTile(
+                    title: t.title,
+                    artist: t.artistName,
+                    playCount: _formatPlayCount(t.playCount),
+                    duration: _formatDuration(t.durationSeconds),
+                    artworkUrl: t.artworkUrl,
+                    onTap: t.id.isNotEmpty && !_isOperationInFlight
+                        ? () => _playFrom(index)
+                        : null,
+                    onMoreTap: _isOperationInFlight
+                        ? null
+                        : () => _showTrackActions(t),
+                    // Show drag handle only when list has >1 item.
+                    dragHandle: _tracks.length > 1
+                        ? ReorderableDragStartListener(
+                            index: index,
+                            enabled: !_isOperationInFlight,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 18),
+                              child: Icon(
+                                Icons.drag_handle,
+                                color: _isOperationInFlight
+                                    ? _secondary.withValues(alpha: 0.3)
+                                    : _secondary,
+                                size: 20,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
+                );
+              },
+              onReorder: _onReorder,
+            ),
+
+          // Bottom clearance for the mini player
+          const SliverToBoxAdapter(child: SizedBox(height: 72)),
         ],
       ),
     );
@@ -470,25 +647,29 @@ String _formatPlayCount(int count) {
   return count.toString();
 }
 
-// ── Track tile ────────────────────────────────────────────────────────────────
+// ── Track tile ────────────────────────────────────────────────────��───────────
 
 class _TrackTile extends StatelessWidget {
   final String title;
   final String artist;
-  final bool isPaused;
   final String? playCount;
   final String? duration;
   final String? artworkUrl;
   final VoidCallback? onTap;
+  final VoidCallback? onMoreTap;
+  // Built outside and passed in so the ReorderableDragStartListener can
+  // reference the item's index in SliverReorderableList.
+  final Widget? dragHandle;
 
   const _TrackTile({
     required this.title,
     required this.artist,
-    this.isPaused = false,
     this.playCount,
     this.duration,
     this.artworkUrl,
     this.onTap,
+    this.onMoreTap,
+    this.dragHandle,
   });
 
   @override
@@ -558,25 +739,30 @@ class _TrackTile extends StatelessWidget {
                     style: const TextStyle(color: _secondary, fontSize: 13),
                   ),
                   const SizedBox(height: 3),
-                  if (isPaused)
-                    const Row(
-                      children: [
-                        Icon(Icons.pause_rounded, color: _secondary, size: 13),
-                        SizedBox(width: 4),
-                        Text('Paused',
-                            style: TextStyle(color: _secondary, fontSize: 12)),
-                      ],
-                    )
-                  else
-                    Text(
+                  Text(
                       '▶ ${playCount ?? '0'} · ${duration ?? '0:00'}',
-                      style: const TextStyle(color: _secondary, fontSize: 12),
+                      style:
+                          const TextStyle(color: _secondary, fontSize: 12),
                     ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.more_horiz_rounded, color: _secondary, size: 22),
+            const SizedBox(width: 4),
+            // More icon — tap to open per-track action sheet
+            GestureDetector(
+              onTap: onMoreTap,
+              behavior: HitTestBehavior.opaque,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Icon(
+                  Icons.more_horiz_rounded,
+                  color: _secondary,
+                  size: 22,
+                ),
+              ),
+            ),
+            // Drag handle — null when list has ≤1 item
+            if (dragHandle != null) dragHandle!,
           ],
         ),
       ),
