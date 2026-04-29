@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../../core/providers/session_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ACCOUNT SETTINGS PAGE
 // ─────────────────────────────────────────────────────────────────────────────
-class AccountSettingsPage extends StatelessWidget {
+class AccountSettingsPage extends ConsumerWidget {
   const AccountSettingsPage({super.key});
 
   static const _bg = Color(0xFF111111);
   static const _surface = Color(0xFF1E1E1E);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -20,8 +24,7 @@ class AccountSettingsPage extends StatelessWidget {
           children: [
             // ── top bar ──────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
                   GestureDetector(
@@ -33,10 +36,8 @@ class AccountSettingsPage extends StatelessWidget {
                         color: Colors.white.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white,
-                          size: 18),
+                      child: const Icon(Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white, size: 18),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -72,7 +73,7 @@ class AccountSettingsPage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: GestureDetector(
-                onTap: () => _showSignOutDialog(context),
+                onTap: () => _showSignOutDialog(context, ref),
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -115,8 +116,7 @@ class AccountSettingsPage extends StatelessWidget {
                     ),
                     const Spacer(),
                     Icon(Icons.chevron_right_rounded,
-                        color: Colors.white.withOpacity(0.55),
-                        size: 22),
+                        color: Colors.white.withOpacity(0.55), size: 22),
                   ],
                 ),
               ),
@@ -128,14 +128,13 @@ class AccountSettingsPage extends StatelessWidget {
   }
 
   // ── Sign out dialog ───────────────────────────────────────────────────
-  void _showSignOutDialog(BuildContext context) {
+  void _showSignOutDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       barrierColor: Colors.black54,
       builder: (_) => Dialog(
         backgroundColor: const Color(0xFF2C2C2C),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
           child: Column(
@@ -164,8 +163,8 @@ class AccountSettingsPage extends StatelessWidget {
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
                     child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Text('Cancel',
                           style: TextStyle(
                               color: Colors.white,
@@ -175,13 +174,16 @@ class AccountSettingsPage extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   GestureDetector(
-                    onTap: () {
+                    onTap: () async {
                       Navigator.of(context).pop();
+                      ref.read(sessionUserIdProvider.notifier).state = '';
+                      await ref.read(authProvider.notifier).logout();
+                      if (!context.mounted) return;
                       context.go('/start');
                     },
                     child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Text('OK',
                           style: TextStyle(
                               color: Colors.white,
@@ -218,8 +220,7 @@ class DeleteAccountPage extends StatelessWidget {
           children: [
             // ── top bar ──────────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
                   GestureDetector(
@@ -231,10 +232,8 @@ class DeleteAccountPage extends StatelessWidget {
                         color: Colors.white.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white,
-                          size: 18),
+                      child: const Icon(Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white, size: 18),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -319,8 +318,7 @@ class DeleteAccountPage extends StatelessWidget {
       barrierColor: Colors.black54,
       builder: (_) => Dialog(
         backgroundColor: const Color(0xFF2C2C2C),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
           child: Column(
@@ -349,8 +347,8 @@ class DeleteAccountPage extends StatelessWidget {
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
                     child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Text('Cancel',
                           style: TextStyle(
                               color: Colors.white,
@@ -365,8 +363,8 @@ class DeleteAccountPage extends StatelessWidget {
                       context.go('/start');
                     },
                     child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Text('Delete my account',
                           style: TextStyle(
                               color: Colors.white,

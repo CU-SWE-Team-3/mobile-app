@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "999530499947",
+    "project_id": "biobeats-69234",
+    "storage_bucket": "biobeats-69234.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:999530499947:android:dcaf2442721a18187ac62e",
+        "android_client_info": {
+          "package_name": "bio.beats"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0Gvurdnt7RLviCAdEQgJTEb2ixGtLxF8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:999530499947:android:4869c2121984610d7ac62e",
+        "android_client_info": {
+          "package_name": "com.soundclone.soundcloud_clone"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0Gvurdnt7RLviCAdEQgJTEb2ixGtLxF8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

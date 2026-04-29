@@ -26,13 +26,27 @@ class _SuggestedUser {
   factory _SuggestedUser.fromJson(Map<String, dynamic> json) {
     final fc = json['followerCount'];
     return _SuggestedUser(
-      id: json['_id'] as String? ?? '',
-      displayName: json['displayName'] as String? ?? '',
-      permalink: json['permalink'] as String? ?? '',
-      avatarUrl: json['avatarUrl'] as String?,
+      id: json['_id'] as String? ?? json['id'] as String? ?? '',
+      displayName: json['displayName'] as String? ??
+          json['username'] as String? ??
+          json['name'] as String? ??
+          '',
+      permalink: json['permalink'] as String? ??
+          json['username'] as String? ??
+          json['_id'] as String? ??
+          '',
+      avatarUrl: json['avatarUrl'] as String? ??
+          json['profileImageUrl'] as String? ??
+          json['photoUrl'] as String?,
       followerCount: fc is int ? fc : int.tryParse(fc?.toString() ?? '') ?? 0,
     );
   }
+}
+
+Map<String, dynamic> _asStringMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return const {};
 }
 
 String _formatCount(int count) {
@@ -77,8 +91,10 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
       if (mounted) {
         setState(() {
           _users = data
-              .map((e) => _SuggestedUser.fromJson(e as Map<String, dynamic>))
-              .where((u) => u.id != myId)
+              .map(_asStringMap)
+              .where((e) => e.isNotEmpty)
+              .map(_SuggestedUser.fromJson)
+              .where((u) => u.id.isNotEmpty && u.id != myId)
               .toList();
           _isLoading = false;
         });
@@ -187,7 +203,8 @@ class _UserCard extends StatelessWidget {
       Color(0xFF00897B), Color(0xFF1E88E5), Color(0xFF8E24AA),
       Color(0xFF43A047), Color(0xFFFF5500),
     ];
-    return colors[user.displayName.codeUnitAt(0) % colors.length];
+    final seed = user.displayName.isNotEmpty ? user.displayName : user.id;
+    return colors[seed.codeUnitAt(0) % colors.length];
   }
 
   bool _isDefaultAvatar(String? url) =>

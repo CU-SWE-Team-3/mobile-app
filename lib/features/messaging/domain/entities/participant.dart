@@ -11,10 +11,16 @@ class Participant {
     required this.permalink,
   });
 
-  factory Participant.fromJson(Map<String, dynamic> json) => Participant(
-        id: json['_id'] as String? ?? '',
-        displayName: json['displayName'] as String? ?? '',
-        avatarUrl: json['avatarUrl'] as String?,
-        permalink: json['permalink'] as String? ?? '',
-      );
+  factory Participant.fromJson(Map<String, dynamic> json) {
+    final id = json['_id']?.toString() ?? json['id']?.toString() ?? '';
+    return Participant(
+      id: id,
+      displayName: json['displayName']?.toString() ??
+          json['name']?.toString() ??
+          json['username']?.toString() ??
+          (id.isEmpty ? '' : 'Unknown user'),
+      avatarUrl: json['avatarUrl']?.toString() ?? json['avatar']?.toString(),
+      permalink: json['permalink']?.toString() ?? '',
+    );
+  }
 }

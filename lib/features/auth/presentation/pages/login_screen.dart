@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/providers/session_provider.dart';
+import '../../../../core/services/fcm_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   final String email;
@@ -49,18 +52,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         'email': _emailController.text.trim(),
         'password': _passwordController.text,
       });
-      final user = (response.data?['data']?['user'] ?? response.data?['user']) as Map<String, dynamic>?;
+      final user = (response.data?['data']?['user'] ?? response.data?['user'])
+          as Map<String, dynamic>?;
       if (user == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Login failed. Please try again.'), backgroundColor: Colors.red),
+            const SnackBar(
+                content: Text('Login failed. Please try again.'),
+                backgroundColor: Colors.red),
           );
         }
         return;
       }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userId', user['_id'] as String? ?? '');
-      await prefs.setString('displayName', user['displayName'] as String? ?? '');
+      await prefs.setString(
+          'displayName', user['displayName'] as String? ?? '');
       await prefs.setString('role', user['role'] as String? ?? '');
       await prefs.setString('permalink', user['permalink'] as String? ?? '');
       // Extract accessToken and refreshToken from Set-Cookie header
@@ -78,19 +85,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           }
         }
       }
-      // Call /auth/refresh to get full user data (including permalink)
+      // The backend rotates tokens on refresh, so save any newly issued
+      // cookies through DioClient instead of keeping a stale login pair.
       if (refreshToken != null) {
         try {
-          final refreshResponse = await dioClient.dio.post('/auth/refresh',
-              data: {'refreshToken': refreshToken});
-          final fullUser = refreshResponse.data['data']?['user'] as Map<String, dynamic>?;
-          if (fullUser != null) {
-            await prefs.setString('permalink', fullUser['permalink'] as String? ?? '');
-          }
+          await dioClient.refreshAccessToken();
         } catch (_) {}
       }
       if (!mounted) return;
-      ref.read(sessionUserIdProvider.notifier).state = user['_id'] as String? ?? '';
+      ref.read(sessionUserIdProvider.notifier).state =
+          user['_id'] as String? ?? '';
+      unawaited(FcmService.registerCurrentToken());
       context.go('/home');
     } on DioException catch (e) {
       final status = e.response?.statusCode;

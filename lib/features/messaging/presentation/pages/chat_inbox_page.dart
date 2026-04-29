@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 
 import '../../../../core/providers/session_provider.dart';
 import '../../domain/entities/conversation.dart';
@@ -31,7 +32,13 @@ class ChatInboxPage extends ConsumerWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
         ),
         title: const Text(
           'Inbox',
@@ -49,13 +56,14 @@ class ChatInboxPage extends ConsumerWidget {
         loading: () => const Center(
           child: CircularProgressIndicator(color: Color(0xFFFF5500)),
         ),
-        error: (_, __) => Center(
+        error: (error, _) => Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Could not load messages',
-                style: TextStyle(color: Colors.white54),
+              Text(
+                _errorMessage(error),
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white54),
               ),
               const SizedBox(height: 12),
               TextButton(
@@ -105,5 +113,16 @@ class ChatInboxPage extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  String _errorMessage(Object error) {
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      if (status == 401) return 'Please log in again to view messages';
+      if (status == 404) return 'Messages endpoint was not found';
+      if (status != null) return 'Could not load messages ($status)';
+      return 'Could not connect to messages';
+    }
+    return 'Could not load messages';
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/session_provider.dart';
@@ -16,15 +18,43 @@ final socketServiceProvider = Provider<SocketService>(
 
 /// Watches sessionUserIdProvider and drives the socket lifecycle.
 /// Connect on login, disconnect on logout. Activated by AppShell watching it.
-final socketLifecycleProvider = Provider.autoDispose<void>((ref) {
+final socketLifecycleProvider = Provider<void>((ref) {
+  final service = ref.watch(socketServiceProvider);
+
+  ref.listen<String>(
+    sessionUserIdProvider,
+    (previousUserId, nextUserId) {
+      if (nextUserId.isEmpty) {
+        service.disconnect();
+        return;
+      }
+
+      if (previousUserId != nextUserId) {
+        service.disconnect();
+        unawaited(service.connect());
+      }
+    },
+    fireImmediately: true,
+  );
+});
+
+/// Keeps conversation lists fresh when messages arrive outside an open chat.
+final socketMessageLifecycleProvider = Provider.autoDispose<void>((ref) {
   final userId = ref.watch(sessionUserIdProvider);
   final service = ref.watch(socketServiceProvider);
+  StreamSubscription<Map<String, dynamic>>? sub;
+
   if (userId.isNotEmpty) {
-    service.connect();
-    ref.onDispose(service.disconnect);
-  } else {
-    service.disconnect();
+    sub = service.newMessages.listen((data) {
+      final conversationId = data['conversationId']?.toString() ?? '';
+      ref.invalidate(conversationsProvider);
+      if (conversationId.isNotEmpty) {
+        ref.invalidate(messagesProvider(conversationId));
+      }
+    });
   }
+
+  ref.onDispose(() => sub?.cancel());
 });
 
 // ── Repository ────────────────────────────────────────────────────────────────
