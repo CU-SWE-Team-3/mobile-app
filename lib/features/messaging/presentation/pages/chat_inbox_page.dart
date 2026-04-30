@@ -31,6 +31,7 @@ class ChatInboxPage extends ConsumerWidget {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: IconButton(
+          key: const ValueKey('chat_back_button'),
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
             if (context.canPop()) {
@@ -46,6 +47,7 @@ class ChatInboxPage extends ConsumerWidget {
         ),
         actions: [
           IconButton(
+            key: const ValueKey('messaging_compose_button'),
             icon: const Icon(Icons.edit_outlined, color: Colors.white),
             tooltip: 'New message',
             onPressed: () => context.push('/messages/new'),
@@ -67,6 +69,7 @@ class ChatInboxPage extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               TextButton(
+                key: const ValueKey('messaging_retry_button'),
                 onPressed: () => ref.invalidate(conversationsProvider),
                 child: const Text(
                   'Retry',
@@ -91,6 +94,7 @@ class ChatInboxPage extends ConsumerWidget {
             backgroundColor: const Color(0xFF1F1F1F),
             onRefresh: () async => ref.invalidate(conversationsProvider),
             child: ListView.separated(
+              key: const ValueKey('conversations_list'),
               itemCount: conversations.length,
               separatorBuilder: (_, __) => const Divider(
                 color: Color(0xFF2A2A2A),
@@ -101,11 +105,14 @@ class ChatInboxPage extends ConsumerWidget {
                 final c = conversations[i];
                 final other = _otherParticipant(c, currentUserId);
                 if (other == null) return const SizedBox.shrink();
-                return ConversationTile(
-                  conversation: c,
-                  otherParticipant: other,
-                  currentUserId: currentUserId,
-                  onTap: () => context.push('/messages/chat/${c.id}'),
+                return KeyedSubtree(
+                  key: ValueKey('conversation_tile_$i'),
+                  child: ConversationTile(
+                    conversation: c,
+                    otherParticipant: other,
+                    currentUserId: currentUserId,
+                    onTap: () => context.push('/messages/chat/${c.id}'),
+                  ),
                 );
               },
             ),

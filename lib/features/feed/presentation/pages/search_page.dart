@@ -10,7 +10,15 @@ class _Genre {
   final Color color;
   final int imageWidth;
   final int imageHeight;
-  const _Genre(this.name, this.assetPath, this.color, this.imageWidth, this.imageHeight);
+  final String? routeOverride;
+  const _Genre(
+    this.name,
+    this.assetPath,
+    this.color,
+    this.imageWidth,
+    this.imageHeight, {
+    this.routeOverride,
+  });
 }
 
 class SearchPage extends StatefulWidget {
@@ -21,20 +29,36 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  static const List<_Genre> _genres = [
-    _Genre('Hip Hop & Rap', 'assets/images/HipHop_&_Rap.png', Color(0xFFFF5500), 502, 443),
-    _Genre('Electronic',    'assets/images/Electronic.png',   Color(0xFF1A6EDD), 434, 575),
-    _Genre('Pop',           'assets/images/Pop.png',          Color(0xFFDD1A8C), 431, 579),
-    _Genre('R&B',           'assets/images/R&B.png',          Color(0xFF9B59B6), 495, 206),
-    _Genre('Chill',         'assets/images/Chill.png',        Color(0xFF1AAD6E), 501, 212),
-    _Genre('Party',         'assets/images/Party.png',        Color(0xFFDDAA1A), 500, 429),
-    _Genre('Workout',       'assets/images/Workout.png',      Color(0xFFE53935), 510, 489),
-    _Genre('Techno',        'assets/images/Techno.png',       Color(0xFF5C6BC0), 416, 600),
-    _Genre('House',         'assets/images/House.png',        Color(0xFF7B1FA2), 416, 600),
-    _Genre('Feel Good',     'assets/images/Feel_good.png',    Color(0xFF43A047), 548, 264),
-    _Genre('At Home',       'assets/images/At_home.png',      Color(0xFFFF8F00), 556, 274),
-    _Genre('Healing Era',   'assets/images/Healing_era.png',  Color(0xFF00897B), 511, 488),
-  ];
+  static const _screenInset = 16.0;
+  static const _sectionGap = 8.0;
+
+  List<_Genre> get _genres => const [
+        _Genre('At Home', 'assets/images/At_home.png', Color(0xFFFF8F00), 556, 274),
+        _Genre(
+          'Healing Era',
+          'assets/images/Healing_era.png',
+          Color(0xFF00897B),
+          511,
+          488,
+        ),
+        _Genre('Study', 'assets/images/Study.png', Color(0xFFFF5CA8), 501, 488),
+        _Genre('Folk', 'assets/images/Folk.png', Color(0xFFFF8A5B), 501, 729),
+        _Genre('Indie', 'assets/images/Indie.png', Color(0xFF5B8CFF), 501, 729),
+        _Genre('Soul', 'assets/images/Soul.png', Color(0xFF23B7B3), 501, 488),
+        _Genre('Country', 'assets/images/Country.png', Color(0xFFFF8A5B), 556, 274),
+        _Genre('Latin', 'assets/images/Latin.png', Color(0xFFD66AC2), 501, 488),
+        _Genre('Rock', 'assets/images/Rock.png', Color(0xFFFF5C7A), 556, 274),
+        _Genre('Workout', 'assets/images/Workout.png', Color(0xFFE53935), 510, 489),
+        _Genre('Hip Hop & Rap', 'assets/images/HipHop_&_Rap.png', Color(0xFFFF5500), 502, 443),
+        _Genre('Electronic', 'assets/images/Electronic.png', Color(0xFF1A6EDD), 434, 575),
+        _Genre('Pop', 'assets/images/Pop.png', Color(0xFFDD1A8C), 431, 579),
+        _Genre('R&B', 'assets/images/R&B.png', Color(0xFF9B59B6), 495, 206),
+        _Genre('Chill', 'assets/images/Chill.png', Color(0xFF1AAD6E), 501, 212),
+        _Genre('Party', 'assets/images/Party.png', Color(0xFFDDAA1A), 500, 429),
+        _Genre('Techno', 'assets/images/Techno.png', Color(0xFF5C6BC0), 416, 600),
+        _Genre('House', 'assets/images/House.png', Color(0xFF7B1FA2), 416, 600),
+        _Genre('Feel Good', 'assets/images/Feel_good.png', Color(0xFF43A047), 548, 264),
+      ];
 
   final _controller = TextEditingController();
   List<Map<String, dynamic>> _results = [];
@@ -89,7 +113,12 @@ class _SearchPageState extends State<SearchPage> {
           children: [
             // ── Search bar ──────────────────────────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              padding: const EdgeInsets.fromLTRB(
+                _screenInset,
+                _screenInset,
+                _screenInset,
+                _sectionGap,
+              ),
               child: TextField(
                 key: const ValueKey('search_field'),
                 controller: _controller,
@@ -284,7 +313,12 @@ class _SearchPageState extends State<SearchPage> {
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(
+        _screenInset,
+        _sectionGap,
+        _screenInset,
+        _screenInset,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -330,8 +364,15 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   Widget _buildGenreCard(_Genre genre) {
-    final route = genre.name == 'Hip Hop & Rap'
+    final route = genre.routeOverride ??
+        (genre.name == 'Hip Hop & Rap'
         ? '/home/genre/hiphop'
+        : genre.name == 'Folk'
+            ? '/home/genre/folk'
+        : genre.name == 'Indie'
+            ? '/home/genre/indie'
+        : genre.name == 'House'
+            ? '/home/genre/house'
         : genre.name == 'Electronic'
             ? '/home/genre/electronic'
             : genre.name == 'Pop'
@@ -340,7 +381,7 @@ class _SearchPageState extends State<SearchPage> {
                     ? '/home/genre/rnb'
                     : genre.name == 'Chill'
                         ? '/home/genre/chill'
-                        : '/search/genre/${Uri.encodeComponent(genre.name)}';
+                        : '/search/genre/${Uri.encodeComponent(genre.name)}');
 
     return GestureDetector(
       onTap: () => context.push(route),
@@ -370,4 +411,3 @@ class _SearchPageState extends State<SearchPage> {
         child: const Icon(Icons.music_note, color: Colors.white38, size: 24),
       );
 }
-

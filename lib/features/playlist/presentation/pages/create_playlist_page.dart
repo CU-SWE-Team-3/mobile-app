@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../features/library/presentation/pages/library_playlists_page.dart';
+import '../providers/playlists_provider.dart';
 import '../../../../features/playlist/domain/entities/playlist.dart';
 
 final _avatarUrlProvider = FutureProvider<String>((ref) async {
@@ -11,8 +11,6 @@ final _avatarUrlProvider = FutureProvider<String>((ref) async {
   return prefs.getString('avatarUrl') ?? '';
 });
 
-// Standalone full-page version of the create playlist flow,
-// kept as a thin wrapper around the shared provider.
 class CreatePlaylistPage extends ConsumerStatefulWidget {
   const CreatePlaylistPage({super.key});
 
@@ -23,6 +21,8 @@ class CreatePlaylistPage extends ConsumerStatefulWidget {
 class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
   late final TextEditingController _ctrl;
   bool _isPublic = true;
+  bool _saving = false;
+  String? _error;
 
   static const _bg = Color(0xFF111111);
   static const _surface = Color(0xFF1F1F1F);
@@ -49,13 +49,44 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
         ),
       );
 
-  void _save() {
+  Future<void> _save() async {
+    if (_saving) return;
     final title =
         _ctrl.text.trim().isEmpty ? 'Untitled Playlist' : _ctrl.text.trim();
-    ref.read(playlistsProvider.notifier).add(
-          Playlist(title: title, ownerName: 'You', isPublic: _isPublic),
-        );
-    Navigator.pop(context);
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    try {
+      final repository = ref.read(playlistRepositoryProvider);
+      final notifier = ref.read(playlistsProvider.notifier);
+
+      final prefs = await SharedPreferences.getInstance();
+      final ownerName =
+          prefs.getString('displayName') ?? prefs.getString('username') ?? 'You';
+
+      // POST to backend first — get a real server-issued ID.
+      final id = await repository.create(title, _isPublic);
+
+      // Now persist locally with the real backend ID.
+      await notifier.add(Playlist(
+        id: id,
+        title: title,
+        ownerName: ownerName,
+        isPublic: _isPublic,
+      ));
+
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = 'Could not create playlist. Please try again.';
+        });
+      }
+    }
   }
 
   @override
@@ -67,7 +98,7 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          onPressed: _saving ? null : () => Navigator.pop(context),
         ),
         title: const Text(
           'Create playlist',
@@ -77,26 +108,37 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: GestureDetector(
-              onTap: _save,
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 10),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'Save',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+            child: _saving
+                ? const Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _primary,
+                      ),
+                    ),
+                  )
+                : GestureDetector(
+                    onTap: _save,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
           ),
         ],
       ),
@@ -132,6 +174,7 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
             TextField(
               controller: _ctrl,
               autofocus: true,
+              enabled: !_saving,
               style: const TextStyle(color: Colors.white, fontSize: 15),
               cursorColor: _primary,
               decoration: InputDecoration(
@@ -144,6 +187,10 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: const BorderSide(color: _primary),
+                ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
                 ),
                 filled: true,
                 fillColor: _surface,
@@ -159,7 +206,7 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
                 const Spacer(),
                 Switch(
                   value: _isPublic,
-                  onChanged: (v) => setState(() => _isPublic = v),
+                  onChanged: _saving ? null : (v) => setState(() => _isPublic = v),
                   activeThumbColor: _primary,
                   activeTrackColor: _primary.withValues(alpha: 0.5),
                   inactiveThumbColor: Colors.white,
@@ -167,6 +214,13 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
                 ),
               ],
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                style: const TextStyle(color: Color(0xFFFF4444), fontSize: 13),
+              ),
+            ],
           ],
         ),
       ),

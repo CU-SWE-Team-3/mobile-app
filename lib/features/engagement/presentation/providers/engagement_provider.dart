@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/providers/session_provider.dart';
 import '../../data/sources/engagement_remote_data_source.dart';
 import '../../../../injection_container.dart';
 
@@ -139,6 +139,31 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
       _ref.read(likesRefreshTickProvider.notifier).state++;
       state = state.copyWith(isLoadingLike: false);
       return true;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      final rawMessage = e.response?.data is Map
+          ? (e.response?.data as Map)['message']?.toString().toLowerCase()
+          : e.response?.data?.toString().toLowerCase();
+      final alreadyInDesiredState =
+          (!wasLiked &&
+              (status == 400 || status == 409) &&
+              (rawMessage?.contains('already') ?? false)) ||
+          (wasLiked &&
+              (status == 400 || status == 404) &&
+              ((rawMessage?.contains('not') ?? false) ||
+                  (rawMessage?.contains('found') ?? false)));
+      if (alreadyInDesiredState) {
+        _ref.read(likesRefreshTickProvider.notifier).state++;
+        state = state.copyWith(isLoadingLike: false);
+        return true;
+      }
+      state = state.copyWith(
+        isLiked: wasLiked,
+        likeCount: prevCount,
+        isLoadingLike: false,
+      );
+      _setLikeHidden(!wasLiked);
+      return false;
     } catch (e) {
       state = state.copyWith(
         isLiked: wasLiked,
@@ -218,27 +243,45 @@ class EngagementNotifier extends StateNotifier<EngagementState> {
 
 final engagementProvider =
     StateNotifierProvider.family<EngagementNotifier, EngagementState, EngagementParams>(
-  (ref, params) => EngagementNotifier(
-    ref,
-    sl<EngagementRemoteDataSource>(),
-    params.trackId,
-    initialIsLiked: params.isLiked,
-    initialIsReposted: params.isReposted,
-    initialLikeCount: params.likeCount,
-    initialRepostCount: params.repostCount,
-  ),
+  (ref, params) {
+    ref.watch(sessionUserIdProvider);
+    return EngagementNotifier(
+      ref,
+      sl<EngagementRemoteDataSource>(),
+      params.trackId,
+      initialIsLiked: params.isLiked,
+      initialIsReposted: params.isReposted,
+      initialLikeCount: params.likeCount,
+      initialRepostCount: params.repostCount,
+    );
+  },
 );
 
-final likesRefreshTickProvider = StateProvider<int>((ref) => 0);
-final hiddenLikedTrackIdsProvider = StateProvider<Set<String>>((ref) => <String>{});
+final likesRefreshTickProvider = StateProvider<int>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return 0;
+});
+
+final hiddenLikedTrackIdsProvider = StateProvider<Set<String>>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return <String>{};
+});
+
 final likedTrackOverridesProvider =
-    StateProvider<Map<String, TrackSummary>>((ref) => <String, TrackSummary>{});
+    StateProvider<Map<String, TrackSummary>>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return <String, TrackSummary>{};
+});
+
+final likedTrackOrderProvider = StateProvider<List<String>>((ref) {
+  ref.watch(sessionUserIdProvider);
+  return <String>[];
+});
 
 final backendUserLikesProvider =
     FutureProvider.autoDispose<List<TrackSummary>>((ref) async {
   ref.watch(likesRefreshTickProvider);
-  final prefs = await SharedPreferences.getInstance();
-  final userId = prefs.getString('userId') ?? '';
+  final userId = ref.watch(sessionUserIdProvider);
   if (userId.isEmpty) return [];
   return sl<EngagementRemoteDataSource>().getUserLikes(userId);
 });

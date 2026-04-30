@@ -21,6 +21,7 @@ class SocketService {
   int _authRecoveryAttempts = 0;
   String? _lastRecoveredTokenFingerprint;
   String? _blockedTokenFingerprint;
+  final Set<String> _recentLocalNotificationMessageIds = {};
   final Set<String> _activeConversationIds = {};
 
   final _newMessageController =
@@ -135,6 +136,10 @@ class SocketService {
     _socket?.emit('leave_chat', {'conversationId': conversationId});
     debugPrint('[SocketService] leave_chat: $conversationId');
   }
+
+  /// Returns true while the user has that conversation's chat page open.
+  bool isViewingConversation(String conversationId) =>
+      _activeConversationIds.contains(conversationId);
 
   // ── NEW ──────────────────────────────────────────────────────────────────
   void sendTyping(String conversationId) {
@@ -413,6 +418,19 @@ class SocketService {
       return;
     }
 
+    final messageId = message['_id']?.toString() ?? message['id']?.toString();
+    if (messageId != null &&
+        messageId.isNotEmpty &&
+        !_recentLocalNotificationMessageIds.add(messageId)) {
+      return;
+    }
+    if (_recentLocalNotificationMessageIds.length > 80) {
+      _recentLocalNotificationMessageIds.clear();
+      if (messageId != null && messageId.isNotEmpty) {
+        _recentLocalNotificationMessageIds.add(messageId);
+      }
+    }
+
     final content = message['content']?.toString().trim();
     final body =
         (content == null || content.isEmpty || _looksLikeObjectId(content))
@@ -454,12 +472,32 @@ class SocketService {
         LocalNotificationService.showNotification(
           title: _notificationTitle(notification),
           body: _notificationBody(notification),
-          payload:
-              notification['_id']?.toString() ?? notification['id']?.toString(),
+          payload: _notificationPayload(notification),
         ),
       );
     } catch (e) {
       debugPrint('[SocketService] new_notification parse error: $e');
+    }
+  }
+
+  String _notificationPayload(Map<String, dynamic> json) {
+    final actionLink = json['actionLink']?.toString();
+    if (actionLink != null && _isSafeRoutePath(actionLink)) {
+      return actionLink;
+    }
+
+    switch ((json['type'] as String? ?? '').toUpperCase()) {
+      case 'FOLLOW':
+      case 'NEW_TRACK':
+      case 'NEW_PLAYLIST':
+        final actor = _firstActor(json);
+        final permalink = actor['permalink']?.toString();
+        if (permalink != null && permalink.trim().isNotEmpty) {
+          return '/user/${permalink.replaceFirst('@', '')}';
+        }
+        return '/notifications';
+      default:
+        return '/notifications';
     }
   }
 
@@ -500,22 +538,45 @@ class SocketService {
   }
 
   String _notificationActor(Map<String, dynamic> json) {
-    final actors = json['actors'];
-    if (actors is! List || actors.isEmpty) return 'Someone';
-
-    final first = actors.first;
-    final firstMap =
-        first is Map ? Map<String, dynamic>.from(first) : <String, dynamic>{};
+    final firstMap = _firstActor(json);
+    if (firstMap.isEmpty) return 'Someone';
     final name = firstMap['displayName']?.toString();
     final actorName = (name == null || name.trim().isEmpty) ? 'Someone' : name;
+    final actors = json['actors'];
     final actorCount = json['actorCount'] is int
         ? json['actorCount'] as int
-        : int.tryParse(json['actorCount']?.toString() ?? '') ?? actors.length;
+        : int.tryParse(json['actorCount']?.toString() ?? '') ??
+            (actors is List ? actors.length : 1);
 
     if (actorCount > 1) {
       return '$actorName and ${actorCount - 1} other${actorCount == 2 ? '' : 's'}';
     }
     return actorName;
+  }
+
+  Map<String, dynamic> _firstActor(Map<String, dynamic> json) {
+    final actors = json['actors'];
+    if (actors is! List || actors.isEmpty) return <String, dynamic>{};
+    final first = actors.first;
+    return first is Map ? Map<String, dynamic>.from(first) : <String, dynamic>{};
+  }
+
+  bool _isSafeRoutePath(String value) {
+    final uri = Uri.tryParse(value);
+    final path = uri?.path ?? '';
+    const validPrefixes = [
+      '/user/',
+      '/player',
+      '/notifications',
+      '/messages',
+      '/playlist',
+      '/comments',
+      '/likes',
+      '/likers',
+      '/reposters',
+      '/profile',
+    ];
+    return validPrefixes.any((prefix) => path.startsWith(prefix));
   }
 
   bool _looksLikeObjectId(String value) {

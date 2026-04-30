@@ -6,10 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/entities/playlist.dart';
-import '../../../library/presentation/pages/library_playlists_page.dart';
+import '../providers/playlists_provider.dart';
+import '../widgets/playlist_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../../core/network/dio_client.dart';
-import 'share_playlist_page.dart';
 
 final _avatarUrlProvider = FutureProvider<String>((ref) async {
   final prefs = await SharedPreferences.getInstance();
@@ -48,6 +48,9 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
   String? _firstTrackArtworkUrl;
   bool _isShuffleActive = false;
   Playlist? _fetchedPlaylist;
+  // Locked while a reorder or remove API call is in flight.
+  // Prevents concurrent mutations that would race on the server's track array.
+  bool _isOperationInFlight = false;
 
   @override
   void initState() {
@@ -63,18 +66,24 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     try {
       final response = await dioClient.dio.get('/playlists/$playlistId');
       final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final playlistData = data['playlist'] as Map<String, dynamic>? ?? {};
+      final rawPlaylist = data['playlist'];
+      final playlistData = rawPlaylist is Map
+          ? Map<String, dynamic>.from(rawPlaylist)
+          : data;
 
       // When navigated by playlistId only (no Playlist object passed), build
       // one from the response so the page can render title/artwork/owner.
       if (widget.playlist == null) {
-        final creator = playlistData['creator'] as Map<String, dynamic>?;
+        final creatorRaw = playlistData['creator'];
+        final creator = creatorRaw is Map
+            ? Map<String, dynamic>.from(creatorRaw)
+            : <String, dynamic>{};
         final fetched = Playlist(
           id: playlistId,
           title: playlistData['title'] as String? ?? '',
           artworkUrl: playlistData['artworkUrl'] as String?,
           ownerName: (playlistData['ownerName'] as String?) ??
-              (creator?['displayName'] as String?) ??
+              (creator['displayName'] as String?) ??
               '',
           trackCount: (playlistData['trackCount'] as num?)?.toInt() ?? 0,
           isPublic: playlistData['isPublic'] as bool? ?? true,
@@ -102,6 +111,129 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
       });
     }
   }
+
+  // ── Reorder ────────────────────────────────────────────────────────────────
+
+  void _onReorder(int oldIndex, int newIndex) {
+    if (_isOperationInFlight) return;
+    // SliverReorderableList passes newIndex in the list after the item is
+    // removed; adjust so removeAt + insert lands at the intended position.
+    if (newIndex > oldIndex) newIndex--;
+    if (oldIndex == newIndex) return;
+
+    final prevTracks = List<_PlaylistTrack>.from(_tracks);
+    setState(() {
+      final moved = _tracks.removeAt(oldIndex);
+      _tracks.insert(newIndex, moved);
+      _isOperationInFlight = true;
+    });
+
+    _doReorderApi(prevTracks); // fire-and-forget
+  }
+
+  Future<void> _doReorderApi(List<_PlaylistTrack> prevTracks) async {
+    final playlistId =
+        widget.playlistId ?? widget.playlist?.id ?? _fetchedPlaylist?.id;
+    if (playlistId == null || playlistId.isEmpty) {
+      if (mounted) setState(() { _tracks = prevTracks; _isOperationInFlight = false; });
+      return;
+    }
+    try {
+      await ref.read(playlistRepositoryProvider).reorderTracks(
+            playlistId,
+            _tracks.map((t) => t.id).toList(),
+          );
+    } catch (_) {
+      if (mounted) {
+        setState(() => _tracks = prevTracks);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to reorder tracks. Please try again.'),
+          backgroundColor: Color(0xFF3A1A1A),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isOperationInFlight = false);
+    }
+  }
+
+  // ── Remove ─────────────────────────────────────────────────────────────────
+
+  void _showTrackActions(_PlaylistTrack track) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.remove_circle_outline,
+                    color: Colors.white),
+                title: const Text('Remove from playlist',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _removeTrack(track);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _removeTrack(_PlaylistTrack track) async {
+    if (_isOperationInFlight) return;
+    final playlistId =
+        widget.playlistId ?? widget.playlist?.id ?? _fetchedPlaylist?.id;
+    if (playlistId == null || playlistId.isEmpty) return;
+
+    final prevTracks = List<_PlaylistTrack>.from(_tracks);
+    setState(() {
+      _tracks.removeWhere((t) => t.id == track.id);
+      _isOperationInFlight = true;
+    });
+
+    try {
+      final newCount = await ref
+          .read(playlistRepositoryProvider)
+          .removeTrack(playlistId, track.id);
+      if (mounted) {
+        ref.read(playlistsProvider.notifier).updateTrackCount(playlistId, newCount);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _tracks = prevTracks);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to remove track. Please try again.'),
+          backgroundColor: Color(0xFF3A1A1A),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _isOperationInFlight = false);
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -214,181 +346,236 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
           ),
         ],
       ),
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          // ── Hero artwork with title overlaid ──────────────────────────────
-          Stack(
-            children: [
-              artworkWidget,
-              // Gradient: dark at top (back button legibility) → clear → dark at bottom (title)
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black54,
-                        Colors.transparent,
-                        _bg.withValues(alpha: 0.65),
-                        _bg,
-                      ],
-                      stops: const [0.0, 0.3, 0.75, 1.0],
-                    ),
-                  ),
-                ),
-              ),
-              // Title + privacy lock at bottom of artwork
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 14,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+      // CustomScrollView lets the header (SliverToBoxAdapter) and the
+      // reorderable track list (SliverReorderableList) share one scroll axis.
+      body: CustomScrollView(
+        slivers: [
+          // ── Header: artwork + creator row + action row ──────────────────
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Hero artwork with title overlaid ──────────────────────
+                Stack(
                   children: [
-                    Expanded(
-                      child: Text(
-                        p.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                    artworkWidget,
+                    // Gradient: dark at top (back button legibility) → clear → dark at bottom (title)
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black54,
+                              Colors.transparent,
+                              _bg.withValues(alpha: 0.65),
+                              _bg,
+                            ],
+                            stops: const [0.0, 0.3, 0.75, 1.0],
+                          ),
                         ),
                       ),
                     ),
-                    if (!p.isPublic)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 8, bottom: 2),
-                        child: Icon(Icons.lock_rounded,
-                            color: Colors.white70, size: 16),
+                    // Title + privacy lock at bottom of artwork
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 14,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              p.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                shadows: [
+                                  Shadow(color: Colors.black54, blurRadius: 4)
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (!p.isPublic)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 8, bottom: 2),
+                              child: Icon(Icons.lock_rounded,
+                                  color: Colors.white70, size: 16),
+                            ),
+                        ],
                       ),
+                    ),
                   ],
                 ),
-              ),
-            ],
-          ),
-          // ── Creator row ───────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Row(
-              children: [
-                _buildOwnerAvatar(resolvedAvatarUrl),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'By ${p.ownerName}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+                // ── Creator row ───────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Row(
+                    children: [
+                      _buildOwnerAvatar(resolvedAvatarUrl),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'By ${p.ownerName}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Action row (three-dot · shuffle · play) ───────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => showModalBottomSheet(
+                          context: context,
+                          backgroundColor: _surface,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(16)),
+                          ),
+                          builder: (_) => PlaylistOptionsSheet(
+                            playlist: p,
+                            showCopyOption: true,
+                            popPageOnDelete: true,
+                          ),
+                        ),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.more_horiz_rounded,
+                              color: Colors.white, size: 20),
+                        ),
+                      ),
+                      const Spacer(),
+                      // Shuffle
+                      GestureDetector(
+                        onTap: canPlay
+                            ? () {
+                                setState(
+                                    () => _isShuffleActive = !_isShuffleActive);
+                                if (_isShuffleActive) _shufflePlay();
+                              }
+                            : null,
+                        child: Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: _isShuffleActive
+                                ? const Color(0xFFFF5500).withValues(alpha: 0.15)
+                                : Colors.white.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.shuffle_rounded,
+                            color: !canPlay
+                                ? Colors.white30
+                                : _isShuffleActive
+                                    ? const Color(0xFFFF5500)
+                                    : Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Play
+                      GestureDetector(
+                        onTap: canPlay ? () => _playFrom(0) : null,
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: canPlay ? Colors.white : Colors.white30,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.play_arrow_rounded,
+                            color: canPlay ? Colors.black : Colors.black38,
+                            size: 36,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          // ── Action row (three-dot · shuffle · play) ───────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () => showModalBottomSheet(
-                    context: context,
-                    backgroundColor: _surface,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.vertical(top: Radius.circular(16)),
-                    ),
-                    builder: (_) => _PlaylistOptionsSheet(playlist: p),
-                  ),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.more_horiz_rounded,
-                        color: Colors.white, size: 20),
-                  ),
-                ),
-                const Spacer(),
-                // Shuffle
-                GestureDetector(
-                  onTap: canPlay
-                      ? () {
-                          setState(() => _isShuffleActive = !_isShuffleActive);
-                          if (_isShuffleActive) _shufflePlay();
-                        }
-                      : null,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: _isShuffleActive
-                          ? const Color(0xFFFF5500).withValues(alpha: 0.15)
-                          : Colors.white.withValues(alpha: 0.08),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.shuffle_rounded,
-                      color: !canPlay
-                          ? Colors.white30
-                          : _isShuffleActive
-                              ? const Color(0xFFFF5500)
-                              : Colors.white,
-                      size: 22,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Play
-                GestureDetector(
-                  onTap: canPlay ? () => _playFrom(0) : null,
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: canPlay ? Colors.white : Colors.white30,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: canPlay ? Colors.black : Colors.black38,
-                      size: 36,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // ── Track list ────────────────────────────────────────────────────
+
+          // ── Track list ──────────────────────────────────────────────────
           if (_isLoadingTracks)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                  child: CircularProgressIndicator(color: Colors.white54)),
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                    child:
+                        CircularProgressIndicator(color: Colors.white54)),
+              ),
             )
           else
-            ...List.generate(_tracks.length, (i) {
-              final t = _tracks[i];
-              return _TrackTile(
-                title: t.title,
-                artist: t.artistName,
-                isPaused: false,
-                playCount: _formatPlayCount(t.playCount),
-                duration: _formatDuration(t.durationSeconds),
-                artworkUrl: t.artworkUrl,
-                onTap: t.id.isNotEmpty ? () => _playFrom(i) : null,
-              );
-            }),
+            SliverReorderableList(
+              itemCount: _tracks.length,
+              itemBuilder: (_, index) {
+                final t = _tracks[index];
+                // Material wrapper ensures InkWell has a Material ancestor
+                // even when the item is lifted into a drag proxy overlay.
+                return Material(
+                  key: ValueKey(t.id.isNotEmpty ? t.id : 'track_$index'),
+                  color: Colors.transparent,
+                  child: _TrackTile(
+                    title: t.title,
+                    artist: t.artistName,
+                    playCount: _formatPlayCount(t.playCount),
+                    duration: _formatDuration(t.durationSeconds),
+                    artworkUrl: t.artworkUrl,
+                    onTap: t.id.isNotEmpty && !_isOperationInFlight
+                        ? () => _playFrom(index)
+                        : null,
+                    onMoreTap: _isOperationInFlight
+                        ? null
+                        : () => _showTrackActions(t),
+                    // Show drag handle only when list has >1 item.
+                    dragHandle: _tracks.length > 1
+                        ? ReorderableDragStartListener(
+                            index: index,
+                            enabled: !_isOperationInFlight,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 18),
+                              child: Icon(
+                                Icons.drag_handle,
+                                color: _isOperationInFlight
+                                    ? _secondary.withValues(alpha: 0.3)
+                                    : _secondary,
+                                size: 20,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
+                );
+              },
+              onReorder: _onReorder,
+            ),
+
+          // Bottom clearance for the mini player
+          const SliverToBoxAdapter(child: SizedBox(height: 72)),
         ],
       ),
     );
@@ -460,199 +647,29 @@ String _formatPlayCount(int count) {
   return count.toString();
 }
 
-// ── Playlist options sheet (from detail page) ─────────────────────────────────
-
-class _PlaylistOptionsSheet extends ConsumerWidget {
-  final Playlist playlist;
-  const _PlaylistOptionsSheet({required this.playlist});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: playlist.artworkUrl != null
-                          ? Image.network(playlist.artworkUrl!,
-                              fit: BoxFit.cover)
-                          : const ColoredBox(
-                              color: Color(0xFF2A2A2A),
-                              child: Center(
-                                child: Icon(Icons.music_note,
-                                    color: Colors.white38, size: 32),
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          playlist.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          playlist.ownerName,
-                          style: const TextStyle(
-                              color: _secondary, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.white12, height: 28),
-            _optionRow(
-              icon: Icons.edit_outlined,
-              label: 'Edit',
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Coming soon'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
-            _optionRow(
-              icon: Icons.lock_outline,
-              label: playlist.isPublic ? 'Make private' : 'Make public',
-              onTap: () {
-                Navigator.pop(context);
-                ref.read(playlistsProvider.notifier).updateVisibility(
-                      playlist.id,
-                      !playlist.isPublic,
-                    );
-              },
-            ),
-            _optionRow(
-              icon: Icons.delete_outline,
-              label: 'Delete',
-              onTap: () {
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                nav.pop(); // close the sheet; user returns to details page
-                ref.read(playlistsProvider.notifier).remove(playlist.id).then((_) {
-                  nav.maybePop(); // go back only after confirmed 204
-                }).catchError((_) {
-                  messenger.showSnackBar(const SnackBar(
-                    content: Text('Could not delete playlist. Please try again.'),
-                    backgroundColor: Color(0xFF3A1A1A),
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                });
-              },
-            ),
-            _optionRow(
-              icon: Icons.copy_rounded,
-              label: 'Copy playlist',
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Coming soon'),
-                    backgroundColor: _surface,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
-            _optionRow(
-              icon: Icons.share_rounded,
-              label: 'Share',
-              onTap: () {
-                Navigator.pop(context);
-                showModalBottomSheet(
-                  context: context,
-                  backgroundColor: _surface,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  builder: (_) => SharePlaylistSheet(playlist: playlist),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _optionRow({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) =>
-      GestureDetector(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, color: Colors.white, size: 22),
-              const SizedBox(width: 16),
-              Text(label,
-                  style:
-                      const TextStyle(color: Colors.white, fontSize: 15)),
-            ],
-          ),
-        ),
-      );
-}
-
-// ── Track tile ────────────────────────────────────────────────────────────────
+// ── Track tile ────────────────────────────────────────────────────��───────────
 
 class _TrackTile extends StatelessWidget {
   final String title;
   final String artist;
-  final bool isPaused;
   final String? playCount;
   final String? duration;
   final String? artworkUrl;
   final VoidCallback? onTap;
+  final VoidCallback? onMoreTap;
+  // Built outside and passed in so the ReorderableDragStartListener can
+  // reference the item's index in SliverReorderableList.
+  final Widget? dragHandle;
 
   const _TrackTile({
     required this.title,
     required this.artist,
-    this.isPaused = false,
     this.playCount,
     this.duration,
     this.artworkUrl,
     this.onTap,
+    this.onMoreTap,
+    this.dragHandle,
   });
 
   @override
@@ -722,25 +739,30 @@ class _TrackTile extends StatelessWidget {
                     style: const TextStyle(color: _secondary, fontSize: 13),
                   ),
                   const SizedBox(height: 3),
-                  if (isPaused)
-                    const Row(
-                      children: [
-                        Icon(Icons.pause_rounded, color: _secondary, size: 13),
-                        SizedBox(width: 4),
-                        Text('Paused',
-                            style: TextStyle(color: _secondary, fontSize: 12)),
-                      ],
-                    )
-                  else
-                    Text(
+                  Text(
                       '▶ ${playCount ?? '0'} · ${duration ?? '0:00'}',
-                      style: const TextStyle(color: _secondary, fontSize: 12),
+                      style:
+                          const TextStyle(color: _secondary, fontSize: 12),
                     ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.more_horiz_rounded, color: _secondary, size: 22),
+            const SizedBox(width: 4),
+            // More icon — tap to open per-track action sheet
+            GestureDetector(
+              onTap: onMoreTap,
+              behavior: HitTestBehavior.opaque,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Icon(
+                  Icons.more_horiz_rounded,
+                  color: _secondary,
+                  size: 22,
+                ),
+              ),
+            ),
+            // Drag handle — null when list has ≤1 item
+            if (dragHandle != null) dragHandle!,
           ],
         ),
       ),

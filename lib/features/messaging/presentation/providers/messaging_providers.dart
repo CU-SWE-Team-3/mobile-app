@@ -11,13 +11,10 @@ import '../../domain/repositories/messaging_repository.dart';
 
 // ── Socket ────────────────────────────────────────────────────────────────────
 
-/// Thin Riverpod wrapper around the get_it SocketService singleton.
 final socketServiceProvider = Provider<SocketService>(
   (ref) => sl<SocketService>(),
 );
 
-/// Watches sessionUserIdProvider and drives the socket lifecycle.
-/// Connect on login, disconnect on logout. Activated by AppShell watching it.
 final socketLifecycleProvider = Provider<void>((ref) {
   final service = ref.watch(socketServiceProvider);
 
@@ -38,7 +35,11 @@ final socketLifecycleProvider = Provider<void>((ref) {
   );
 });
 
-/// Keeps conversation lists fresh when messages arrive outside an open chat.
+/// Keeps conversation unread counts live when messages arrive outside an open
+/// chat. Increments the count for the relevant conversation immediately so the
+/// badge updates without a full re-fetch. If the user IS inside that chat,
+/// [SocketService.isViewingConversation] returns true and the count is not
+/// incremented (the chat's own receipt call will reset it instead).
 final socketMessageLifecycleProvider = Provider.autoDispose<void>((ref) {
   final userId = ref.watch(sessionUserIdProvider);
   final service = ref.watch(socketServiceProvider);
@@ -47,9 +48,14 @@ final socketMessageLifecycleProvider = Provider.autoDispose<void>((ref) {
   if (userId.isNotEmpty) {
     sub = service.newMessages.listen((data) {
       final conversationId = data['conversationId']?.toString() ?? '';
-      ref.invalidate(conversationsProvider);
-      if (conversationId.isNotEmpty) {
-        ref.invalidate(messagesProvider(conversationId));
+      if (conversationId.isEmpty) return;
+
+      // Always refresh the message thread so the chat room stays current.
+      ref.invalidate(messagesProvider(conversationId));
+
+      // Only bump the unread badge if the user is NOT inside that conversation.
+      if (!service.isViewingConversation(conversationId)) {
+        ref.read(conversationsProvider.notifier).incrementUnread(conversationId);
       }
     });
   }
@@ -63,22 +69,64 @@ final messagingRepositoryProvider = Provider<MessagingRepository>(
   (ref) => sl<MessagingRepository>(),
 );
 
-// ── Conversations ─────────────────────────────────────────────────────────────
+// ── Conversations notifier ────────────────────────────────────────────────────
 
-/// All conversations for the current user. Returns [] when unauthenticated.
-/// Auto-invalidates when sessionUserIdProvider changes (Riverpod dependency
-/// tracking handles this — no manual invalidation needed on user switch).
+/// Holds the full conversations list and exposes surgical mutations for unread
+/// count changes so the UI can update without a round-trip to the server.
+class ConversationsNotifier extends AsyncNotifier<List<Conversation>> {
+  @override
+  Future<List<Conversation>> build() async {
+    final userId = ref.watch(sessionUserIdProvider);
+    if (userId.isEmpty) return [];
+    return ref.read(messagingRepositoryProvider).getConversations();
+  }
+
+  /// Increments [conversationId]'s unread count by 1 in local state.
+  /// No-op when the data is not yet loaded or the conversation is not found.
+  void incrementUnread(String conversationId) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(
+      current.map((c) {
+        if (c.id != conversationId) return c;
+        return Conversation(
+          id: c.id,
+          participants: c.participants,
+          lastMessage: c.lastMessage,
+          unreadCount: c.unreadCount + 1,
+          updatedAt: c.updatedAt,
+        );
+      }).toList(),
+    );
+  }
+
+  /// Resets [conversationId]'s unread count to 0 in local state.
+  /// No-op when already zero or when data is not yet loaded.
+  void resetUnread(String conversationId) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncData(
+      current.map((c) {
+        if (c.id != conversationId || c.unreadCount == 0) return c;
+        return Conversation(
+          id: c.id,
+          participants: c.participants,
+          lastMessage: c.lastMessage,
+          unreadCount: 0,
+          updatedAt: c.updatedAt,
+        );
+      }).toList(),
+    );
+  }
+}
+
 final conversationsProvider =
-    FutureProvider.autoDispose<List<Conversation>>((ref) async {
-  final userId = ref.watch(sessionUserIdProvider);
-  if (userId.isEmpty) return [];
-  return ref.watch(messagingRepositoryProvider).getConversations();
-});
+    AsyncNotifierProvider<ConversationsNotifier, List<Conversation>>(
+  ConversationsNotifier.new,
+);
 
 // ── Messages ──────────────────────────────────────────────────────────────────
 
-/// Messages for a given conversation. Returns [] when unauthenticated.
-/// The userId watch ensures this rebuilds and clears on user switch.
 final messagesProvider = FutureProvider.autoDispose
     .family<List<Message>, String>((ref, conversationId) async {
   final userId = ref.watch(sessionUserIdProvider);

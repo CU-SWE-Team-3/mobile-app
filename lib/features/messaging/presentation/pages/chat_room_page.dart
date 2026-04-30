@@ -1,16 +1,27 @@
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:dio/dio.dart';
 import '../../../../core/providers/session_provider.dart';
 import '../../../../core/socket/socket_service.dart';
+import '../../../../core/utils/profile_navigation.dart';
+import '../../../player/data/services/player_api_service.dart';
+import '../../../player/presentation/providers/player_provider.dart';
+import '../../data/datasources/messaging_remote_data_source.dart';
+import '../../domain/entities/attachment.dart';
 import '../../domain/entities/message.dart';
 import '../../domain/entities/participant.dart';
 import '../providers/messaging_providers.dart';
+import '../widgets/attachment_picker_sheet.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/participant_avatar.dart';
+import '../../../premium/data/models/offline_downloaded_track.dart';
+import '../../../premium/data/services/offline_downloads_repository.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
 
 class ChatRoomPage extends ConsumerStatefulWidget {
   final String conversationId;
@@ -31,6 +42,9 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   List<Message>? _localMessages;
   final List<Map<String, dynamic>> _pendingSocketMessages = [];
   bool _hasScrolledToBottom = false;
+
+  // Pending attachment selection from the picker.
+  AttachmentSelection? _pendingAttachment;
 
   // Existing socket subscriptions
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
@@ -68,6 +82,14 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   void _joinAndSubscribe() {
     _socketService = ref.read(socketServiceProvider);
     _socketService.joinChat(widget.conversationId);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      ref
+          .read(conversationsProvider.notifier)
+          .resetUnread(widget.conversationId);
+    });
     _messageSubscription = _socketService.newMessages.listen(_onSocketMessage);
     _deliverySubscription =
         _socketService.deliveryReceipts.listen(_onDeliveryReceipt);
@@ -153,8 +175,19 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
 
     debugPrint('[ChatRoom] appended socket message: ${incoming.id}');
     setState(() => _localMessages!.add(incoming));
+    if (incoming.attachment != null && !incoming.attachment!.hasRichData) {
+      _refreshMessagesFromServerSoon();
+    }
     _emitReceipts();
     _scrollToBottom(force: true);
+  }
+
+  void _refreshMessagesFromServerSoon() {
+    Future<void>.delayed(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      setState(() => _localMessages = null);
+      ref.invalidate(messagesProvider(widget.conversationId));
+    });
   }
 
   String _conversationIdFrom(Map<String, dynamic> message) {
@@ -331,6 +364,209 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     }
   }
 
+  // ── Attachment picker ──────────────────────────────────────────────────────
+
+  Future<void> _openAttachmentPicker() async {
+    final selection = await showAttachmentPicker(context);
+    if (selection == null || !mounted) return;
+    setState(() => _pendingAttachment = selection);
+  }
+
+  void _clearPendingAttachment() {
+    setState(() => _pendingAttachment = null);
+  }
+
+  // ── Attachment tap-to-navigate ─────────────────────────────────────────────
+
+  Future<void> _onAttachmentTap(Attachment attachment) async {
+    if (!attachment.isAvailable) return;
+
+    if (attachment.type == 'playlist') {
+      context.push('/playlist', extra: {'playlistId': attachment.referenceId});
+      return;
+    }
+
+    // For tracks: fetch full details so we can play them, then open the player.
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Loading track…'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      final playerTrack =
+          await ref.read(playerApiServiceProvider).getTrackDetails(
+                attachment.referenceId,
+                trackPermalink: attachment.permalink,
+              );
+
+      if (!mounted) return;
+
+      if (playerTrack == null) {
+        debugPrint(
+          '[ChatRoom] track fetch returned null — '
+          'referenceId=${attachment.referenceId} permalink=${attachment.permalink}',
+        );
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(content: Text('Could not load track')),
+          );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ref.read(playerProvider.notifier).playTrack(playerTrack);
+      context.push('/player');
+    } catch (e, st) {
+      debugPrint('[ChatRoom] _onAttachmentTap error: $e\n$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Could not load track')),
+        );
+    }
+  }
+
+  // ── Send message ───────────────────────────────────────────────────────────
+
+  Future<void> _sendMessage({
+    required String currentUserId,
+    required String receiverId,
+  }) async {
+    final text = _textController.text.trim();
+    final attachment = _pendingAttachment;
+
+    // Must have at least text or an attachment.
+    if (text.isEmpty && attachment == null) return;
+
+    // Stop typing indicator immediately on send.
+    _stopTypingIfNeeded(widget.conversationId);
+    _textController.clear();
+    setState(() => _pendingAttachment = null);
+
+    final optimisticId = 'pending_${DateTime.now().millisecondsSinceEpoch}';
+    final optimistic = Message(
+      id: optimisticId,
+      conversationId: widget.conversationId,
+      senderId: currentUserId,
+      content: text,
+      attachment: attachment != null
+          ? Attachment(
+              type: attachment.type,
+              referenceId: attachment.id,
+              title: attachment.title,
+              artworkUrl: attachment.artworkUrl,
+            )
+          : null,
+      createdAt: DateTime.now(),
+    );
+
+    setState(() => (_localMessages ??= []).add(optimistic));
+    _scrollToBottom(force: true);
+
+    try {
+      final sent = await ref.read(messagingRepositoryProvider).sendMessage(
+            receiverId: receiverId,
+            content: text.isNotEmpty ? text : null,
+            conversationId: widget.conversationId,
+            attachmentType: attachment?.type,
+            attachmentId: attachment?.id,
+          );
+
+      if (!mounted) return;
+      if (sent.conversationId != widget.conversationId) {
+        debugPrint(
+          '[ChatRoom] sendMessage returned different conversationId: '
+          'current=${widget.conversationId} returned=${sent.conversationId}',
+        );
+      }
+      setState(() {
+        final messages = _localMessages ??= [];
+        final idx = messages.indexWhere((m) => m.id == optimisticId);
+        if (idx >= 0) {
+          messages[idx] = _preserveOptimisticAttachmentData(
+            sent,
+            optimistic.attachment,
+          );
+        }
+      });
+      ref.invalidate(conversationsProvider);
+    } on PrivateAttachmentException {
+      if (!mounted) return;
+      setState(() => _localMessages!.removeWhere((m) => m.id == optimisticId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This track is private and cannot be shared.'),
+          backgroundColor: Color(0xFF3A1A1A),
+        ),
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() => _localMessages!.removeWhere((m) => m.id == optimisticId));
+      final isAttachmentError =
+          e.response?.statusCode == 400 && attachment != null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isAttachmentError
+                ? "Couldn't send attachment — please try again."
+                : 'Failed to send message',
+          ),
+          backgroundColor: isAttachmentError ? const Color(0xFF3A1A1A) : null,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _localMessages!.removeWhere((m) => m.id == optimisticId));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to send message')),
+      );
+    }
+  }
+
+  Message _preserveOptimisticAttachmentData(
+    Message sent,
+    Attachment? optimisticAttachment,
+  ) {
+    final sentAttachment = sent.attachment;
+    if (sentAttachment == null || optimisticAttachment == null) return sent;
+    if (sentAttachment.hasRichData &&
+        (sentAttachment.artworkUrl?.isNotEmpty ?? false)) {
+      return sent;
+    }
+    return Message(
+      id: sent.id,
+      conversationId: sent.conversationId,
+      senderId: sent.senderId,
+      senderDisplayName: sent.senderDisplayName,
+      senderAvatarUrl: sent.senderAvatarUrl,
+      content: sent.content,
+      attachment: Attachment(
+        type: sentAttachment.type.isNotEmpty
+            ? sentAttachment.type
+            : optimisticAttachment.type,
+        referenceId: sentAttachment.referenceId.isNotEmpty
+            ? sentAttachment.referenceId
+            : optimisticAttachment.referenceId,
+        title: sentAttachment.title ?? optimisticAttachment.title,
+        artworkUrl:
+            sentAttachment.artworkUrl ?? optimisticAttachment.artworkUrl,
+        permalink: sentAttachment.permalink ?? optimisticAttachment.permalink,
+        artistName:
+            sentAttachment.artistName ?? optimisticAttachment.artistName,
+        duration: sentAttachment.duration ?? optimisticAttachment.duration,
+      ),
+      status: sent.status,
+      isEdited: sent.isEdited,
+      isDeleted: sent.isDeleted,
+      createdAt: sent.createdAt,
+    );
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
@@ -411,58 +647,6 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     }
   }
 
-  Future<void> _sendMessage({
-    required String currentUserId,
-    required String receiverId,
-  }) async {
-    final text = _textController.text.trim();
-    if (text.isEmpty) return;
-
-    // Stop typing indicator immediately on send.
-    _stopTypingIfNeeded(widget.conversationId);
-    _textController.clear();
-
-    final optimisticId = 'pending_${DateTime.now().millisecondsSinceEpoch}';
-    final optimistic = Message(
-      id: optimisticId,
-      conversationId: widget.conversationId,
-      senderId: currentUserId,
-      content: text,
-      createdAt: DateTime.now(),
-    );
-
-    setState(() => (_localMessages ??= []).add(optimistic));
-    _scrollToBottom(force: true);
-
-    try {
-      final sent = await ref.read(messagingRepositoryProvider).sendMessage(
-            receiverId: receiverId,
-            content: text,
-            conversationId: widget.conversationId,
-          );
-
-      if (!mounted) return;
-      if (sent.conversationId != widget.conversationId) {
-        debugPrint(
-          '[ChatRoom] sendMessage returned different conversationId: '
-          'current=${widget.conversationId} returned=${sent.conversationId}',
-        );
-      }
-      setState(() {
-        final messages = _localMessages ??= [];
-        final idx = messages.indexWhere((m) => m.id == optimisticId);
-        if (idx >= 0) messages[idx] = sent;
-      });
-      ref.invalidate(conversationsProvider);
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _localMessages!.removeWhere((m) => m.id == optimisticId));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to send message')),
-      );
-    }
-  }
-
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -488,30 +672,42 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: IconButton(
+          key: const ValueKey('chat_back_button'),
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: _goBack,
         ),
         title: otherParticipant != null
-            ? Row(
-                children: [
-                  ParticipantAvatar(
-                    avatarUrl: otherParticipant.avatarUrl,
-                    displayName: otherParticipant.displayName,
-                    radius: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(
-                      otherParticipant.displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+            ? GestureDetector(
+                onTap: otherParticipant.id.isNotEmpty &&
+                        otherParticipant.permalink.isNotEmpty
+                    ? () => navigateToUserProfile(
+                          context,
+                          userId: otherParticipant.id,
+                          permalink: otherParticipant.permalink,
+                          displayName: otherParticipant.displayName,
+                        )
+                    : null,
+                child: Row(
+                  children: [
+                    ParticipantAvatar(
+                      avatarUrl: otherParticipant.avatarUrl,
+                      displayName: otherParticipant.displayName,
+                      radius: 18,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Text(
+                        otherParticipant.displayName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               )
             : const Text(
                 'Chat',
@@ -596,6 +792,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                     ref.invalidate(messagesProvider(widget.conversationId));
                   },
                   child: ListView.builder(
+                    key: const ValueKey('message_list'),
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     itemCount: _localMessages!.length,
@@ -613,14 +810,24 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                           isOwn && !msg.isDeleted && !isPending && withinWindow;
                       return Opacity(
                         opacity: isPending ? 0.6 : 1.0,
-                        child: MessageBubble(
-                          message: msg,
-                          isOwn: isOwn,
-                          otherParticipant: isOwn ? null : otherParticipant,
-                          onEdit:
-                              canEditDelete ? () => _enterEditMode(msg) : null,
-                          onDelete:
-                              canEditDelete ? () => _deleteMessage(msg) : null,
+                        child: KeyedSubtree(
+                          key: ValueKey('message_bubble_$i'),
+                          child: MessageBubble(
+                            message: msg,
+                            isOwn: isOwn,
+                            otherParticipant: isOwn ? null : otherParticipant,
+                            onEdit: canEditDelete &&
+                                    msg.content.isNotEmpty &&
+                                    msg.attachment == null
+                                ? () => _enterEditMode(msg)
+                                : null,
+                            onDelete: canEditDelete
+                                ? () => _deleteMessage(msg)
+                                : null,
+                            onAttachmentTap: msg.attachment != null
+                                ? _onAttachmentTap
+                                : null,
+                          ),
                         ),
                       );
                     },
@@ -632,11 +839,19 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
           // Animated indicator shown while the other user is typing.
           if (_otherUserIsTyping)
             _TypingIndicator(participant: otherParticipant),
+          // Pending attachment preview strip
+          if (_pendingAttachment != null)
+            _AttachmentPreviewStrip(
+              selection: _pendingAttachment!,
+              onClear: _clearPendingAttachment,
+            ),
           _MessageInputBar(
             controller: _textController,
             focusNode: _textFocusNode,
             isEditMode: isEditing,
+            hasAttachment: _pendingAttachment != null,
             onCancelEdit: isEditing ? _cancelEditMode : null,
+            onAttach: isEditing ? null : _openAttachmentPicker,
             onSend: isEditing
                 ? () => _confirmEdit()
                 : (otherParticipant == null
@@ -651,6 +866,94 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     );
   }
 }
+
+// ── Attachment preview strip ──────────────────────────────────────────────────
+
+class _AttachmentPreviewStrip extends StatelessWidget {
+  final AttachmentSelection selection;
+  final VoidCallback onClear;
+
+  const _AttachmentPreviewStrip({
+    required this.selection,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isTrack = selection.type == 'track';
+    final hasArtwork = selection.artworkUrl != null &&
+        selection.artworkUrl!.isNotEmpty &&
+        selection.artworkUrl!.startsWith('http');
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      color: const Color(0xFF1A1A1A),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: hasArtwork
+                  ? CachedNetworkImage(
+                      imageUrl: selection.artworkUrl!,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _fallback(isTrack),
+                    )
+                  : _fallback(isTrack),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  selection.title ?? (isTrack ? 'Track' : 'Playlist'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  isTrack ? 'Track' : 'Playlist',
+                  style: const TextStyle(
+                    color: Color(0xFFFF5500),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+            onPressed: onClear,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _fallback(bool isTrack) => ColoredBox(
+        color: const Color(0xFF2A2A2A),
+        child: Center(
+          child: Icon(
+            isTrack ? Icons.music_note : Icons.queue_music,
+            color: Colors.white38,
+            size: 16,
+          ),
+        ),
+      );
+}
+
+// ── Unknown conversation fallback ─────────────────────────────────────────────
 
 class _UnknownConversationFallback extends StatelessWidget {
   final VoidCallback onOpenInbox;
@@ -766,14 +1069,18 @@ class _MessageInputBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final VoidCallback? onSend;
+  final VoidCallback? onAttach;
   final bool isEditMode;
+  final bool hasAttachment;
   final VoidCallback? onCancelEdit;
 
   const _MessageInputBar({
     required this.controller,
     required this.focusNode,
     required this.onSend,
+    this.onAttach,
     this.isEditMode = false,
+    this.hasAttachment = false,
     this.onCancelEdit,
   });
 
@@ -824,8 +1131,26 @@ class _MessageInputBar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
+                  // Attach button (hidden in edit mode)
+                  if (!isEditMode)
+                    IconButton(
+                      key: const ValueKey('message_attach_button'),
+                      onPressed: onAttach,
+                      icon: Icon(
+                        Icons.attach_file_rounded,
+                        color: hasAttachment
+                            ? const Color(0xFFFF5500)
+                            : Colors.white54,
+                      ),
+                      iconSize: 22,
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  if (!isEditMode) const SizedBox(width: 4),
                   Expanded(
                     child: TextField(
+                      key: const ValueKey('message_input_field'),
                       controller: controller,
                       focusNode: focusNode,
                       style: const TextStyle(color: Colors.white, fontSize: 15),
@@ -833,9 +1158,8 @@ class _MessageInputBar extends StatelessWidget {
                       minLines: 1,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
-                        hintText: isEditMode
-                            ? 'Edit message...'
-                            : 'Write a message...',
+                        hintText:
+                            isEditMode ? 'Edit message...' : 'Write a message…',
                         hintStyle: const TextStyle(color: Colors.white38),
                         filled: true,
                         fillColor: const Color(0xFF2A2A2A),
@@ -853,6 +1177,7 @@ class _MessageInputBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
+                    key: const ValueKey('message_send_button'),
                     onPressed: onSend,
                     icon: Icon(
                       isEditMode ? Icons.check_rounded : Icons.send_rounded,

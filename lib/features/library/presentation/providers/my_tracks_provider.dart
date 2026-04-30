@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/upload_track.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../../core/providers/session_provider.dart';
 
 final myTracksProvider =
     FutureProvider.autoDispose<List<UploadTrack>>((ref) async {
@@ -19,8 +20,7 @@ final myTracksProvider =
   final response = await dio.get('/tracks/my-tracks');
   final data = response.data['data'];
   if (data is! List) return [];
-  final raw = data;
-  return raw.map((t) {
+  return data.map((t) {
     final artist = t['artist'] is Map<String, dynamic>
         ? t['artist'] as Map<String, dynamic>
         : <String, dynamic>{};

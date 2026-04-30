@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/network/user_session.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../messaging/presentation/widgets/send_to_sheet.dart';
 import '../../../player/presentation/providers/follow_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../providers/feed_provider.dart';
@@ -445,6 +446,14 @@ class _FeedTrackOptionsSheet extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
+        _OptionTile(
+          icon: Icons.send_outlined,
+          label: 'Message',
+          onTap: () {
+            Navigator.pop(context);
+            showSendToSheet(context, ShareableTrack(trackId));
+          },
+        ),
         _OptionTile(
           icon: Icons.favorite,
           label: 'Your Likes',

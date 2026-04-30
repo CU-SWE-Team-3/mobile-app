@@ -11,6 +11,7 @@ import 'core/router/app_router.dart';
 import 'core/services/audio_handler_service.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/local_notification_service.dart';
+import 'core/socket/socket_service.dart';
 import 'core/themes/app_theme.dart';
 import 'features/messaging/presentation/providers/messaging_providers.dart';
 import 'features/notifications/presentation/providers/notification_provider.dart';
@@ -43,6 +44,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<void>? _authInvalidatedSub;
+  SocketService? _socketSvc;
 
   @override
   void initState() {
@@ -56,7 +58,29 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       appRouter.go('/login-screen');
     });
     WidgetsBinding.instance.addObserver(this);
+    _wireNotificationSocketCallbacks();
     _initDeepLinks();
+  }
+
+  void _wireNotificationSocketCallbacks() {
+    final socketSvc = ref.read(socketServiceProvider);
+    _socketSvc = socketSvc;
+    socketSvc.onNewNotification = (data) {
+      if (!mounted) return;
+      ref.read(notificationProvider.notifier).socketAddNotification(data);
+    };
+    socketSvc.onNotificationRead = (id) {
+      if (!mounted) return;
+      ref.read(notificationProvider.notifier).socketMarkNotificationRead(id);
+    };
+    socketSvc.onAllNotificationsRead = () {
+      if (!mounted) return;
+      ref.read(notificationProvider.notifier).socketMarkAllRead();
+    };
+    socketSvc.onNotificationDeleted = (id) {
+      if (!mounted) return;
+      ref.read(notificationProvider.notifier).socketRemoveNotification(id);
+    };
   }
 
   @override
@@ -133,6 +157,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _socketSvc?.onNewNotification = null;
+    _socketSvc?.onNotificationRead = null;
+    _socketSvc?.onAllNotificationsRead = null;
+    _socketSvc?.onNotificationDeleted = null;
     _linkSub?.cancel();
     _authInvalidatedSub?.cancel();
     super.dispose();
@@ -140,12 +168,6 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final socketSvc = ref.watch(socketServiceProvider);
-    final notifier = ref.read(notificationProvider.notifier);
-    socketSvc.onNewNotification = notifier.socketAddNotification;
-    socketSvc.onNotificationRead = notifier.socketMarkNotificationRead;
-    socketSvc.onAllNotificationsRead = notifier.socketMarkAllRead;
-    socketSvc.onNotificationDeleted = notifier.socketRemoveNotification;
     ref.watch(socketLifecycleProvider);
     ref.watch(socketMessageLifecycleProvider);
 

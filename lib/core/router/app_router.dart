@@ -23,14 +23,23 @@ import '../../features/feed/presentation/pages/search_results_tracks_page.dart';
 import '../../features/feed/presentation/pages/search_results_users_page.dart';
 import '../../features/feed/presentation/pages/search_results_playlists_page.dart';
 import '../../features/feed/presentation/pages/electronic_genre_page.dart';
+import '../../features/feed/presentation/pages/folk_genre_page.dart';
 import '../../features/feed/presentation/pages/hiphop_genre_page.dart';
+import '../../features/feed/presentation/pages/indie_genre_page.dart';
+import '../../features/feed/presentation/pages/house_genre_page.dart';
 import '../../features/feed/presentation/pages/electronic_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/folk_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/hiphop_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/indie_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/house_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/chill_genre_page.dart';
+import '../../features/feed/presentation/pages/party_genre_page.dart';
+import '../../features/feed/presentation/pages/workout_genre_page.dart';
 import '../../features/feed/presentation/pages/pop_playlist_detail_page.dart';
 import '../../features/feed/presentation/pages/pop_genre_page.dart';
 import '../../features/feed/presentation/pages/rnb_genre_page.dart';
 import '../../features/feed/presentation/pages/rnb_playlist_detail_page.dart';
+import '../../features/feed/presentation/pages/techno_genre_page.dart';
 import '../../features/feed/presentation/pages/genre_results_page.dart';
 import '../../features/feed/presentation/pages/trending_charts_page.dart';
 import '../../features/feed/presentation/pages/cast_page.dart';
@@ -71,6 +80,7 @@ import '../../features/engagement/presentation/pages/comments_sheet.dart';
 import '../../features/engagement/presentation/pages/likers_list_page.dart';
 import '../../features/engagement/presentation/pages/reposters_list_page.dart';
 
+import '../../features/playlist/domain/entities/playlist.dart';
 import '../../features/playlist/presentation/pages/playlist_details_page.dart';
 import '../../features/playlist/presentation/pages/create_playlist_page.dart';
 import '../../features/playlist/presentation/pages/edit_playlist_page.dart';
@@ -177,11 +187,20 @@ final appRouter = GoRouter(
                     builder: (_, __) => const RecommendedTracksPage()),
                 GoRoute(path: 'cast', builder: (_, __) => const CastPage()),
                 GoRoute(
+                    path: 'genre/folk',
+                    builder: (_, __) => const FolkGenrePage()),
+                GoRoute(
                     path: 'genre/electronic',
                     builder: (_, __) => const ElectronicGenrePage()),
                 GoRoute(
                     path: 'genre/hiphop',
                     builder: (_, __) => const HiphopGenrePage()),
+                GoRoute(
+                    path: 'genre/indie',
+                    builder: (_, __) => const IndieGenrePage()),
+                GoRoute(
+                    path: 'genre/house',
+                    builder: (_, __) => const HouseGenrePage()),
                 GoRoute(
                     path: 'genre/pop',
                     builder: (_, __) => const PopGenrePage()),
@@ -191,6 +210,15 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'genre/chill',
                     builder: (_, __) => const ChillGenrePage()),
+                GoRoute(
+                    path: 'genre/party',
+                    builder: (_, __) => const PartyGenrePage()),
+                GoRoute(
+                    path: 'genre/workout',
+                    builder: (_, __) => const WorkoutGenrePage()),
+                GoRoute(
+                    path: 'genre/techno',
+                    builder: (_, __) => const TechnoGenrePage()),
               ],
             ),
           ],
@@ -222,13 +250,34 @@ final appRouter = GoRouter(
                 GoRoute(
                     path: 'playlists',
                     builder: (_, __) => const SearchResultsPlaylistsPage()),
-                 GoRoute(
+                GoRoute(
+                    path: 'folk/introducing',
+                    builder: (_, state) => FolkPlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
                      path: 'hiphop/introducing',
                      builder: (_, state) => HiphopPlaylistDetailPage(
                            playlistId:
                                state.uri.queryParameters['playlistId'] ?? '',
                            useBuzzingPreset: true,
                          )),
+                GoRoute(
+                    path: 'indie/introducing',
+                    builder: (_, state) => IndiePlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
+                GoRoute(
+                    path: 'house/introducing',
+                    builder: (_, state) => HousePlaylistDetailPage(
+                          playlistId:
+                              state.uri.queryParameters['playlistId'] ?? '',
+                          useBuzzingPreset: true,
+                        )),
                 GoRoute(
                     path: 'electronic/introducing',
                     builder: (_, state) => ElectronicPlaylistDetailPage(
@@ -456,16 +505,32 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/playlist',
       builder: (_, state) {
-        final extra = state.extra as Map<String, dynamic>? ?? {};
+        final rawExtra = state.extra;
+        final extra = rawExtra is Map
+            ? Map<String, dynamic>.from(rawExtra)
+            : <String, dynamic>{};
         return PlaylistDetailsPage(
-          playlistId: extra['playlistId'] as String?,
+          playlistId: rawExtra is String
+              ? rawExtra
+              : extra['playlistId']?.toString(),
         );
       },
       routes: [
         GoRoute(path: 'create', builder: (_, __) => const CreatePlaylistPage()),
-        GoRoute(path: 'edit', builder: (_, __) => const EditPlaylistPage()),
         GoRoute(
-            path: 'privacy', builder: (_, __) => const PlaylistPrivacyPage()),
+            path: 'edit',
+            builder: (_, state) => EditPlaylistPage(
+                  playlist: state.extra is Playlist
+                      ? state.extra as Playlist
+                      : null,
+                )),
+        GoRoute(
+          path: 'privacy',
+          builder: (_, state) {
+            final playlist = state.extra as Playlist;
+            return PlaylistPrivacyPage(playlist: playlist);
+          },
+        ),
         GoRoute(path: 'share', builder: (_, __) => const SharePlaylistPage()),
         GoRoute(
           path: 'add-track',

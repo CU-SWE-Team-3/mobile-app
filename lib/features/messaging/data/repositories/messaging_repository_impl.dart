@@ -27,13 +27,17 @@ class MessagingRepositoryImpl implements MessagingRepository {
   @override
   Future<Message> sendMessage({
     required String receiverId,
-    required String content,
+    String? content,
     String? conversationId,
+    String? attachmentType,
+    String? attachmentId,
   }) =>
       _dataSource.sendMessage(
         receiverId: receiverId,
         content: content,
         conversationId: conversationId,
+        attachmentType: attachmentType,
+        attachmentId: attachmentId,
       );
 
   @override

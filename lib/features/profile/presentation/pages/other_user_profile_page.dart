@@ -387,7 +387,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
         elevation: 0,
         leading: GestureDetector(
           key: const ValueKey('other_profile_back_button'),
-          onTap: () => context.pop(),
+          onTap: () => context.canPop() ? context.pop() : context.go('/home'),
           child: Container(
             margin: const EdgeInsets.all(8),
             decoration:

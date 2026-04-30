@@ -21,7 +21,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    repo = HistoryRepository();
+    repo = HistoryRepository('test-user');
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ void main() {
 
     test('returns empty list when stored value is malformed JSON', () async {
       SharedPreferences.setMockInitialValues({
-        'listening_history_v1': '[[[ not valid json',
+        'listening_history_v1:test-user': '[[[ not valid json',
       });
       final entries = await repo.load();
       expect(entries, isEmpty);
@@ -73,7 +73,7 @@ void main() {
     test('returns empty list when stored value is valid JSON but wrong shape',
         () async {
       SharedPreferences.setMockInitialValues({
-        'listening_history_v1': '"just a string"',
+        'listening_history_v1:test-user': '"just a string"',
       });
       final entries = await repo.load();
       expect(entries, isEmpty);

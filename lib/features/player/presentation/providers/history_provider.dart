@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/providers/session_provider.dart';
 import '../../data/repositories/history_repository.dart';
 import '../../data/services/player_api_service.dart';
 import 'player_provider.dart';
@@ -107,7 +108,8 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
 
 final historyProvider =
     StateNotifierProvider<HistoryNotifier, HistoryState>((ref) {
-  return HistoryNotifier(ref, HistoryRepository());
+  final userId = ref.watch(sessionUserIdProvider);
+  return HistoryNotifier(ref, HistoryRepository(userId));
 });
 
 // ---------------------------------------------------------------------------

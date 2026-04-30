@@ -1,5 +1,4 @@
 import 'dart:math';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
@@ -56,12 +56,7 @@ class _FeedTrack {
     final artist = track['artist'] as Map<String, dynamic>? ?? {};
     final audio = track['audio'] as Map<String, dynamic>?;
     final isActivity = target != null || json.containsKey('activityType');
-    final actor = isActivity
-        ? (json['actor'] ??
-            json['user'] ??
-            json['createdBy'] ??
-            json['profile']) as Map<String, dynamic>?
-        : null;
+    final actor = isActivity ? _activityActor(json) : null;
     return _FeedTrack(
       id: track['_id'] as String? ?? '',
       title: track['title'] as String? ?? '',
@@ -85,6 +80,21 @@ class _FeedTrack {
           actor?['profileImageUrl'] as String? ??
           actor?['photoUrl'] as String?,
     );
+  }
+
+  static Map<String, dynamic>? _activityActor(Map<String, dynamic> json) {
+    final actors = json['actors'];
+    if (actors is List && actors.isNotEmpty) {
+      final first = actors.first;
+      if (first is Map<String, dynamic>) return first;
+      if (first is Map) return Map<String, dynamic>.from(first);
+    }
+
+    final actor =
+        json['actor'] ?? json['user'] ?? json['createdBy'] ?? json['profile'];
+    if (actor is Map<String, dynamic>) return actor;
+    if (actor is Map) return Map<String, dynamic>.from(actor);
+    return null;
   }
 
   _FeedTrack copyWith({
@@ -220,6 +230,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   List<_FeedTrack> _madeForYouCards = [];
   List<_FeedTrack> _curatedTracks = [];
   List<_FeedTrack> _likedByFollowingTracks = [];
+  Map<String, List<_FeedTrack>> _buzzingGenreTracks = {};
 
   @override
   void initState() {
@@ -230,6 +241,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     _fetchRecommended();
     _fetchMixedForYou();
     _fetchCurated();
+    _fetchBuzzingGenres();
   }
 
   Future<void> _loadUserName() async {
@@ -436,10 +448,12 @@ class _HomePageState extends ConsumerState<HomePage> {
           }
         }
 
+        final displayTitle =
+            stationTitle.isNotEmpty ? stationTitle : firstTrack.artistName;
         final stationTrack = _FeedTrack(
           id: stationId.isNotEmpty ? stationId : firstTrack.id,
-          title: stationTitle,
-          artistName: stationTitle,
+          title: displayTitle,
+          artistName: displayTitle,
           artworkUrl: stationArtworkUrl,
           hlsUrl: firstTrack.hlsUrl,
           playCount: firstTrack.playCount,
@@ -483,6 +497,33 @@ class _HomePageState extends ConsumerState<HomePage> {
       if (mounted) setState(() => _curatedTracks = tracks);
     } catch (e) {
       debugPrint('Curated error: $e');
+    }
+  }
+
+  Future<void> _fetchBuzzingGenres() async {
+    final entries = await Future.wait(
+      _genres.map((genre) async {
+        try {
+          final response = await dioClient.dio.get(
+            '/discovery/trending',
+            queryParameters: {'genre': genre.query, 'limit': 5},
+          );
+          final data = response.data['data'] as Map<String, dynamic>? ?? {};
+          final rawTrending = data['trending'] as List<dynamic>? ?? [];
+          final tracks = rawTrending
+              .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
+              .where((track) => track.id.isNotEmpty)
+              .toList();
+          return MapEntry(genre.query, tracks);
+        } catch (e) {
+          debugPrint('Buzzing ${genre.query} error: $e');
+          return MapEntry(genre.query, <_FeedTrack>[]);
+        }
+      }),
+    );
+
+    if (mounted) {
+      setState(() => _buzzingGenreTracks = Map.fromEntries(entries));
     }
   }
 
@@ -603,35 +644,46 @@ class _HomePageState extends ConsumerState<HomePage> {
         title: track.title,
         artistName: track.artistName,
         artworkUrl: track.artworkUrl,
+        audioUrl: track.hlsUrl,
+        waveform: track.waveform,
         artistId: track.artistId,
         artistPermalink: track.artistPermalink,
+        initialIsLiked: track.isLiked,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
       ),
     );
   }
 
   Widget _buildLikesBanner() {
     final mergedLikesAsync = ref.watch(mergedUserLikesProvider);
+    final likedOrder = ref.watch(likedTrackOrderProvider);
+    final likedTracksById = {
+      for (final track in _likedTracks) track.id: track,
+    };
     final visibleLikedTracks = mergedLikesAsync.maybeWhen(
-      data: (tracks) => tracks
-          .map(
-            (track) => _FeedTrack(
-              id: track.id,
-              title: track.title,
-              artistName: track.artistName,
-              artworkUrl: track.artworkUrl,
-              hlsUrl: track.audioUrl ?? '',
-              playCount: track.playCount,
-              artistId: track.artistId,
-              artistPermalink: track.artistPermalink,
-              likeCount: track.likeCount,
-              repostCount: track.repostCount,
-              isLiked: true,
-              waveform: track.waveform,
-            ),
-          )
-          .toList(),
+      data: (tracks) => tracks.map(
+        (track) {
+          final rawTrack = likedTracksById[track.id];
+          return _FeedTrack(
+            id: track.id,
+            title: track.title,
+            artistName: track.artistName,
+            artworkUrl: track.artworkUrl,
+            hlsUrl: rawTrack?.hlsUrl ?? _hlsUrlFromTrackSummary(track),
+            playCount: track.playCount,
+            artistId: track.artistId,
+            artistPermalink: track.artistPermalink,
+            likeCount: track.likeCount,
+            repostCount: track.repostCount,
+            isLiked: true,
+            waveform: track.waveform,
+          );
+        },
+      ).toList(),
       orElse: () => _likedTracks,
     );
+    final orderedLikedTracks = _applyLikedOrder(visibleLikedTracks, likedOrder);
     return GestureDetector(
       onTap: () => context.push('/library/likes'),
       child: Container(
@@ -661,23 +713,32 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                   ),
                 ),
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.32),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.shuffle_rounded,
-                    color: Colors.white,
-                    size: 22,
+                GestureDetector(
+                  onTap: () {
+                    if (orderedLikedTracks.isEmpty) return;
+                    final shuffled = List<_FeedTrack>.from(orderedLikedTracks)
+                      ..shuffle(Random());
+                    ref.read(likedTrackOrderProvider.notifier).state =
+                        shuffled.map((track) => track.id).toList();
+                  },
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.32),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.shuffle_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 14),
-            if (visibleLikedTracks.isEmpty)
+            if (orderedLikedTracks.isEmpty)
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -691,40 +752,68 @@ class _HomePageState extends ConsumerState<HomePage> {
                   Row(
                     children: [
                       Expanded(
-                          child: _SmallTrackTile(track: visibleLikedTracks[0])),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _SmallTrackTile(
-                          track: visibleLikedTracks[
-                              visibleLikedTracks.length > 1 ? 1 : 0],
-                        ),
-                      ),
+                          
+                          child: _SmallTrackTile(track: orderedLikedTracks[0])),
+                      if (orderedLikedTracks.length > 1) ...[
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child:
+                                _SmallTrackTile(track: orderedLikedTracks[1])),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _SmallTrackTile(
-                          track: visibleLikedTracks[
-                              visibleLikedTracks.length > 2 ? 2 : 0],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _SmallTrackTile(
-                          track: visibleLikedTracks[
-                              visibleLikedTracks.length > 3 ? 3 : 0],
-                        ),
-                      ),
-                    ],
-                  ),
+                  if (orderedLikedTracks.length > 2) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                            child:
+                                _SmallTrackTile(track: orderedLikedTracks[2])),
+                        if (orderedLikedTracks.length > 3) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: _SmallTrackTile(
+                                  track: orderedLikedTracks[3])),
+                        ],
+                      ],
+                    ),
+                  ],
                 ],
               ),
           ],
         ),
       ),
     );
+  }
+
+  List<_FeedTrack> _applyLikedOrder(
+    List<_FeedTrack> tracks,
+    List<String> likedOrder,
+  ) {
+    if (likedOrder.isEmpty) return tracks;
+    final order = {
+      for (var i = 0; i < likedOrder.length; i++) likedOrder[i]: i,
+    };
+    final sorted = List<_FeedTrack>.from(tracks);
+    sorted.sort((a, b) {
+      final ai = order[a.id];
+      final bi = order[b.id];
+      if (ai == null && bi == null) return 0;
+      if (ai == null) return 1;
+      if (bi == null) return -1;
+      return ai.compareTo(bi);
+    });
+    return sorted;
+  }
+
+  String _hlsUrlFromTrackSummary(TrackSummary track) {
+    final url = track.audioUrl;
+    if (url == null || url.isEmpty) return '';
+    final lower = url.toLowerCase();
+    final isHls = lower.contains('.m3u8') || lower.contains('/hls/');
+    final guessedFallback =
+        'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/${track.id}/playlist.m3u8';
+    return isHls && url != guessedFallback ? url : '';
   }
 
   Widget _buildSquareShelf(
@@ -917,6 +1006,36 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  Widget _buildBuzzingShelf() {
+    return SizedBox(
+      height: 184,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _genres.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, index) {
+          final genre = _genres[index];
+          final tracks =
+              _buzzingGenreTracks[genre.query] ?? const <_FeedTrack>[];
+          return _BuzzingCard(
+            genre: genre,
+            track: tracks.isNotEmpty ? tracks.first : null,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                settings: const RouteSettings(name: '/home/genre-station'),
+                builder: (_) => _GenreStationPage(
+                  genre: genre,
+                  tracks: tracks,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<int>(likesRefreshTickProvider, (previous, next) {
@@ -930,8 +1049,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     final followLikedTracks = _likedByFollowingTracks;
     final curatedTracks = _curatedTracks;
     final likedByTracks = followLikedTracks;
-    final stationTracks = _stationCards;
-    final artistTracks = _recommendedTracks;
+    final stationTracks =
+        _stationCards.isNotEmpty ? _stationCards : _mixedShelfTracks;
+    final madeForYouTracks =
+        _madeForYouCards.isNotEmpty ? _madeForYouCards : recommendationTracks;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -963,11 +1084,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                 fontWeight: FontWeight.w800,
               ),
             ),
-          ),
-          IconButton(
-            key: const ValueKey('home_cast_button'),
-            onPressed: () {},
-            icon: const Icon(Icons.cast_connected_outlined, size: 23),
           ),
           IconButton(
             key: const ValueKey('home_upload_button'),
@@ -1018,12 +1134,13 @@ class _HomePageState extends ConsumerState<HomePage> {
             _fetchRecommended(),
             _fetchMixedForYou(),
             _fetchCurated(),
+            _fetchBuzzingGenres(),
           ]);
         },
         color: const Color(0xFFFF5500),
         backgroundColor: const Color(0xFF1A1A1A),
         child: ListView(
-          padding: const EdgeInsets.only(top: 12, bottom: 28),
+          padding: const EdgeInsets.only(top: 12, bottom: 140),
           children: [
             _buildLikesBanner(),
             _buildSectionHeader(
@@ -1042,7 +1159,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             _buildTrackRowsSection(followLikedTracks),
             const SizedBox(height: 28),
             _buildSectionHeader('Made for you'),
-            _buildMadeForYou(_madeForYouCards),
+            _buildMadeForYou(madeForYouTracks),
             const SizedBox(height: 28),
             _buildSectionHeader('Curated by SoundCloud'),
             _buildSquareShelf(curatedTracks, compact: true),
@@ -1060,7 +1177,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             const SizedBox(height: 28),
             _buildSectionHeader('Artists to watch out for'),
-            _buildBuzzingShelf(artistTracks),
+            _buildBuzzingShelf(),
             if (_isLoading && _tracks.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
@@ -1092,31 +1209,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (_, index) => _StationCard(
           track: tracks[index],
-          onTap: () => _playTrackCollection(
-            ref,
-            track: tracks[index],
-            source: tracks,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBuzzingShelf(List<_FeedTrack> tracks) {
-    return SizedBox(
-      height: 176,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: tracks.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (_, index) => _BuzzingCard(
-          track: tracks[index],
-          accent: [
-            const Color(0xFFE7D36E),
-            const Color(0xFFA273F3),
-            const Color(0xFFEA5B67),
-          ][index % 3],
           onTap: () => _playTrackCollection(
             ref,
             track: tracks[index],
@@ -1276,6 +1368,13 @@ class _ArtworkShelfCard extends StatelessWidget {
                           ],
                         ),
                       ),
+                    ),
+                  if (track.waveform != null && track.waveform!.isNotEmpty)
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      bottom: ribbonLabel == null ? 8 : 34,
+                      child: _MiniWaveformStrip(samples: track.waveform!),
                     ),
                 ],
               ),
@@ -1797,13 +1896,13 @@ class _StationCard extends StatelessWidget {
 }
 
 class _BuzzingCard extends StatelessWidget {
-  final _FeedTrack track;
-  final Color accent;
+  final _GenreTheme genre;
+  final _FeedTrack? track;
   final VoidCallback onTap;
 
   const _BuzzingCard({
+    required this.genre,
     required this.track,
-    required this.accent,
     required this.onTap,
   });
 
@@ -1812,13 +1911,13 @@ class _BuzzingCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: 118,
+        width: 126,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 118,
-              height: 118,
+              width: 126,
+              height: 126,
               decoration: BoxDecoration(
                 color: const Color(0xFF1D1D1D),
                 border: Border.all(color: const Color(0xFF3A3A3A)),
@@ -1827,7 +1926,7 @@ class _BuzzingCard extends StatelessWidget {
                 children: [
                   Positioned.fill(
                     child: CustomPaint(
-                      painter: _BuzzingPainter(accent: accent),
+                      painter: _BuzzingPainter(accent: genre.accent),
                     ),
                   ),
                   Positioned(
@@ -1836,7 +1935,7 @@ class _BuzzingCard extends StatelessWidget {
                     child: Text(
                       'BUZZING',
                       style: TextStyle(
-                        color: accent,
+                        color: genre.accent,
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
                       ),
@@ -1850,7 +1949,7 @@ class _BuzzingCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(3),
                       child: SizedBox(
                         height: 58,
-                        child: _NetworkArtwork(url: track.artworkUrl),
+                        child: _NetworkArtwork(url: track?.artworkUrl),
                       ),
                     ),
                   ),
@@ -1859,15 +1958,265 @@ class _BuzzingCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Buzzing ${track.artistName}',
+              genre.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 13,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GenreStationPage extends ConsumerWidget {
+  final _GenreTheme genre;
+  final List<_FeedTrack> tracks;
+
+  const _GenreStationPage({
+    required this.genre,
+    required this.tracks,
+  });
+
+  void _playTrack(
+    WidgetRef ref, {
+    required _FeedTrack track,
+  }) {
+    final playable = tracks.where((item) => item.hlsUrl.isNotEmpty).toList();
+    if (playable.isEmpty) return;
+
+    final queue = playable
+        .map(
+          (item) => PlayerTrack(
+            id: item.id,
+            title: item.title,
+            artist: item.artistName,
+            artistId: item.artistId,
+            artistPermalink: item.artistPermalink,
+            audioUrl: item.hlsUrl,
+            coverUrl: item.artworkUrl,
+            waveform: item.waveform,
+          ),
+        )
+        .toList();
+    final startIndex = playable.indexWhere((item) => item.id == track.id);
+    ref.read(playerProvider.notifier).playQueue(
+          queue,
+          startIndex: startIndex < 0 ? 0 : startIndex,
+        );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final heroTrack = tracks.isNotEmpty ? tracks.first : null;
+    final engagementParams = heroTrack == null
+        ? null
+        : EngagementParams(
+            trackId: heroTrack.id,
+            isLiked: heroTrack.isLiked,
+            isReposted: heroTrack.isReposted,
+            likeCount: heroTrack.likeCount,
+            repostCount: heroTrack.repostCount,
+          );
+    final engagement = engagementParams == null
+        ? null
+        : ref.watch(engagementProvider(engagementParams));
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text(
+          'Introducing',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: genre.surface,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: genre.accent.withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  genre.label,
+                  style: TextStyle(
+                    color: genre.accent,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'BUZZING',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                AspectRatio(
+                  aspectRatio: 1,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: _NetworkArtwork(url: heroTrack?.artworkUrl),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  heroTrack?.title ?? 'No tracks yet',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  heroTrack?.artistName ?? 'Check back soon',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFC9C9C9),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: heroTrack == null
+                          ? null
+                          : () => _playTrack(ref, track: heroTrack),
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: const Text('Play'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: genre.accent,
+                        foregroundColor: Colors.black,
+                        disabledBackgroundColor: const Color(0xFF333333),
+                        disabledForegroundColor: const Color(0xFF777777),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      onPressed: engagementParams == null ||
+                              engagement!.isLoadingLike
+                          ? null
+                          : () => ref
+                              .read(
+                                engagementProvider(engagementParams).notifier,
+                              )
+                              .toggleLike(),
+                      icon: Icon(
+                        engagement?.isLiked == true
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                      ),
+                      color: engagement?.isLiked == true
+                          ? const Color(0xFFFF5500)
+                          : Colors.white,
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.12),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          for (final track in tracks)
+            _GenreStationTrackRow(
+              track: track,
+              accent: genre.accent,
+              onTap: () => _playTrack(ref, track: track),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GenreStationTrackRow extends StatelessWidget {
+  final _FeedTrack track;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _GenreStationTrackRow({
+    required this.track,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 54,
+                height: 54,
+                child: _NetworkArtwork(url: track.artworkUrl),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    track.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    track.artistName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFAFAFAF),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.play_arrow_rounded, color: accent),
           ],
         ),
       ),
@@ -1891,6 +2240,67 @@ class _NetworkArtwork extends StatelessWidget {
       errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
     );
   }
+}
+
+class _MiniWaveformStrip extends StatelessWidget {
+  final List<int> samples;
+
+  const _MiniWaveformStrip({required this.samples});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 24,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.38),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: CustomPaint(
+            painter: _MiniWaveformPainter(samples),
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniWaveformPainter extends CustomPainter {
+  final List<int> samples;
+
+  const _MiniWaveformPainter(this.samples);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (samples.isEmpty || size.width <= 0 || size.height <= 0) return;
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.82)
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.6;
+    final visibleBars = min(samples.length, (size.width / 3).floor());
+    if (visibleBars <= 0) return;
+    final stride = max(1, (samples.length / visibleBars).floor());
+    final maxSample = samples.reduce(max).clamp(1, 100).toDouble();
+    final gap = size.width / visibleBars;
+    for (var i = 0; i < visibleBars; i++) {
+      final sample = samples[min(i * stride, samples.length - 1)];
+      final normalized = (sample / maxSample).clamp(0.12, 1.0).toDouble();
+      final barHeight = size.height * normalized;
+      final x = (i * gap) + (gap / 2);
+      canvas.drawLine(
+        Offset(x, (size.height - barHeight) / 2),
+        Offset(x, (size.height + barHeight) / 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MiniWaveformPainter oldDelegate) =>
+      oldDelegate.samples != samples;
 }
 
 class _LikesGlyph extends StatelessWidget {
@@ -1971,7 +2381,7 @@ class _BuzzingPainter extends CustomPainter {
     for (int i = 0; i < 8; i++) {
       final top = i * 14.0;
       canvas.drawRect(
-        Rect.fromLTWH((i.isEven ? 0 : 10), top, 12, 6),
+        Rect.fromLTWH(i.isEven ? 0 : 10, top, 12, 6),
         paint,
       );
       canvas.drawRect(
