@@ -23,6 +23,7 @@ class SocketService {
   String? _blockedTokenFingerprint;
   final Set<String> _recentLocalNotificationMessageIds = {};
   final Set<String> _activeConversationIds = {};
+  
   final Map<String, DateTime> _recentNotificationPopups = {};
 
   final _newMessageController =
@@ -478,6 +479,9 @@ class SocketService {
       if (isMessage && messageId.isNotEmpty) {
         _recentLocalNotificationMessageIds.add(messageId);
       }
+      if (_shouldSuppressNotificationPopup(notification)) {
+        return;
+      }
       unawaited(
         LocalNotificationService.showNotification(
           title: _notificationTitle(notification),
@@ -543,6 +547,11 @@ class SocketService {
         final conversationId = _conversationIdFrom(json);
         if (conversationId.isNotEmpty) return '/messages/chat/$conversationId';
         return '/messages';
+      case 'SYSTEM':
+        if (_isRecommendationNotification(json)) {
+          return '/home/recommended';
+        }
+        return '/notifications';
       case 'SYSTEM':
         if (_isRecommendationNotification(json)) {
           return '/home/recommended';
