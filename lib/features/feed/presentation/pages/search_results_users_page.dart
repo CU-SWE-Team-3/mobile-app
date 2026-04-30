@@ -36,12 +36,17 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
     });
     try {
       final results = await Future.wait([
-        dioClient.dio.get('/users/search',
-            queryParameters: {'q': q, 'page': 1, 'limit': 20}),
+        dioClient.dio.get(
+          '/tracks/search',
+          queryParameters: {'q': q, 'type': 'users', 'page': 1, 'limit': 20},
+        ),
         dioClient.dio.get('/network/blocked-users'),
       ]);
 
-      final usersRaw = results[0].data['data'] as List? ?? [];
+      final searchData = results[0].data['data'];
+      final usersRaw = searchData is Map<String, dynamic>
+          ? (searchData['users'] as List?) ?? []
+          : const [];
       final users = usersRaw.cast<Map<String, dynamic>>();
 
       final blockedRaw = results[1].data['data'];

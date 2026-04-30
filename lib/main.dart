@@ -12,9 +12,11 @@ import 'core/services/audio_handler_service.dart';
 import 'core/services/fcm_service.dart';
 import 'core/services/local_notification_service.dart';
 import 'core/themes/app_theme.dart';
+import 'features/feed/data/services/resource_resolver_service.dart';
 import 'features/messaging/presentation/providers/messaging_providers.dart';
 import 'features/notifications/presentation/providers/notification_fcm_lifecycle_provider.dart';
 import 'features/notifications/presentation/providers/notification_socket_lifecycle_provider.dart';
+import 'features/player/presentation/providers/player_provider.dart';
 import 'features/premium/presentation/providers/subscription_provider.dart';
 import 'injection_container.dart';
 
@@ -41,6 +43,7 @@ class MyApp extends ConsumerStatefulWidget {
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   late final AppLinks _appLinks;
+  late final ResourceResolverService _resourceResolver;
   StreamSubscription<Uri>? _linkSub;
   StreamSubscription<void>? _authInvalidatedSub;
 
@@ -56,12 +59,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       appRouter.go('/login-screen');
     });
     WidgetsBinding.instance.addObserver(this);
+    _resourceResolver = ResourceResolverService(dioClient.dio);
     _initDeepLinks();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Refresh subscription when user returns from background (e.g., from Stripe browser)
     if (state == AppLifecycleState.resumed) {
       _onResume();
     }
@@ -70,40 +73,33 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   Future<void> _onResume() async {
     try {
       await ref.read(subscriptionProvider.notifier).refreshFromProfile();
-      // Only navigate to PaymentSuccessPage when a checkout was explicitly
-      // started from this app (pendingCheckout flag). Without this gate every
-      // app-resume event — file picker close, login, keyboard dismiss — would
-      // wrongly open PaymentSuccessPage for any already-subscribed user.
       final prefs = await SharedPreferences.getInstance();
       final pending = prefs.getBool('pendingCheckout') ?? false;
       if (!pending) return;
-      await prefs.setBool('pendingCheckout', false); // consume — one-shot
+      await prefs.setBool('pendingCheckout', false);
       final sub = ref.read(subscriptionProvider);
       if (sub.isPremium) {
         try {
           appRouter.go('/payment-success');
         } catch (_) {
-          // ignore navigation errors during resume
+          // Ignore navigation errors during resume.
         }
       }
     } catch (_) {
-      // Ignore errors during resume refresh
+      // Ignore errors during resume refresh.
     }
   }
 
   Future<void> _initDeepLinks() async {
     _appLinks = AppLinks();
 
-    // Cold start — app launched via a link
     final initial = await _appLinks.getInitialLink();
     if (initial != null) await _handleLink(initial);
 
-    // Warm start — link received while app is already running
     _linkSub = _appLinks.uriLinkStream.listen(_handleLink);
   }
 
   Future<void> _handleLink(Uri uri) async {
-    // Payment return paths — no token required
     if (uri.path == '/payment-success') {
       appRouter.go('/payment-success');
       return;
@@ -114,20 +110,88 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     }
 
     final token = uri.queryParameters['token'];
-    if (token == null || token.isEmpty) return;
-
-    if (uri.path == '/verify-email') {
+    if (token != null && token.isNotEmpty && uri.path == '/verify-email') {
       try {
         await dioClient.dio.post('/auth/verify-email', data: {'token': token});
-        // Navigate to login so user can sign in with their verified account
         appRouter.go('/login-screen');
       } catch (_) {
-        // Token invalid/expired — send to start so user can request a new one
         appRouter.go('/start');
       }
-    } else if (uri.path == '/reset-password') {
-      appRouter.go('/reset-password', extra: token);
+      return;
     }
+
+    if (token != null && token.isNotEmpty && uri.path == '/reset-password') {
+      appRouter.go('/reset-password', extra: token);
+      return;
+    }
+
+    final resolved = await _resourceResolver.resolve(uri);
+    if (!mounted) return;
+
+    switch (resolved.kind) {
+      case ResolvedResourceKind.user:
+        final permalink = resolved.userPermalink;
+        if (permalink != null && permalink.isNotEmpty) {
+          appRouter.go('/user/${Uri.encodeComponent(permalink)}');
+        }
+        return;
+      case ResolvedResourceKind.track:
+        final trackId = resolved.trackId;
+        final title = resolved.title;
+        final artistName = resolved.artistName;
+        if (trackId == null ||
+            trackId.isEmpty ||
+            title == null ||
+            title.isEmpty ||
+            artistName == null ||
+            artistName.isEmpty) {
+          _showDeepLinkMessage('We could not open that track link.');
+          return;
+        }
+
+        final track = PlayerTrack(
+          id: trackId,
+          title: title,
+          artist: artistName,
+          audioUrl: '',
+          coverUrl: resolved.artworkUrl,
+          duration: resolved.durationSeconds != null
+              ? Duration(seconds: resolved.durationSeconds!)
+              : null,
+          artistId: resolved.artistId,
+          artistPermalink: resolved.artistPermalink,
+          trackPermalink: resolved.trackPermalink,
+        );
+
+        await ref.read(playerProvider.notifier).playTrack(track);
+        ref.read(playerProvider.notifier).setQueueContext(
+              'track',
+              contextId: trackId,
+            );
+        appRouter.go('/player');
+        return;
+      case ResolvedResourceKind.playlist:
+        final playlistId = resolved.playlistId;
+        if (playlistId == null || playlistId.isEmpty) {
+          _showDeepLinkMessage('We could not open that playlist link.');
+          return;
+        }
+        appRouter.go('/playlist', extra: {'playlistId': playlistId});
+        return;
+      case ResolvedResourceKind.notFound:
+        _showDeepLinkMessage(
+          resolved.message ?? 'We could not open that shared link.',
+        );
+        return;
+      case ResolvedResourceKind.ignored:
+        return;
+    }
+  }
+
+  void _showDeepLinkMessage(String message) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

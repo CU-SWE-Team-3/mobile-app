@@ -156,6 +156,14 @@ class _FeedPageState extends ConsumerState<FeedPage> {
     setState(() => _currentPage = index);
     final track = tracks[index];
     ref.read(playerProvider.notifier).playTrack(track.toPlayerTrack());
+    _maybeLoadMoreFollowing(index, tracks.length);
+  }
+
+  void _maybeLoadMoreFollowing(int index, int totalTracks) {
+    if (_tab != _Tab.following || totalTracks == 0) return;
+    final thresholdIndex = totalTracks <= 3 ? totalTracks - 1 : totalTracks - 3;
+    if (index < thresholdIndex) return;
+    ref.read(followingFeedProvider.notifier).loadNextPage();
   }
 
   // ── Build ───────────────────────────────────────────────────────────────────
@@ -245,7 +253,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       );
     }
 
-    if (feedState.error != null) {
+    if (feedState.error != null && feedState.tracks.isEmpty) {
       return RefreshIndicator(
         onRefresh: _refreshCurrentTab,
         color: const Color(0xFFFF5500),
@@ -278,24 +286,46 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       );
     }
 
-    return RefreshIndicator(
-      onRefresh: _refreshCurrentTab,
-      color: const Color(0xFFFF5500),
-      backgroundColor: const Color(0xFF1A1A1A),
-      child: PageView.builder(
-        controller: _pageController,
-        scrollDirection: Axis.vertical,
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: feedState.tracks.length,
-        onPageChanged: (index) => _onPageChanged(index, feedState.tracks),
-        itemBuilder: (context, index) {
-          final track = feedState.tracks[index];
-          return FeedTrackCard(
-            track: track,
-            isActive: index == _currentPage,
-          );
-        },
-      ),
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: _refreshCurrentTab,
+          color: const Color(0xFFFF5500),
+          backgroundColor: const Color(0xFF1A1A1A),
+          child: PageView.builder(
+            controller: _pageController,
+            scrollDirection: Axis.vertical,
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: feedState.tracks.length,
+            onPageChanged: (index) => _onPageChanged(index, feedState.tracks),
+            itemBuilder: (context, index) {
+              final track = feedState.tracks[index];
+              return FeedTrackCard(
+                track: track,
+                isActive: index == _currentPage,
+              );
+            },
+          ),
+        ),
+        if (_tab == _Tab.following && feedState.isLoadingMore)
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 20,
+            child: IgnorePointer(
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Color(0xFFFF5500),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

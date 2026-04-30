@@ -15,23 +15,36 @@ export '../../data/models/feed_track.dart';
 class FeedState {
   final List<FeedTrack> tracks;
   final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasMore;
+  final String? nextCursor;
   final String? error;
 
   const FeedState({
     this.tracks = const [],
     this.isLoading = false,
+    this.isLoadingMore = false,
+    this.hasMore = false,
+    this.nextCursor,
     this.error,
   });
 
   FeedState copyWith({
     List<FeedTrack>? tracks,
     bool? isLoading,
+    bool? isLoadingMore,
+    bool? hasMore,
+    String? nextCursor,
+    bool clearNextCursor = false,
     String? error,
     bool clearError = false,
   }) =>
       FeedState(
         tracks: tracks ?? this.tracks,
         isLoading: isLoading ?? this.isLoading,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+        hasMore: hasMore ?? this.hasMore,
+        nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
         error: clearError ? null : (error ?? this.error),
       );
 }
@@ -98,7 +111,13 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
   FollowingFeedNotifier() : super(const FeedState());
 
   Future<void> load() async {
-    state = state.copyWith(isLoading: true, clearError: true);
+    state = state.copyWith(
+      isLoading: true,
+      isLoadingMore: false,
+      hasMore: false,
+      clearNextCursor: true,
+      clearError: true,
+    );
     try {
       final prefs = await SharedPreferences.getInstance();
       final userId = prefs.getString('userId') ?? '';
@@ -106,8 +125,12 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
       final myAvatarUrl = prefs.getString('avatarUrl') ?? '';
 
       // Fetch followed-users feed.
-      final feedResponse = await dioClient.dio.get('/feed');
+      final feedResponse = await dioClient.dio.get(
+        '/feed',
+        queryParameters: {'limit': 40},
+      );
       final feedItems = _extractFeedItems(feedResponse.data);
+      final pagination = _extractPagination(feedResponse.data);
 
       // Fetch current user's own reposts; prepend them silently on failure.
       var myRepostItems = <Map<String, dynamic>>[];
@@ -128,15 +151,62 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
           .map(FeedTrack.fromJson)
           .where((t) => t.id.isNotEmpty)
           .toList();
-      state = state.copyWith(tracks: tracks, isLoading: false);
+      state = state.copyWith(
+        tracks: tracks,
+        isLoading: false,
+        hasMore: pagination.hasMore,
+        nextCursor: pagination.nextCursor,
+      );
     } on DioException {
       state = state.copyWith(
         isLoading: false,
+        isLoadingMore: false,
         error: 'Failed to load tracks. Check your connection and try again.',
       );
     } catch (_) {
       state = state.copyWith(
         isLoading: false,
+        isLoadingMore: false,
+        error: 'Something went wrong. Please try again.',
+      );
+    }
+  }
+
+  Future<void> loadNextPage() async {
+    if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
+    final cursor = state.nextCursor;
+    if (cursor == null || cursor.isEmpty) return;
+
+    state = state.copyWith(isLoadingMore: true, clearError: true);
+    try {
+      final response = await dioClient.dio.get(
+        '/feed',
+        queryParameters: {
+          'cursor': cursor,
+          'limit': 40,
+        },
+      );
+      final nextItems = _extractFeedItems(response.data);
+      final pagination = _extractPagination(response.data);
+      final nextTracks = nextItems
+          .map(FeedTrack.fromJson)
+          .where((t) => t.id.isNotEmpty)
+          .toList();
+
+      state = state.copyWith(
+        tracks: _appendUniqueTracks(state.tracks, nextTracks),
+        isLoadingMore: false,
+        hasMore: pagination.hasMore,
+        nextCursor: pagination.nextCursor,
+      );
+    } on DioException {
+      state = state.copyWith(
+        isLoadingMore: false,
+        error: 'Failed to load more activities. Please try again.',
+      );
+    } catch (_) {
+      state = state.copyWith(
+        isLoadingMore: false,
         error: 'Something went wrong. Please try again.',
       );
     }
@@ -209,11 +279,65 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     return result;
   }
 
+  _FeedPagination _extractPagination(dynamic data) {
+    final dataMap = data['data'];
+    if (dataMap is! Map<String, dynamic>) {
+      return const _FeedPagination();
+    }
+
+    final pagination = dataMap['pagination'];
+    if (pagination is! Map<String, dynamic>) {
+      return const _FeedPagination();
+    }
+
+    final nextCursor = pagination['nextCursor']?.toString();
+    final hasMore = pagination['hasMore'] == true;
+    return _FeedPagination(
+      nextCursor: nextCursor != null && nextCursor.isNotEmpty
+          ? nextCursor
+          : null,
+      hasMore: hasMore,
+    );
+  }
+
+  List<FeedTrack> _appendUniqueTracks(
+    List<FeedTrack> existing,
+    List<FeedTrack> incoming,
+  ) {
+    final seen = existing.map(_trackKey).toSet();
+    final merged = [...existing];
+    for (final track in incoming) {
+      final key = _trackKey(track);
+      if (seen.add(key)) {
+        merged.add(track);
+      }
+    }
+    return merged;
+  }
+
+  String _trackKey(FeedTrack track) {
+    return [
+      track.id,
+      track.activityType ?? '',
+      track.activityTimestamp?.toIso8601String() ?? '',
+    ].join('|');
+  }
+
   Map<String, dynamic>? _asStringMap(dynamic value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
     return null;
   }
+}
+
+class _FeedPagination {
+  const _FeedPagination({
+    this.nextCursor,
+    this.hasMore = false,
+  });
+
+  final String? nextCursor;
+  final bool hasMore;
 }
 
 final followingFeedProvider =

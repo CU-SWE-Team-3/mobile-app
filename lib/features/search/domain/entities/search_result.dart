@@ -10,6 +10,7 @@ class SearchResultTrack {
   final String hlsUrl;
   final int? durationSeconds;
   final int playCount;
+  final List<int>? waveform;
 
   const SearchResultTrack({
     required this.id,
@@ -21,6 +22,7 @@ class SearchResultTrack {
     required this.hlsUrl,
     this.durationSeconds,
     this.playCount = 0,
+    this.waveform,
   });
 
   factory SearchResultTrack.fromJson(Map<String, dynamic> json) {
@@ -42,6 +44,9 @@ class SearchResultTrack {
       hlsUrl: json['hlsUrl'] as String? ?? '',
       durationSeconds: (json['duration'] as num?)?.toInt(),
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
     );
   }
 }

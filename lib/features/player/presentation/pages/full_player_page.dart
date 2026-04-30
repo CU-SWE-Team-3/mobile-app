@@ -1031,7 +1031,11 @@ class _WaveformPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (waveform == null || waveform!.isEmpty) {
+    final y = size.height / 2;
+    final splitX = (size.width * progress).clamp(0.0, size.width);
+
+    // Flat-line mode: no waveform data, or track is paused
+    if (waveform == null || waveform!.isEmpty || !isPlaying) {
       const strokeWidth = 2.0;
       final playedPaint = Paint()
         ..color = AppTheme.primary
@@ -1041,13 +1045,22 @@ class _WaveformPainter extends CustomPainter {
         ..color = Colors.white.withOpacity(0.25)
         ..strokeWidth = strokeWidth
         ..style = PaintingStyle.stroke;
-      final y = size.height / 2;
-      final splitX = size.width * progress;
       canvas.drawLine(Offset(0, y), Offset(splitX, y), playedPaint);
       canvas.drawLine(Offset(splitX, y), Offset(size.width, y), unplayedPaint);
+      // Progress marker dot shown when paused with a real position
+      if (!isPlaying && progress > 0) {
+        canvas.drawCircle(
+          Offset(splitX, y),
+          4.5,
+          Paint()
+            ..color = AppTheme.primary
+            ..style = PaintingStyle.fill,
+        );
+      }
       return;
     }
 
+    // Bar mode: track is playing with real waveform data
     final heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
 
     final barCount = heights.length;
@@ -1064,9 +1077,9 @@ class _WaveformPainter extends CustomPainter {
     for (int i = 0; i < barCount; i++) {
       final barHeight = heights[i] * size.height;
       final x = i * (barWidth + spacing);
-      final y = (size.height - barHeight) / 2;
+      final top = (size.height - barHeight) / 2;
       final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, y, barWidth, barHeight),
+        Rect.fromLTWH(x, top, barWidth, barHeight),
         const Radius.circular(2),
       );
       canvas.drawRRect(

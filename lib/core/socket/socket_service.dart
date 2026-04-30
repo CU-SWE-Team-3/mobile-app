@@ -431,14 +431,11 @@ class SocketService {
       }
     }
 
-    final content = message['content']?.toString().trim();
-    final body =
-        (content == null || content.isEmpty || _looksLikeObjectId(content))
-            ? 'Tap to open chat'
-            : content;
+    final title = _messageNotificationTitle(message);
+    final body = _messageNotificationBody(message);
     unawaited(
       LocalNotificationService.showNotification(
-        title: 'New message',
+        title: title,
         body: body,
         payload: '/messages/chat/$conversationId',
       ),
@@ -583,6 +580,33 @@ class SocketService {
     return RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(value);
   }
 
+  String _messageNotificationTitle(Map<String, dynamic> message) {
+    final senderName = _senderDisplayNameFrom(message);
+    if (senderName.isEmpty) return 'New message';
+    return 'Message from $senderName';
+  }
+
+  String _messageNotificationBody(Map<String, dynamic> message) {
+    for (final key in const [
+      'contentSnippet',
+      'content',
+      'message',
+      'text',
+      'body',
+    ]) {
+      final value = message[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+
+    if (message['attachment'] != null || message['attachments'] != null) {
+      return 'Sent an attachment';
+    }
+
+    return 'Tap to open chat';
+  }
+
   String _conversationIdFrom(Map<String, dynamic> message) {
     final direct = message['conversationId'] ?? message['chatId'];
     final directValue = _idValue(direct);
@@ -599,6 +623,44 @@ class SocketService {
     return _idValue(message['senderId']).isNotEmpty
         ? _idValue(message['senderId'])
         : _idValue(message['sender']);
+  }
+
+  String _senderDisplayNameFrom(Map<String, dynamic> message) {
+    for (final key in const [
+      'senderDisplayName',
+      'senderName',
+      'actorName',
+      'displayName',
+    ]) {
+      final value = message[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+
+    final sender = message['senderId'] is Map
+        ? message['senderId']
+        : message['sender'] is Map
+            ? message['sender']
+            : null;
+    if (sender is Map) {
+      final map = Map<String, dynamic>.from(sender);
+      final value = map['displayName']?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+
+    final actors = message['actors'];
+    if (actors is List && actors.isNotEmpty && actors.first is Map) {
+      final first = Map<String, dynamic>.from(actors.first as Map);
+      final value = first['displayName']?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+
+    return '';
   }
 
   String _idValue(dynamic value) {

@@ -137,6 +137,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               : null,
           artistId: track.artistId,
           artistPermalink: track.artistPermalink,
+          waveform: track.waveform,
         )
       ],
       startIndex: 0,
