@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../network/dio_client.dart';
 import '../router/app_router.dart';
+import 'local_notification_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -29,6 +30,11 @@ class FcmService {
   static String? _lastRegisteredAuth;
   static StreamSubscription<String>? _tokenRefreshSub;
   static StreamSubscription<RemoteMessage>? _openedAppSub;
+  static StreamSubscription<RemoteMessage>? _foregroundMessageSub;
+
+  /// Assigned by the notification lifecycle provider so foreground FCM messages
+  /// update the in-app notification feed. Cleared on logout.
+  static void Function(Map<String, dynamic>)? onForegroundMessage;
 
   static void registerBackgroundHandler() {
     if (kIsWeb || _backgroundHandlerRegistered) return;
@@ -63,6 +69,10 @@ class FcmService {
       _openedAppSub = FirebaseMessaging.onMessageOpenedApp.listen(
         _handleNotificationTap,
       );
+
+      await _foregroundMessageSub?.cancel();
+      _foregroundMessageSub =
+          FirebaseMessaging.onMessage.listen(_onForegroundMessage);
 
       await _tokenRefreshSub?.cancel();
       _tokenRefreshSub = _messaging.onTokenRefresh.listen((token) {
@@ -184,6 +194,25 @@ class FcmService {
   static Future<void> _createAndroidChannel() async {
     // The native MainActivity channel uses the same ID. Firebase uses this
     // default channel for background/killed notification payloads.
+  }
+
+  static void _onForegroundMessage(RemoteMessage message) {
+    final data = message.data;
+
+    // Forward to the in-app notification provider if a listener is registered.
+    onForegroundMessage?.call(data);
+
+    // Show a system-tray notification for foreground messages that carry a
+    // visible notification payload (data-only messages have no notification).
+    final notif = message.notification;
+    if (notif == null) return;
+    final actionLink = data['actionLink']?.toString() ?? '';
+    final payload = actionLink.isNotEmpty ? actionLink : '/notifications';
+    unawaited(LocalNotificationService.showNotification(
+      title: notif.title ?? 'BioBeats',
+      body: notif.body ?? 'Tap to open BioBeats',
+      payload: payload,
+    ));
   }
 
   static void _handleNotificationTap(RemoteMessage message) {

@@ -32,14 +32,16 @@ class SubscriptionState {
     String? expiresAt,
     bool? cancelAtPeriodEnd,
     String? planType,
+    bool clearExpiresAt = false,
+    bool clearPlanType = false,
   }) {
     return SubscriptionState(
       isPremium: isPremium ?? this.isPremium,
       isLoading: isLoading ?? this.isLoading,
       error: error,
-      expiresAt: expiresAt ?? this.expiresAt,
+      expiresAt: clearExpiresAt ? null : (expiresAt ?? this.expiresAt),
       cancelAtPeriodEnd: cancelAtPeriodEnd ?? this.cancelAtPeriodEnd,
-      planType: planType ?? this.planType,
+      planType: clearPlanType ? null : (planType ?? this.planType),
     );
   }
 }
@@ -100,25 +102,49 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       final user = response.data['data']['user'] as Map<String, dynamic>?;
       final isPremium = user?['isPremium'] as bool? ?? false;
 
-      // Try to read planType from various possible backend response structures
+      // Try to read planType from various possible backend response structures.
+      // The API spec names this field subscriptionPlan on the user object.
       final subscription = user?['subscription'] as Map<String, dynamic>?;
-      final remotePlanType = subscription?['planType'] as String?
-          ?? user?['planType'] as String?;
+      final remotePlanType = subscription?['planType'] as String? ??
+          subscription?['subscriptionPlan'] as String? ??
+          user?['planType'] as String? ??
+          user?['subscriptionPlan'] as String?;
+      final remoteExpiresAt = subscription?['expiresAt']?.toString() ??
+          subscription?['subscriptionExpiresAt']?.toString() ??
+          user?['expiresAt']?.toString() ??
+          user?['subscriptionExpiresAt']?.toString();
+      final remoteCancelAtPeriodEnd =
+          subscription?['cancelAtPeriodEnd'] as bool? ??
+              user?['cancelAtPeriodEnd'] as bool? ??
+              false;
 
       await prefs.setBool('isPremium', isPremium);
       if (remotePlanType != null) {
         await prefs.setString('subscriptionPlanType', remotePlanType);
+      } else {
+        await prefs.remove('subscriptionPlanType');
       }
+      if (remoteExpiresAt != null) {
+        await prefs.setString('subscriptionExpiresAt', remoteExpiresAt);
+      } else {
+        await prefs.remove('subscriptionExpiresAt');
+      }
+      await prefs.setBool('cancelAtPeriodEnd', remoteCancelAtPeriodEnd);
 
       debugPrint(
         '[Subscription] refreshFromProfile — isPremium: $isPremium, '
-        'planType: $remotePlanType',
+        'planType: $remotePlanType, expiresAt: $remoteExpiresAt, '
+        'cancelAtPeriodEnd: $remoteCancelAtPeriodEnd',
       );
 
       state = state.copyWith(
         isPremium: isPremium,
         isLoading: false,
-        planType: remotePlanType ?? state.planType,
+        planType: remotePlanType,
+        clearPlanType: remotePlanType == null,
+        expiresAt: remoteExpiresAt,
+        clearExpiresAt: remoteExpiresAt == null,
+        cancelAtPeriodEnd: remoteCancelAtPeriodEnd,
       );
     } catch (_) {
       state = state.copyWith(isLoading: false);

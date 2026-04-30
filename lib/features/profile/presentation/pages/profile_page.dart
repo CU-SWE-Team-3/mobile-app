@@ -268,6 +268,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       }
       final playlists = items
           .whereType<Map<String, dynamic>>()
+          .where((json) {
+            final isPrivate = json['isPrivate'] as bool?;
+            return json['isPublic'] as bool? ?? !(isPrivate ?? false);
+          })
           .map(_ProfilePlaylist.fromJson)
           .toList();
       if (mounted)

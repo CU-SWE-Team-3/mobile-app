@@ -196,6 +196,7 @@ class AddToPlaylistPage extends ConsumerWidget {
         backgroundColor: const Color(0xFF111111),
         elevation: 0,
         leading: IconButton(
+          key: const ValueKey('playlist_back_button'),
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () => Navigator.maybePop(context),
         ),
@@ -219,6 +220,7 @@ class AddToPlaylistPage extends ConsumerWidget {
             )
           else
             TextButton(
+              key: const ValueKey('playlist_add_tracks_button'),
               onPressed: state.selectedId == null
                   ? null
                   : () async {
@@ -280,6 +282,7 @@ class AddToPlaylistPage extends ConsumerWidget {
                         itemBuilder: (_, i) {
                           final pl = state.playlists[i];
                           return _PlaylistRow(
+                            key: ValueKey('playlist_tile_${pl.id}'),
                             playlist: pl,
                             isSelected: state.selectedId == pl.id,
                             onTap: () => notifier.select(pl.id),
@@ -301,6 +304,7 @@ class _PlaylistRow extends StatelessWidget {
   final VoidCallback onTap;
 
   const _PlaylistRow({
+    super.key,
     required this.playlist,
     required this.isSelected,
     required this.onTap,
@@ -312,10 +316,12 @@ class _PlaylistRow extends StatelessWidget {
       onTap: onTap,
       splashColor: Colors.white10,
       highlightColor: Colors.white10,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
+      child: KeyedSubtree(
+        key: const ValueKey('playlist_tile'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: SizedBox(
@@ -388,7 +394,8 @@ class _PlaylistRow extends StatelessWidget {
                   ? const Icon(Icons.check, color: Colors.white, size: 14)
                   : null,
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -48,11 +48,13 @@ Future<TrackDownloadResult> downloadTrack({
   void Function(double)? onProgress,
 }) async {
   var sub = ref.read(subscriptionProvider);
-  if (!sub.isPremium) {
+  if (!sub.isPremium || sub.planType != 'Go+') {
     await ref.read(subscriptionProvider.notifier).refreshFromProfile();
     sub = ref.read(subscriptionProvider);
   }
-  if (!sub.isPremium) return const TrackDownloadPlanGated();
+  if (!sub.isPremium || sub.planType != 'Go+') {
+    return const TrackDownloadPlanGated();
+  }
 
   try {
     final dir = await getApplicationDocumentsDirectory();
@@ -113,7 +115,7 @@ Future<TrackDownloadResult> downloadTrack({
       }
       final msg = backendMsg.isNotEmpty
           ? backendMsg
-          : 'Offline downloads require Go+ or Artist Pro.';
+          : 'Offline downloads require Go+.';
       return TrackDownloadError(msg);
     }
     return const TrackDownloadError('Download failed. Please try again.');

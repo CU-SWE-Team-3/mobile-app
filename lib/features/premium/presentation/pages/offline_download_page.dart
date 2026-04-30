@@ -12,7 +12,7 @@ class OfflineDownloadPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sub = ref.watch(subscriptionProvider);
-    final isPremium = sub.isPremium;
+    final isGoPlus = sub.isPremium && sub.planType == 'Go+';
     final downloadsAsync = ref.watch(offlineDownloadsProvider);
 
     return Scaffold(
@@ -26,8 +26,8 @@ class OfflineDownloadPage extends ConsumerWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: !isPremium
-          ? _nonPremiumBody(context)
+      body: !isGoPlus
+          ? _nonGoPlusBody(context, sub)
           : Column(
               children: [
                 // Plan + download availability banner
@@ -58,7 +58,8 @@ class OfflineDownloadPage extends ConsumerWidget {
     );
   }
 
-  Widget _nonPremiumBody(BuildContext context) {
+  Widget _nonGoPlusBody(BuildContext context, SubscriptionState sub) {
+    final isPro = sub.isPremium && sub.planType == 'Pro';
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -77,10 +78,10 @@ class OfflineDownloadPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 28),
-          const Center(
+          Center(
             child: Text(
-              'Listen Anywhere, Anytime',
-              style: TextStyle(
+              isPro ? 'Go+ Required' : 'Listen Anywhere, Anytime',
+              style: const TextStyle(
                   color: Colors.white,
                   fontSize: 22,
                   fontWeight: FontWeight.w800),
@@ -88,10 +89,12 @@ class OfflineDownloadPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Center(
+          Center(
             child: Text(
-              'Download your favorite tracks and listen without an internet connection. Available with Artist Pro and Go+ plans.',
-              style: TextStyle(
+              isPro
+                  ? 'Artist Pro unlocks creator tools. Offline downloads require a Go+ subscription.'
+                  : 'Download your favorite tracks and listen without an internet connection. Available with Go+.',
+              style: const TextStyle(
                   color: Colors.white60, fontSize: 15, height: 1.6),
               textAlign: TextAlign.center,
             ),
@@ -120,7 +123,7 @@ class OfflineDownloadPage extends ConsumerWidget {
             width: double.infinity,
             height: 52,
             child: ElevatedButton(
-              onPressed: () => context.go('/upgrade'),
+              onPressed: () => context.go(isPro ? '/upgrade/status' : '/upgrade'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF5500),
                 foregroundColor: Colors.white,
@@ -128,9 +131,11 @@ class OfflineDownloadPage extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(32)),
                 elevation: 0,
               ),
-              child: const Text('Upgrade to unlock downloads',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700)),
+              child: Text(
+                isPro ? 'Manage subscription' : 'Upgrade to unlock downloads',
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ],
@@ -209,8 +214,8 @@ class _PlanBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isGoPlus = planType == 'Go+';
-    final label = isGoPlus ? 'Unlimited downloads' : 'Limited monthly downloads';
-    final plan = planType ?? 'Pro';
+    final label = isGoPlus ? 'Offline downloads enabled' : 'Go+ required';
+    final plan = planType ?? 'Free';
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

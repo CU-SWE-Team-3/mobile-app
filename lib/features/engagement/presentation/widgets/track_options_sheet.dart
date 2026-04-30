@@ -75,19 +75,19 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
       '[Download] isPremium=${sub.isPremium}, currentPlan=${sub.planType}',
     );
 
-    if (!sub.isPremium) {
+    if (!sub.isPremium || sub.planType != 'Go+') {
       await ref.read(subscriptionProvider.notifier).refreshFromProfile();
       sub = ref.read(subscriptionProvider);
       debugPrint('[Download] after refresh - isPremium=${sub.isPremium}');
     }
 
-    if (!sub.isPremium) {
+    if (!sub.isPremium || sub.planType != 'Go+') {
       if (!mounted) return;
       final scaffold = ScaffoldMessenger.of(context);
       Navigator.pop(context);
       scaffold.showSnackBar(
         const SnackBar(
-          content: Text('Offline downloads require Go+ or Artist Pro.'),
+          content: Text('Offline downloads require Go+.'),
           backgroundColor: Color(0xFF333333),
         ),
       );
@@ -141,7 +141,7 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
       } else if (e.response?.statusCode == 403) {
         final data = e.response?.data;
         msg = (data is Map ? data['message'] as String? : null) ??
-            'Offline downloads require Go+ or Artist Pro.';
+            'Offline downloads require Go+.';
       } else {
         msg = 'Download failed. Please try again.';
       }
@@ -333,6 +333,7 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                       ),
                     )
                   : _OptionTile(
+                      key: const ValueKey('premium_download_button'),
                       icon: Icons.download_outlined,
                       label: 'Download',
                       onTap: _handleDownload,
@@ -761,6 +762,7 @@ class _OptionTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _OptionTile({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,

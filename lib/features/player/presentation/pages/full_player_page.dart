@@ -108,7 +108,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
           setState(() { _isDownloading = false; _downloadProgress = 0.0; });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Offline downloads require Go+ or Artist Pro.'),
+              content: Text('Offline downloads require Go+.'),
               backgroundColor: Color(0xFF333333),
             ),
           );
@@ -743,9 +743,11 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                   artistName: playerState.currentTrack?.artist ?? '',
                                   artworkUrl: playerState.currentTrackArtworkUrl,
                                 ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+                        child: KeyedSubtree(
+                          key: const ValueKey('premium_download_button'),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
                             SizedBox(
                               width: 26,
                               height: 26,
@@ -779,7 +781,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                 fontSize: 11,
                               ),
                             ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ],
