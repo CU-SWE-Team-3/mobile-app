@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -1034,8 +1036,7 @@ class _WaveformPainter extends CustomPainter {
     final y = size.height / 2;
     final splitX = (size.width * progress).clamp(0.0, size.width);
 
-    // Flat-line mode: no waveform data, or track is paused
-    if (waveform == null || waveform!.isEmpty || !isPlaying) {
+    if (!isPlaying) {
       const strokeWidth = 2.0;
       final playedPaint = Paint()
         ..color = AppTheme.primary
@@ -1047,8 +1048,7 @@ class _WaveformPainter extends CustomPainter {
         ..style = PaintingStyle.stroke;
       canvas.drawLine(Offset(0, y), Offset(splitX, y), playedPaint);
       canvas.drawLine(Offset(splitX, y), Offset(size.width, y), unplayedPaint);
-      // Progress marker dot shown when paused with a real position
-      if (!isPlaying && progress > 0) {
+      if (progress > 0) {
         canvas.drawCircle(
           Offset(splitX, y),
           4.5,
@@ -1060,12 +1060,15 @@ class _WaveformPainter extends CustomPainter {
       return;
     }
 
-    // Bar mode: track is playing with real waveform data
-    final heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
+    final heights = (waveform != null && waveform!.isNotEmpty)
+        ? waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList()
+        : _buildFallbackHeights(size.width);
 
     final barCount = heights.length;
+    if (barCount == 0) return;
     const spacing = 2.0;
-    final barWidth = (size.width - (barCount - 1) * spacing) / barCount;
+    final usableWidth = size.width - (barCount - 1) * spacing;
+    final barWidth = barCount <= 0 ? size.width : usableWidth / barCount;
 
     final playedPaint = Paint()
       ..color = AppTheme.primary
@@ -1085,6 +1088,16 @@ class _WaveformPainter extends CustomPainter {
       canvas.drawRRect(
           rect, i / barCount < progress ? playedPaint : unplayedPaint);
     }
+  }
+
+  List<double> _buildFallbackHeights(double width) {
+    final count = (width / 6).floor().clamp(18, 72);
+    return List<double>.generate(count, (index) {
+      final waveA = (sin(index * 0.52) + 1) / 2;
+      final waveB = (cos(index * 0.21) + 1) / 2;
+      final value = (waveA * 0.65) + (waveB * 0.35);
+      return value.clamp(0.18, 0.92);
+    });
   }
 
   @override

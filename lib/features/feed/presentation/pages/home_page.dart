@@ -22,11 +22,13 @@ class _FeedTrack {
   final String? artworkUrl;
   final String hlsUrl;
   final int playCount;
+  final int? durationSeconds;
   final int likeCount;
   final int repostCount;
   final bool isLiked;
   final bool isReposted;
   final List<int>? waveform;
+  final String? trackPermalink;
   final String? likedByName;
   final String? likedByAvatarUrl;
 
@@ -37,6 +39,7 @@ class _FeedTrack {
     required this.artworkUrl,
     required this.hlsUrl,
     required this.playCount,
+    this.durationSeconds,
     this.artistId,
     this.artistPermalink,
     this.likeCount = 0,
@@ -44,26 +47,52 @@ class _FeedTrack {
     this.isLiked = false,
     this.isReposted = false,
     this.waveform,
+    this.trackPermalink,
     this.likedByName,
     this.likedByAvatarUrl,
   });
 
   factory _FeedTrack.fromJson(Map<String, dynamic> json) {
-    final target = json['target'] as Map<String, dynamic>?;
-    final track = target ?? json;
-    final artist = track['artist'] as Map<String, dynamic>? ?? {};
-    final audio = track['audio'] as Map<String, dynamic>?;
+    final target = _asMap(json['target']);
+    final targetTrack = _asMap(target?['track']);
+    final nestedTrack = _asMap(json['track']);
+    final track = targetTrack ?? target ?? nestedTrack ?? json;
+    final artist = _asMap(track['artist']) ??
+        _asMap(track['user']) ??
+        _asMap(json['artist']) ??
+        _asMap(json['user']) ??
+        const <String, dynamic>{};
+    final audio = _asMap(track['audio']);
+    final media = _asMap(track['media']);
     final isActivity = target != null || json.containsKey('activityType');
     final actor = isActivity ? _activityActor(json) : null;
+    final trackId =
+        track['_id']?.toString() ?? track['id']?.toString() ?? '';
+    final fallbackHlsUrl = trackId.isEmpty
+        ? ''
+        : 'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/$trackId/playlist.m3u8';
+    final artworkUrl = (track['artworkUrl'] ??
+            track['artwork_url'] ??
+            json['artworkUrl'] ??
+            json['artwork_url'])
+        ?.toString();
+    final artistName = (artist['displayName'] ??
+            artist['username'] ??
+            artist['name'] ??
+            track['artistName'] ??
+            track['ownerName'] ??
+            json['artistName'])
+        ?.toString();
     return _FeedTrack(
-      id: track['_id'] as String? ?? '',
-      title: track['title'] as String? ?? '',
-      artistName: artist['displayName'] as String? ?? '',
-      artistId: artist['_id'] as String?,
-      artistPermalink: artist['permalink'] as String?,
-      artworkUrl: track['artworkUrl'] as String?,
-      hlsUrl: track['hlsUrl'] as String? ?? audio?['hlsUrl'] as String? ?? '',
+      id: trackId,
+      title: track['title']?.toString() ?? '',
+      artistName: artistName ?? '',
+      artistId: artist['_id']?.toString() ?? artist['id']?.toString(),
+      artistPermalink: artist['permalink']?.toString(),
+      artworkUrl: artworkUrl,
+      hlsUrl: _extractHlsUrl(track, audio, media) ?? fallbackHlsUrl,
       playCount: (track['playCount'] as num?)?.toInt() ?? 0,
+      durationSeconds: (track['duration'] as num?)?.toInt(),
       likeCount: (track['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (track['repostCount'] as num?)?.toInt() ?? 0,
       isLiked: track['isLiked'] as bool? ?? false,
@@ -71,6 +100,7 @@ class _FeedTrack {
       waveform: (track['waveform'] as List<dynamic>?)
           ?.map((e) => (e as num).toInt())
           .toList(),
+      trackPermalink: track['permalink']?.toString(),
       likedByName: actor?['displayName'] as String? ??
           actor?['username'] as String? ??
           actor?['name'] as String?,
@@ -78,6 +108,51 @@ class _FeedTrack {
           actor?['profileImageUrl'] as String? ??
           actor?['photoUrl'] as String?,
     );
+  }
+
+  static Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
+  static String? _extractHlsUrl(
+    Map<String, dynamic> track,
+    Map<String, dynamic>? audio,
+    Map<String, dynamic>? media,
+  ) {
+    final direct = (track['hlsUrl'] ??
+            audio?['hlsUrl'] ??
+            media?['hlsUrl'] ??
+            track['audioUrl'] ??
+            track['streamUrl'])
+        ?.toString();
+    if (direct != null && direct.isNotEmpty) return direct;
+
+    final transcodings = media?['transcodings'];
+    if (transcodings is List) {
+      for (final item in transcodings) {
+        final transcoding = _asMap(item);
+        if (transcoding == null) continue;
+        final format = _asMap(transcoding['format']);
+        final protocol = format?['protocol']?.toString();
+        final preset = format?['preset']?.toString();
+        final url = transcoding['url']?.toString();
+        if (url == null || url.isEmpty) continue;
+        if (protocol == 'hls' ||
+            (preset?.toLowerCase().contains('hls') ?? false)) {
+          return url;
+        }
+      }
+
+      for (final item in transcodings) {
+        final transcoding = _asMap(item);
+        final url = transcoding?['url']?.toString();
+        if (url != null && url.isNotEmpty) return url;
+      }
+    }
+
+    return null;
   }
 
   static Map<String, dynamic>? _activityActor(Map<String, dynamic> json) {
@@ -110,6 +185,7 @@ class _FeedTrack {
       artworkUrl: artworkUrl,
       hlsUrl: hlsUrl,
       playCount: playCount,
+      durationSeconds: durationSeconds,
       artistId: artistId,
       artistPermalink: artistPermalink,
       likeCount: likeCount ?? this.likeCount,
@@ -117,6 +193,7 @@ class _FeedTrack {
       isLiked: isLiked ?? this.isLiked,
       isReposted: isReposted ?? this.isReposted,
       waveform: waveform,
+      trackPermalink: trackPermalink,
       likedByName: likedByName ?? this.likedByName,
       likedByAvatarUrl: likedByAvatarUrl ?? this.likedByAvatarUrl,
     );
@@ -126,6 +203,7 @@ class _FeedTrack {
 class _GenreTheme {
   final String label;
   final String query;
+  final List<String> trendingQueries;
   final Color accent;
   final Color glow;
   final List<Color> surface;
@@ -133,10 +211,14 @@ class _GenreTheme {
   const _GenreTheme({
     required this.label,
     required this.query,
+    this.trendingQueries = const [],
     required this.accent,
     required this.glow,
     required this.surface,
   });
+
+  List<String> get effectiveTrendingQueries =>
+      trendingQueries.isEmpty ? <String>[query] : trendingQueries;
 }
 
 class HomePage extends ConsumerStatefulWidget {
@@ -149,18 +231,11 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   static const List<_GenreTheme> _genres = [
     _GenreTheme(
-      label: 'INDIE',
-      query: 'Indie',
-      accent: Color(0xFF6A89FF),
-      glow: Color(0x333C5BFF),
-      surface: [Color(0xFF182033), Color(0xFF13161F)],
-    ),
-    _GenreTheme(
-      label: 'SOUNDCLOUD',
-      query: 'SoundCloud',
-      accent: Color(0xFFFF7A3C),
-      glow: Color(0x33FF6428),
-      surface: [Color(0xFF2A1F18), Color(0xFF141414)],
+      label: 'HIP-HOP & RAP',
+      query: 'Hiphop & rap',
+      accent: Color(0xFF9B5CFF),
+      glow: Color(0x339B5CFF),
+      surface: [Color(0xFF24173B), Color(0xFF141414)],
     ),
     _GenreTheme(
       label: 'ELECTRONIC',
@@ -170,11 +245,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       surface: [Color(0xFF2B1B27), Color(0xFF141414)],
     ),
     _GenreTheme(
-      label: 'COUNTRY',
-      query: 'Country',
-      accent: Color(0xFFF1C36B),
-      glow: Color(0x33F1C36B),
-      surface: [Color(0xFF30261A), Color(0xFF141414)],
+      label: 'POP',
+      query: 'Pop',
+      accent: Color(0xFFEED17A),
+      glow: Color(0x33EED17A),
+      surface: [Color(0xFF2A2418), Color(0xFF141414)],
     ),
     _GenreTheme(
       label: 'TECHNO',
@@ -184,32 +259,34 @@ class _HomePageState extends ConsumerState<HomePage> {
       surface: [Color(0xFF2E1B25), Color(0xFF141414)],
     ),
     _GenreTheme(
-      label: 'REGGAE',
-      query: 'Reggae',
-      accent: Color(0xFF53E6A4),
-      glow: Color(0x3353E6A4),
-      surface: [Color(0xFF18271E), Color(0xFF141414)],
+      label: 'R&B',
+      query: 'R&B',
+      trendingQueries: [
+        'R&B',
+        'R&B & Soul',
+        'R&B & soul',
+        'RnB',
+        'Rnb',
+        'R & B',
+        'R and B',
+      ],
+      accent: Color(0xFF22C7B8),
+      glow: Color(0x3322C7B8),
+      surface: [Color(0xFF163032), Color(0xFF141414)],
     ),
     _GenreTheme(
-      label: 'JAZZ',
-      query: 'Jazz',
-      accent: Color(0xFFBBB2FF),
-      glow: Color(0x33BBB2FF),
-      surface: [Color(0xFF201D2A), Color(0xFF141414)],
+      label: 'HOUSE',
+      query: 'House',
+      accent: Color(0xFFFF5AA7),
+      glow: Color(0x33FF5AA7),
+      surface: [Color(0xFF321A28), Color(0xFF141414)],
     ),
     _GenreTheme(
-      label: 'POP',
-      query: 'Pop',
-      accent: Color(0xFFEED17A),
-      glow: Color(0x33EED17A),
-      surface: [Color(0xFF2A2418), Color(0xFF141414)],
-    ),
-    _GenreTheme(
-      label: 'FOLK',
-      query: 'Folk',
-      accent: Color(0xFF9AD0A2),
-      glow: Color(0x339AD0A2),
-      surface: [Color(0xFF1C241C), Color(0xFF141414)],
+      label: 'INDIE',
+      query: 'Indie',
+      accent: Color(0xFF6A89FF),
+      glow: Color(0x333C5BFF),
+      surface: [Color(0xFF182033), Color(0xFF13161F)],
     ),
   ];
 
@@ -357,23 +434,18 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _fetchTrending() async {
+    final selectedIndex = _selectedGenreIndex;
+    final genre = _genres[selectedIndex];
+
     setState(() {
       _isTrendingLoading = true;
     });
 
     try {
-      final response = await dioClient.dio.get(
-        '/discovery/trending',
-        queryParameters: {'genre': _genres[_selectedGenreIndex].query},
-      );
-      final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final rawTrending = data['trending'] as List<dynamic>? ?? [];
-      var tracks = rawTrending
-          .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
-          .where((track) => track.id.isNotEmpty)
-          .toList();
+      final tracks = await _fetchTrendingForGenre(genre);
 
       if (mounted) {
+        if (_selectedGenreIndex != selectedIndex) return;
         setState(() {
           _trendingTracks = tracks;
           _isTrendingLoading = false;
@@ -391,6 +463,40 @@ class _HomePageState extends ConsumerState<HomePage> {
         setState(() => _isTrendingLoading = false);
       }
     }
+  }
+
+  Future<List<_FeedTrack>> _fetchTrendingForGenre(
+    _GenreTheme genre, {
+    int? limit,
+  }) async {
+    for (final query in genre.effectiveTrendingQueries) {
+      try {
+        final response = await dioClient.dio.get(
+          '/discovery/trending',
+          queryParameters: {
+            'genre': query,
+            if (limit != null) 'limit': limit,
+          },
+        );
+        final tracks = _extractTrendingTracks(response.data);
+        if (tracks.isNotEmpty) return tracks;
+      } catch (error) {
+        debugPrint('Trending ${genre.label} query "$query" error: $error');
+      }
+    }
+    return const <_FeedTrack>[];
+  }
+
+  List<_FeedTrack> _extractTrendingTracks(dynamic body) {
+    final data = body is Map<String, dynamic>
+        ? body['data'] as Map<String, dynamic>?
+        : null;
+    final rawTrending = data?['trending'] as List<dynamic>? ?? [];
+    return rawTrending
+        .whereType<Map<String, dynamic>>()
+        .map(_FeedTrack.fromJson)
+        .where((track) => track.id.isNotEmpty)
+        .toList();
   }
 
   Future<void> _fetchRecommended() async {
@@ -455,8 +561,11 @@ class _HomePageState extends ConsumerState<HomePage> {
           artworkUrl: stationArtworkUrl,
           hlsUrl: firstTrack.hlsUrl,
           playCount: firstTrack.playCount,
+          durationSeconds: firstTrack.durationSeconds,
           artistId: firstTrack.artistId,
           artistPermalink: firstTrack.artistPermalink,
+          waveform: firstTrack.waveform,
+          trackPermalink: firstTrack.trackPermalink,
         );
 
         stationCards.add(stationTrack);
@@ -502,16 +611,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final entries = await Future.wait(
       _genres.map((genre) async {
         try {
-          final response = await dioClient.dio.get(
-            '/discovery/trending',
-            queryParameters: {'genre': genre.query, 'limit': 5},
-          );
-          final data = response.data['data'] as Map<String, dynamic>? ?? {};
-          final rawTrending = data['trending'] as List<dynamic>? ?? [];
-          final tracks = rawTrending
-              .map((e) => _FeedTrack.fromJson(e as Map<String, dynamic>))
-              .where((track) => track.id.isNotEmpty)
-              .toList();
+          final tracks = await _fetchTrendingForGenre(genre, limit: 5);
           return MapEntry(genre.query, tracks);
         } catch (e) {
           debugPrint('Buzzing ${genre.query} error: $e');
@@ -543,7 +643,11 @@ class _HomePageState extends ConsumerState<HomePage> {
             artistPermalink: item.artistPermalink,
             audioUrl: item.hlsUrl,
             coverUrl: item.artworkUrl,
+            duration: item.durationSeconds != null
+                ? Duration(seconds: item.durationSeconds!)
+                : null,
             waveform: item.waveform,
+            trackPermalink: item.trackPermalink,
           ),
         )
         .toList();
@@ -1407,6 +1511,7 @@ class _TrendingListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      key: const ValueKey('trending_track_tile'),
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Padding(
@@ -1978,7 +2083,11 @@ class _GenreStationPage extends ConsumerWidget {
             artistPermalink: item.artistPermalink,
             audioUrl: item.hlsUrl,
             coverUrl: item.artworkUrl,
+            duration: item.durationSeconds != null
+                ? Duration(seconds: item.durationSeconds!)
+                : null,
             waveform: item.waveform,
+            trackPermalink: item.trackPermalink,
           ),
         )
         .toList();

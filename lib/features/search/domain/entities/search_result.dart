@@ -11,6 +11,7 @@ class SearchResultTrack {
   final int? durationSeconds;
   final int playCount;
   final List<int>? waveform;
+  final String? permalink;
 
   const SearchResultTrack({
     required this.id,
@@ -23,6 +24,7 @@ class SearchResultTrack {
     this.durationSeconds,
     this.playCount = 0,
     this.waveform,
+    this.permalink,
   });
 
   factory SearchResultTrack.fromJson(Map<String, dynamic> json) {
@@ -41,12 +43,16 @@ class SearchResultTrack {
       artistId: artist['_id'] as String?,
       artistPermalink: artist['permalink'] as String?,
       artworkUrl: json['artworkUrl'] as String?,
-      hlsUrl: json['hlsUrl'] as String? ?? '',
+      hlsUrl: json['hlsUrl'] as String? ??
+          json['audioUrl'] as String? ??
+          json['streamUrl'] as String? ??
+          '',
       durationSeconds: (json['duration'] as num?)?.toInt(),
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       waveform: (json['waveform'] as List<dynamic>?)
           ?.map((e) => (e as num).toInt())
           .toList(),
+      permalink: json['permalink'] as String?,
     );
   }
 }

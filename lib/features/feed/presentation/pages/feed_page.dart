@@ -293,6 +293,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
           color: const Color(0xFFFF5500),
           backgroundColor: const Color(0xFF1A1A1A),
           child: PageView.builder(
+            key: const ValueKey('feed_track_list'),
             controller: _pageController,
             scrollDirection: Axis.vertical,
             physics: const AlwaysScrollableScrollPhysics(),
@@ -394,6 +395,7 @@ class _ErrorView extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
+              key: const ValueKey('feed_retry_button'),
               onPressed: onRetry,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF5500),

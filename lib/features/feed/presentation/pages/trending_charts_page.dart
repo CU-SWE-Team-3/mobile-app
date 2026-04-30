@@ -127,6 +127,7 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 8),
                           child: Row(
+                            key: const ValueKey('trending_track_tile'),
                             children: [
                               // Rank number
                               SizedBox(

@@ -560,7 +560,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                             _playlistRow(context),
                             _sectionHeader('Likes', onSeeAll: () {
                               _playFromLikes(0);
-                              context.push('/likes');
+                              context.push('/profile/likes');
                             }),
                             _likesList(),
                             const SizedBox(height: 120),

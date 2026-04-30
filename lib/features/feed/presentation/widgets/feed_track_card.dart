@@ -91,6 +91,7 @@ class _FeedTrackCardState extends ConsumerState<FeedTrackCard> {
         !resolvedArtwork.contains('default-artwork');
 
     return Stack(
+      key: const ValueKey('feed_track_tile'),
       fit: StackFit.expand,
       children: [
         // ── Background artwork ───────────────────────────────────────────

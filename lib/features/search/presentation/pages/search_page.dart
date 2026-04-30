@@ -138,6 +138,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           artistId: track.artistId,
           artistPermalink: track.artistPermalink,
           waveform: track.waveform,
+          trackPermalink: track.permalink,
         )
       ],
       startIndex: 0,
@@ -371,6 +372,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           for (final t in state.visibleTracks)
             SearchResultTile(
               key: ValueKey('search_result_track_${t.id}'),
+              tileKey: const ValueKey('search_track_tile'),
               displayName: t.title,
               subtitle: t.artistName,
               imageUrl: t.artworkUrl,
@@ -383,6 +385,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           for (final u in state.visibleUsers)
             SearchResultTile(
               key: ValueKey('search_result_user_${u.id}'),
+              tileKey: const ValueKey('search_user_tile'),
               displayName: u.displayName,
               subtitle: u.bio != null && u.bio!.isNotEmpty
                   ? u.bio!
@@ -397,6 +400,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           for (final p in state.visiblePlaylists)
             SearchResultTile(
               key: ValueKey('search_result_playlist_${p.id}'),
+              tileKey: const ValueKey('search_playlist_tile'),
               displayName: p.title,
               subtitle: p.creatorName ?? '',
               imageUrl: p.artworkUrl,
@@ -498,6 +502,13 @@ class _TabBarState extends State<_TabBar>
     }
   }
 
+  String _tabKey(int index) => switch (_tabs[index].filter) {
+        SearchFilter.tracks => 'search_tab_tracks',
+        SearchFilter.users => 'search_tab_users',
+        SearchFilter.playlists => 'search_tab_playlists',
+        _ => 'search_tab_${_tabs[index].label.toLowerCase()}',
+      };
+
   @override
   void dispose() {
     _animCtrl.dispose();
@@ -539,7 +550,7 @@ class _TabBarState extends State<_TabBar>
                           width: _tabWidth,
                           height: _barH,
                           child: GestureDetector(
-                            key: ValueKey('search_tab_${_tabs[i].label.toLowerCase()}'),
+                            key: ValueKey(_tabKey(i)),
                             onTap: () => _onTabTap(i),
                             behavior: HitTestBehavior.opaque,
                             child: Center(
