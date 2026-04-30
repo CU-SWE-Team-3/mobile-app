@@ -144,8 +144,11 @@ class UploadNotifier extends StateNotifier<UploadState> {
       if (permalink.isNotEmpty) {
         final profileResp = await dioClient.dio.get('/profile/$permalink');
         final user = profileResp.data['data']?['user'] as Map<String, dynamic>?;
-        final planType = (user?['subscription']?['planType'] as String?) ??
+        final subscription = user?['subscription'] as Map<String, dynamic>?;
+        final planType = (subscription?['planType'] as String?) ??
+            (subscription?['subscriptionPlan'] as String?) ??
             (user?['planType'] as String?) ??
+            (user?['subscriptionPlan'] as String?) ??
             prefs.getString('subscriptionPlanType');
         if (planType != null && planType != 'Pro') {
           int? tracksCount;

@@ -228,8 +228,10 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
               ),
               ListTile(
                 key: const ValueKey('track_options_download_button'),
-                leading:
-                    const Icon(Icons.download_outlined, color: Colors.white),
+                leading: const KeyedSubtree(
+                  key: ValueKey('premium_download_button'),
+                  child: Icon(Icons.download_outlined, color: Colors.white),
+                ),
                 title: const Text('Download',
                     style: TextStyle(color: Colors.white)),
                 onTap: () {
@@ -274,17 +276,17 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
     debugPrint(
         '[Download] isPremium=${sub.isPremium}, currentPlan=${sub.planType}');
 
-    if (!sub.isPremium) {
+    if (!sub.isPremium || sub.planType != 'Go+') {
       await ref.read(subscriptionProvider.notifier).refreshFromProfile();
       sub = ref.read(subscriptionProvider);
       debugPrint('[Download] after refresh — isPremium=${sub.isPremium}');
     }
 
-    if (!sub.isPremium) {
+    if (!sub.isPremium || sub.planType != 'Go+') {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Offline downloads require Go+ or Artist Pro.'),
+          content: Text('Offline downloads require Go+.'),
           backgroundColor: Color(0xFF333333),
         ),
       );
@@ -329,7 +331,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
       } else if (e.response?.statusCode == 403) {
         final data = e.response?.data;
         msg = (data is Map ? data['message'] as String? : null) ??
-            'Offline downloads require Go+ or Artist Pro.';
+            'Offline downloads require Go+.';
       } else {
         msg = 'Download failed. Please try again.';
       }

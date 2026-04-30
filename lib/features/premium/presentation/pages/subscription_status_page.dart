@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -79,6 +80,7 @@ class _StatusBody extends ConsumerWidget {
                     ),
                     const SizedBox(width: 12),
                     Text(
+                      key: const ValueKey('premium_current_plan_label'),
                       sub.isPremium
                           ? 'You are on ${planDisplayName(sub.planType)}'
                           : 'Free Plan',
@@ -97,7 +99,7 @@ class _StatusBody extends ConsumerWidget {
                   const SizedBox(height: 6),
                   Text(
                     sub.planType == 'Pro'
-                        ? 'Unlimited uploads · Offline downloads · Ad-free'
+                        ? 'Unlimited uploads · Scheduled releases · Ad-free'
                         : 'Offline downloads · Ad-free listening',
                     style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
@@ -217,7 +219,7 @@ class _StatusBody extends ConsumerWidget {
             const SizedBox(height: 16),
             if (sub.planType == 'Pro') ...[
               const _PerkTile(Icons.cloud_upload_outlined, 'Unlimited uploads'),
-              const _PerkTile(Icons.download_outlined, 'Offline downloads'),
+              const _PerkTile(Icons.schedule, 'Scheduled releases'),
               const _PerkTile(Icons.music_off, 'Ad-free listening'),
               const _PerkTile(Icons.cancel_outlined, 'Cancel anytime'),
             ] else if (sub.planType == 'Go+') ...[
@@ -235,28 +237,30 @@ class _StatusBody extends ConsumerWidget {
           const SizedBox(height: 48),
 
           // ── DEV reset ────────────────────────────────────────────────
-          const Divider(color: Color(0xFF2A2A2A)),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () async {
-              await ref
-                  .read(subscriptionProvider.notifier)
-                  .devReset();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                        'DEV: local premium state reset. Subscribe again to test.'),
-                    backgroundColor: Colors.blueGrey,
-                  ),
-                );
-              }
-            },
-            child: const Text(
-              'DEV: Reset premium state',
-              style: TextStyle(color: Colors.white24, fontSize: 12),
+          if (kDebugMode) ...[
+            const Divider(color: Color(0xFF2A2A2A)),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () async {
+                await ref
+                    .read(subscriptionProvider.notifier)
+                    .devReset();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'DEV: local premium state reset. Subscribe again to test.'),
+                      backgroundColor: Colors.blueGrey,
+                    ),
+                  );
+                }
+              },
+              child: const Text(
+                'DEV: Reset premium state',
+                style: TextStyle(color: Colors.white24, fontSize: 12),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

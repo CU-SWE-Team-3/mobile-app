@@ -169,6 +169,7 @@ class PremiumPaywallPage extends ConsumerWidget {
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
+                      key: const ValueKey('premium_subscribe_button'),
                       onPressed: sub.isLoading
                           ? null
                           : () => ref
@@ -248,8 +249,8 @@ class PremiumPaywallPage extends ConsumerWidget {
                     text: 'Ad-free listening',
                   ),
                   const _FeatureRow(
-                    icon: Icons.download_outlined,
-                    text: 'Offline downloads',
+                    icon: Icons.schedule,
+                    text: 'Scheduled releases',
                   ),
 
                   const SizedBox(height: 40),
@@ -295,6 +296,7 @@ class _SubscribedView extends ConsumerWidget {
               const SizedBox(height: 24),
 
               Text(
+                key: const ValueKey('premium_current_plan_label'),
                 'You are on $planName',
                 style: const TextStyle(
                   color: Colors.white,

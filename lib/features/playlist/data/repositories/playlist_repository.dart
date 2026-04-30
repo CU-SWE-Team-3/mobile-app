@@ -17,12 +17,21 @@ class PlaylistRepository {
 
   /// POST /playlists — returns the server-issued playlist ID.
   Future<String> create(String title, bool isPublic) async {
-    final response = await _dio.post(
-      '/playlists',
-      data: {'title': title, 'isPrivate': !isPublic},
-    );
+    late final Response<dynamic> response;
+    try {
+      response = await _dio.post(
+        '/playlists',
+        data: {'title': title, 'isPrivate': !isPublic},
+      );
+    } on DioException catch (e) {
+      final raw = e.response?.data ?? e.message;
+      debugPrint('[PlaylistRepository.create] raw: $raw');
+      throw Exception(
+        'Create playlist failed (${e.response?.statusCode}): $raw',
+      );
+    }
     final raw = response.data;
-    debugPrint('[PlaylistRepository.create] raw response: $raw');
+    debugPrint('[PlaylistRepository.create] raw: $raw');
 
     // Try each known response shape in order of specificity.
     String? id;
@@ -50,10 +59,17 @@ class PlaylistRepository {
     return id;
   }
 
-  /// PATCH /playlists/{id} — update mutable metadata fields (title, etc.).
-  Future<void> updateMetadata(String id, {String? title}) async {
+  /// PATCH /playlists/{id} — update mutable metadata fields in a single call.
+  Future<void> updateMetadata(
+    String id, {
+    String? title,
+    bool? isPublic,
+    String? description,
+  }) async {
     final body = <String, dynamic>{};
     if (title != null) body['title'] = title;
+    if (isPublic != null) body['isPrivate'] = !isPublic;
+    if (description != null) body['description'] = description;
     if (body.isEmpty) return;
     await _dio.patch('/playlists/$id', data: body);
   }

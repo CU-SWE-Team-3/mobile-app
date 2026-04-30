@@ -37,6 +37,7 @@ class Playlist {
 
   factory Playlist.fromJson(Map<String, dynamic> json) {
     final creator = json['creator'] as Map<String, dynamic>?;
+    final isPrivate = json['isPrivate'] as bool?;
     return Playlist(
       id: json['id'] as String?,
       title: json['title'] as String? ?? '',
@@ -46,7 +47,7 @@ class Playlist {
           (creator?['displayName'] as String?) ??
           '',
       trackCount: json['trackCount'] as int? ?? 0,
-      isPublic: json['isPublic'] as bool? ?? true,
+      isPublic: json['isPublic'] as bool? ?? !(isPrivate ?? false),
       permalink: json['permalink'] as String?,
       ownerPermalink: (json['ownerPermalink'] as String?) ??
           (creator?['permalink'] as String?),

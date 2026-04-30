@@ -2,20 +2,38 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../data/repositories/playlist_repository.dart';
 import '../../domain/entities/playlist.dart';
 import '../widgets/embed_code_sheet.dart';
 import '../widgets/playlist_url_builder.dart';
 import '../../../messaging/presentation/widgets/send_to_sheet.dart';
 
-// ── Stub page (router entry /playlist/share kept alive) ──────────────────────
+// ── Provider (page-private) ───────────────────────────────────────────────────
+
+final _playlistByIdProvider =
+    FutureProvider.autoDispose.family<Playlist, String>((ref, playlistId) async {
+  if (playlistId.isEmpty) throw Exception('No playlist ID provided');
+  final repo = PlaylistRepository();
+  final data = await repo.fetchById(playlistId);
+  final normalized = Map<String, dynamic>.from(data);
+  normalized['id'] ??= normalized['_id'];
+  return Playlist.fromJson(normalized);
+});
+
+// ── Full-page share entry point ───────────────────────────────────────────────
 
 class SharePlaylistPage extends ConsumerWidget {
   const SharePlaylistPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final playlistId =
+        GoRouterState.of(context).uri.queryParameters['playlistId'] ?? '';
+    final playlistAsync = ref.watch(_playlistByIdProvider(playlistId));
+
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
@@ -25,9 +43,22 @@ class SharePlaylistPage extends ConsumerWidget {
             style: TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: const Center(
-        child: Text('Share Playlist',
-            style: TextStyle(color: Colors.white54, fontSize: 18)),
+      body: playlistAsync.when(
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+        ),
+        error: (_, __) => const Center(
+          child: Text(
+            'Could not load playlist.',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
+        data: (playlist) => SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: _ShareContent(playlist: playlist),
+          ),
+        ),
       ),
     );
   }
@@ -39,6 +70,53 @@ class SharePlaylistSheet extends StatelessWidget {
   final Playlist playlist;
 
   const SharePlaylistSheet({super.key, required this.playlist});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle — sheet chrome only, not shown on the full page
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            _ShareContent(
+              playlist: playlist,
+              // Pop the sheet before presenting any secondary sheet so it
+              // doesn't stack modals. Not needed in the full-page context.
+              onBeforeSecondarySheet: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Shared share content (used by both the sheet and the full page) ───────────
+
+class _ShareContent extends StatelessWidget {
+  final Playlist playlist;
+
+  /// Called before showing a secondary bottom sheet (Embed / SendTo).
+  /// In the bottom-sheet context this pops the share sheet first.
+  /// In the full-page context this is null (nothing to pop).
+  final VoidCallback? onBeforeSecondarySheet;
+
+  const _ShareContent({
+    required this.playlist,
+    this.onBeforeSecondarySheet,
+  });
 
   String get _url => buildPlaylistUrl(playlist);
 
@@ -67,164 +145,145 @@ class SharePlaylistSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Drag handle
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            // Header: artwork + title + owner + privacy badge
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 72,
-                      height: 72,
-                      child: playlist.artworkUrl != null &&
-                              playlist.artworkUrl!.isNotEmpty
-                          ? CachedNetworkImage(
-                              imageUrl: playlist.artworkUrl!,
-                              fit: BoxFit.cover,
-                              placeholder: (_, __) =>
-                                  const _ArtworkFallback(),
-                              errorWidget: (_, __, ___) =>
-                                  const _ArtworkFallback(),
-                            )
-                          : const _ArtworkFallback(),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          playlist.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          playlist.ownerName,
-                          style: const TextStyle(
-                              color: Color(0xFF999999), fontSize: 13),
-                        ),
-                        if (!playlist.isPublic) ...[
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.white12,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.lock_outline,
-                                    color: Colors.white54, size: 10),
-                                SizedBox(width: 3),
-                                Text('Private',
-                                    style: TextStyle(
-                                        color: Colors.white54, fontSize: 10)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.white12, height: 28),
-            const Padding(
-              padding: EdgeInsets.only(left: 16, bottom: 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'SHARE',
-                  style: TextStyle(
-                    color: Color(0xFF999999),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                  ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Header: artwork + title + owner + privacy badge
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: playlist.artworkUrl != null &&
+                          playlist.artworkUrl!.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: playlist.artworkUrl!,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => const _ArtworkFallback(),
+                          errorWidget: (_, __, ___) => const _ArtworkFallback(),
+                        )
+                      : const _ArtworkFallback(),
                 ),
               ),
-            ),
-            // Action buttons
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _ShareButton(
-                    icon: Icons.link_rounded,
-                    label: 'Copy Link',
-                    bgColor: const Color(0xFF2A2A2A),
-                    onTap: () => _copyLink(context),
-                  ),
-                  _ShareButton(
-                    icon: Icons.chat_rounded,
-                    label: 'WhatsApp',
-                    bgColor: const Color(0xFF25D366),
-                    onTap: _openWhatsApp,
-                  ),
-                  _ShareButton(
-                    icon: Icons.message_rounded,
-                    label: 'Message',
-                    bgColor: const Color(0xFF2A2A2A),
-                    onTap: () {
-                      Navigator.pop(context);
-                      showSendToSheet(context, ShareablePlaylist(playlist.id));
-                    },
-                  ),
-                  _ShareButton(
-                    icon: Icons.code_rounded,
-                    label: 'Embed',
-                    bgColor: const Color(0xFF2A2A2A),
-                    onTap: () {
-                      Navigator.pop(context);
-                      showModalBottomSheet(
-                        context: context,
-                        backgroundColor: const Color(0xFF1F1F1F),
-                        shape: const RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(16)),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      playlist.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      playlist.ownerName,
+                      style: const TextStyle(
+                          color: Color(0xFF999999), fontSize: 13),
+                    ),
+                    if (!playlist.isPublic) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white12,
+                          borderRadius: BorderRadius.circular(4),
                         ),
-                        isScrollControlled: true,
-                        builder: (_) =>
-                            EmbedCodeSheet(playlistId: playlist.id),
-                      );
-                    },
-                  ),
-                ],
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.lock_outline,
+                                color: Colors.white54, size: 10),
+                            SizedBox(width: 3),
+                            Text('Private',
+                                style: TextStyle(
+                                    color: Colors.white54, fontSize: 10)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(color: Colors.white12, height: 28),
+        const Padding(
+          padding: EdgeInsets.only(left: 16, bottom: 12),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'SHARE',
+              style: TextStyle(
+                color: Color(0xFF999999),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.2,
               ),
             ),
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
-      ),
+        // Action buttons
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _ShareButton(
+                icon: Icons.link_rounded,
+                label: 'Copy Link',
+                bgColor: const Color(0xFF2A2A2A),
+                onTap: () => _copyLink(context),
+              ),
+              _ShareButton(
+                icon: Icons.chat_rounded,
+                label: 'WhatsApp',
+                bgColor: const Color(0xFF25D366),
+                onTap: _openWhatsApp,
+              ),
+              _ShareButton(
+                icon: Icons.message_rounded,
+                label: 'Message',
+                bgColor: const Color(0xFF2A2A2A),
+                onTap: () {
+                  onBeforeSecondarySheet?.call();
+                  showSendToSheet(context, ShareablePlaylist(playlist.id));
+                },
+              ),
+              _ShareButton(
+                icon: Icons.code_rounded,
+                label: 'Embed',
+                bgColor: const Color(0xFF2A2A2A),
+                onTap: () {
+                  onBeforeSecondarySheet?.call();
+                  showModalBottomSheet(
+                    context: context,
+                    backgroundColor: const Color(0xFF1F1F1F),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                    isScrollControlled: true,
+                    builder: (_) => EmbedCodeSheet(playlistId: playlist.id),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }

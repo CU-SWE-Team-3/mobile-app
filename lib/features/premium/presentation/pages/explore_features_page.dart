@@ -162,10 +162,10 @@ class ExploreFeaturesPage extends ConsumerWidget {
         route: null,
       ),
       const _Feature(
-        icon: Icons.download_outlined,
-        title: 'Offline Downloads',
-        subtitle: 'Download and listen without internet.',
-        route: '/upgrade/offline',
+        icon: Icons.schedule,
+        title: 'Scheduled Releases',
+        subtitle: 'Schedule tracks for future release dates.',
+        route: '/library/uploads',
       ),
     ];
   }

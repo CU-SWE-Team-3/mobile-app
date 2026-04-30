@@ -46,7 +46,7 @@ const _kPlans = [
       'Unlimited audio uploads',
       'Unlimited playlists',
       'Ad-free listening',
-      'Offline downloads',
+      'Scheduled releases',
     ],
   ),
   _PlanData(
@@ -61,7 +61,7 @@ const _kPlans = [
       'Unlimited audio uploads',
       'Unlimited playlists',
       'Ad-free listening',
-      'Offline downloads',
+      'Scheduled releases',
     ],
   ),
   _PlanData(
@@ -154,6 +154,7 @@ class _PricingTiersPageState extends ConsumerState<PricingTiersPage> {
               Align(
                 alignment: Alignment.topRight,
                 child: IconButton(
+                  key: const ValueKey('paywall_dismiss_button'),
                   icon: const Icon(Icons.close, color: Colors.white, size: 26),
                   onPressed: () => context.pop(),
                 ),
@@ -233,6 +234,7 @@ class _PricingTiersPageState extends ConsumerState<PricingTiersPage> {
                     final alreadySubscribed =
                         sub.isPremium && !sub.cancelAtPeriodEnd;
                     return _PlanCard(
+                      key: ValueKey('premium_plan_tile_$i'),
                       plan: plan,
                       isLoading: sub.isLoading,
                       isCurrentPlan:
@@ -294,6 +296,7 @@ class _PlanCard extends StatelessWidget {
   final String? error;
 
   const _PlanCard({
+    super.key,
     required this.plan,
     required this.isLoading,
     required this.isCurrentPlan,
@@ -305,19 +308,21 @@ class _PlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(20),
-          border: isCurrentPlan
-              ? Border.all(color: const Color(0xFF00C853), width: 1.5)
-              : null,
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      child: KeyedSubtree(
+        key: const ValueKey('premium_plan_tile'),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(20),
+            border: isCurrentPlan
+                ? Border.all(color: const Color(0xFF00C853), width: 1.5)
+                : null,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // ── Audience + billing badges ─────────────────────────────
               Wrap(
                 spacing: 8,
@@ -409,6 +414,7 @@ class _PlanCard extends StatelessWidget {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
+                  key: const ValueKey('premium_confirm_button'),
                   onPressed: isCurrentPlan || isLoading ? null : onSubscribe,
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
@@ -461,7 +467,8 @@ class _PlanCard extends StatelessWidget {
                       color: Colors.redAccent, fontSize: 12),
                 ),
               ],
-            ],
+              ],
+            ),
           ),
         ),
       ),
