@@ -29,7 +29,8 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
     try {
       final response =
           await dioClient.dio.get('/discovery/trending?page=1&limit=20');
-      final data = response.data['data'] as List;
+      debugPrint('[TrendingCharts] raw response.data: ${response.data}');
+      final data = response.data['data']['trending'] as List;
       setState(() {
         _tracks = data.cast<Map<String, dynamic>>();
         _isLoading = false;
@@ -51,6 +52,7 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: const ValueKey('trending_charts_scaffold'),
       backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111111),
@@ -63,9 +65,11 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
       ),
       body: _isLoading
           ? const Center(
+              key: ValueKey('trending_charts_loading'),
               child: CircularProgressIndicator(color: Color(0xFFFF5500)))
           : _hasError
               ? Center(
+                  key: const ValueKey('trending_charts_error'),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -88,6 +92,7 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
                 )
               : _tracks.isEmpty
                   ? Center(
+                      key: const ValueKey('trending_charts_empty'),
                       child: Text(
                         'No trending tracks yet',
                         style:
@@ -95,6 +100,7 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
                       ),
                     )
                   : ListView.builder(
+                      key: const ValueKey('trending_track_list'),
                       itemCount: _tracks.length,
                       itemBuilder: (context, i) {
                         final track = _tracks[i];
@@ -117,9 +123,11 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
                             !artworkUrl.contains('default-artwork');
 
                         return Padding(
+                          key: ValueKey('trending_charts_tile_${track['_id'] as String? ?? i.toString()}'),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 8),
                           child: Row(
+                            key: const ValueKey('trending_track_tile'),
                             children: [
                               // Rank number
                               SizedBox(

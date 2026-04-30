@@ -137,6 +137,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               : null,
           artistId: track.artistId,
           artistPermalink: track.artistPermalink,
+          waveform: track.waveform,
+          trackPermalink: track.permalink,
         )
       ],
       startIndex: 0,
@@ -209,6 +211,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final state = ref.watch(searchProvider);
 
     return Scaffold(
+      key: const ValueKey('search_scaffold'),
       backgroundColor: _bg,
       body: SafeArea(
         child: Column(
@@ -255,6 +258,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             // ── Tab bar — results mode only ───────────────────────────────
             if (state.mode == SearchMode.results)
               _TabBar(
+                key: const ValueKey('search_filter_tab_bar'),
                 selected: state.filter,
                 onChanged: (f) =>
                     ref.read(searchProvider.notifier).setFilter(f),
@@ -280,6 +284,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Widget _historyPanel(List<SearchHistoryEntry> history) {
     if (history.isEmpty) {
       return const Center(
+        key: ValueKey('search_history_empty'),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -294,11 +299,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       );
     }
     return ListView.builder(
+      key: const ValueKey('search_history_list'),
       physics: const BouncingScrollPhysics(),
       itemCount: history.length,
       itemBuilder: (_, i) {
         final entry = history[i];
         return SearchResultTile(
+          key: ValueKey('search_history_tile_${entry.id}_${entry.type.name}'),
           displayName: entry.displayName,
           subtitle: entry.subtitle,
           imageUrl: entry.imageUrl,
@@ -317,12 +324,14 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Widget _resultsBody(SearchState state) {
     if (state.isLoading) {
       return const Center(
+        key: ValueKey('search_results_loading'),
         child: CircularProgressIndicator(color: _orange),
       );
     }
 
     if (state.hasError) {
       return Center(
+        key: const ValueKey('search_results_error'),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -346,6 +355,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
     if (!state.hasResults) {
       return Center(
+        key: const ValueKey('search_no_results'),
         child: Text(
           'No results for "${state.query}"',
           style: TextStyle(color: Colors.grey[600], fontSize: 15),
@@ -354,12 +364,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     }
 
     return ListView(
+      key: const ValueKey('search_results_list'),
       physics: const BouncingScrollPhysics(),
       children: [
         if (state.visibleTracks.isNotEmpty) ...[
           const SearchSectionHeader('Tracks'),
           for (final t in state.visibleTracks)
             SearchResultTile(
+              key: ValueKey('search_result_track_${t.id}'),
+              tileKey: const ValueKey('search_track_tile'),
               displayName: t.title,
               subtitle: t.artistName,
               imageUrl: t.artworkUrl,
@@ -371,6 +384,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           const SearchSectionHeader('Artists'),
           for (final u in state.visibleUsers)
             SearchResultTile(
+              key: ValueKey('search_result_user_${u.id}'),
+              tileKey: const ValueKey('search_user_tile'),
               displayName: u.displayName,
               subtitle: u.bio != null && u.bio!.isNotEmpty
                   ? u.bio!
@@ -384,6 +399,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           const SearchSectionHeader('Playlists'),
           for (final p in state.visiblePlaylists)
             SearchResultTile(
+              key: ValueKey('search_result_playlist_${p.id}'),
+              tileKey: const ValueKey('search_playlist_tile'),
               displayName: p.title,
               subtitle: p.creatorName ?? '',
               imageUrl: p.artworkUrl,
@@ -408,7 +425,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 class _TabBar extends StatefulWidget {
   final SearchFilter selected;
   final ValueChanged<SearchFilter> onChanged;
-  const _TabBar({required this.selected, required this.onChanged});
+  const _TabBar({super.key, required this.selected, required this.onChanged});
 
   @override
   State<_TabBar> createState() => _TabBarState();
@@ -427,6 +444,11 @@ class _TabBarState extends State<_TabBar>
   static const _orange = Color(0xFFFF5500);
   static const _indicatorH = 2.0;
   static const _barH = 44.0;
+  static const _testKeys = <SearchFilter, ValueKey<String>>{
+    SearchFilter.tracks: ValueKey('search_tab_tracks'),
+    SearchFilter.users: ValueKey('search_tab_users'),
+    SearchFilter.playlists: ValueKey('search_tab_playlists'),
+  };
 
   late final AnimationController _animCtrl;
   late Animation<double> _indicatorAnim;
@@ -485,6 +507,13 @@ class _TabBarState extends State<_TabBar>
     }
   }
 
+  String _tabKey(int index) => switch (_tabs[index].filter) {
+        SearchFilter.tracks => 'search_tab_tracks',
+        SearchFilter.users => 'search_tab_users',
+        SearchFilter.playlists => 'search_tab_playlists',
+        _ => 'search_tab_${_tabs[index].label.toLowerCase()}',
+      };
+
   @override
   void dispose() {
     _animCtrl.dispose();
@@ -526,6 +555,7 @@ class _TabBarState extends State<_TabBar>
                           width: _tabWidth,
                           height: _barH,
                           child: GestureDetector(
+                            key: ValueKey(_tabKey(i)),
                             onTap: () => _onTabTap(i),
                             behavior: HitTestBehavior.opaque,
                             child: Center(
@@ -592,6 +622,7 @@ class _VibesGrid extends StatelessWidget {
     final right = [for (int i = 1; i < genres.length; i += 2) genres[i]];
 
     return SingleChildScrollView(
+      key: const ValueKey('search_vibes_grid'),
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(
         _SearchPageState._screenInset,
@@ -666,6 +697,7 @@ class _GenreCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      key: ValueKey('search_genre_card_${genre.name}'),
       onTap: () => context.push(_route),
       child: AspectRatio(
         aspectRatio: genre.imageWidth / genre.imageHeight,

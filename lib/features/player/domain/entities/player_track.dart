@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 
 class PlayerTrack {
   final String id;
@@ -51,9 +52,32 @@ class PlayerTrack {
   }
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) || other is PlayerTrack && other.id == id;
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is PlayerTrack &&
+        other.id == id &&
+        other.title == title &&
+        other.artist == artist &&
+        other.audioUrl == audioUrl &&
+        other.coverUrl == coverUrl &&
+        other.duration == duration &&
+        listEquals(other.waveform, waveform) &&
+        other.artistId == artistId &&
+        other.artistPermalink == artistPermalink &&
+        other.trackPermalink == trackPermalink;
+  }
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(
+        id,
+        title,
+        artist,
+        audioUrl,
+        coverUrl,
+        duration,
+        Object.hashAll(waveform ?? const []),
+        artistId,
+        artistPermalink,
+        trackPermalink,
+      );
 }
