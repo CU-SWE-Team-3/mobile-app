@@ -16,9 +16,7 @@ class _Genre {
     this.assetPath,
     this.color,
     this.imageWidth,
-    this.imageHeight, {
-    this.routeOverride,
-  });
+    this.imageHeight);
 }
 
 class SearchPage extends StatefulWidget {

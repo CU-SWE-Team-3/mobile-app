@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/utils/profile_navigation.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
-import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../premium/data/services/track_download_service.dart';
 

@@ -173,11 +173,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
                 .toLowerCase();
         final legacyArtistPro =
             isPremium && planType == null && role == 'artist';
-        final hasUnlimitedUploads =
-            isPremium &&
-                (planType == 'Pro' ||
-                    planType == 'Artist Pro' ||
-                    legacyArtistPro);
+        final hasUnlimitedUploads = isPremium &&
+            (planType == 'Pro' || planType == 'Artist Pro' || legacyArtistPro);
         final canDownload = planType == 'Go+' || offlineListening;
         debugPrint(
           '[Upload] entitlement â€” isPremium=$isPremium, '
@@ -248,7 +245,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
       }
 
       final normalizedGenre = _normalizeGenre(state.track.genre);
-      debugPrint('[Upload] selectedGenre=${state.track.genre ?? "null"} → normalized=${normalizedGenre ?? "null"}');
+      debugPrint(
+          '[Upload] selectedGenre=${state.track.genre ?? "null"} → normalized=${normalizedGenre ?? "null"}');
       final uploadInitBody = <String, dynamic>{
         'title': state.track.title.isNotEmpty ? state.track.title : 'Untitled',
         'format': mimeType,
@@ -278,8 +276,8 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
       final trackId = uploadInitResponse.data['data']['trackId'] as String;
       final uploadUrl = uploadInitResponse.data['data']['uploadUrl'] as String;
-      final responseGenre = uploadInitResponse.data['data']?['genre']
-          ?? uploadInitResponse.data['data']?['track']?['genre'];
+      final responseGenre = uploadInitResponse.data['data']?['genre'] ??
+          uploadInitResponse.data['data']?['track']?['genre'];
       debugPrint('[Upload] backend response genre=${responseGenre ?? "null"}');
 
       // Step B: PUT file to Azure Blob Storage with progress.

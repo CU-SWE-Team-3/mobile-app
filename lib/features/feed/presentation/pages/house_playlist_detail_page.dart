@@ -33,7 +33,6 @@ class _PlaylistMeta {
     this.trackCount = 0,
     this.likeCount = 0,
     this.createdAt,
-    this.subtitleOverride,
     this.isLiked = false,
   });
 

@@ -19,9 +19,6 @@ import '../providers/messaging_providers.dart';
 import '../widgets/attachment_picker_sheet.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/participant_avatar.dart';
-import '../../../premium/data/models/offline_downloaded_track.dart';
-import '../../../premium/data/services/offline_downloads_repository.dart';
-import '../../../premium/presentation/providers/subscription_provider.dart';
 
 class ChatRoomPage extends ConsumerStatefulWidget {
   final String conversationId;

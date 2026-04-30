@@ -685,9 +685,8 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
 
   Widget _buildTrendingPreviewTile(List<_Track> tracks, int index) {
     final track = tracks[index];
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        !track.artworkUrl!.contains('default-artwork');
+    final hasArtwork = track.artworkUrl.isNotEmpty &&
+        !track.artworkUrl.contains('default-artwork');
 
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
@@ -699,7 +698,7 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
               borderRadius: BorderRadius.circular(8),
               child: hasArtwork
                   ? CachedNetworkImage(
-                      imageUrl: track.artworkUrl!,
+                      imageUrl: track.artworkUrl,
                       width: 52,
                       height: 52,
                       fit: BoxFit.cover,
@@ -813,9 +812,8 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
     final previewTracks = recentTracks.take(2).toList();
     final heroTrack = previewTracks.isNotEmpty ? previewTracks.first : recentTracks.first;
     const heroArtworkSize = 152.0;
-    final hasArtwork = heroTrack.artworkUrl != null &&
-        heroTrack.artworkUrl!.isNotEmpty &&
-        !heroTrack.artworkUrl!.contains('default-artwork');
+    final hasArtwork = heroTrack.artworkUrl.isNotEmpty &&
+        !heroTrack.artworkUrl.contains('default-artwork');
     final buzzingQueue = _buzzingQueue();
     final hasPlayablePlaylistTrack = buzzingQueue.isNotEmpty;
     final currentTrackId = playerState.currentTrack?.id;
@@ -862,7 +860,7 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
                       borderRadius: BorderRadius.circular(10),
                       child: hasArtwork
                           ? CachedNetworkImage(
-                              imageUrl: heroTrack.artworkUrl!,
+                              imageUrl: heroTrack.artworkUrl,
                               width: heroArtworkSize,
                               height: heroArtworkSize,
                               fit: BoxFit.cover,
@@ -991,9 +989,8 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
 
   Widget _buildFeaturedTrackRow(List<_Track> tracks, int index) {
     final track = tracks[index];
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        !track.artworkUrl!.contains('default-artwork');
+    final hasArtwork = track.artworkUrl.isNotEmpty &&
+        !track.artworkUrl.contains('default-artwork');
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
       child: Row(
@@ -1002,7 +999,7 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
             borderRadius: BorderRadius.circular(10),
             child: hasArtwork
                 ? CachedNetworkImage(
-                    imageUrl: track.artworkUrl!,
+                    imageUrl: track.artworkUrl,
                     width: 52,
                     height: 52,
                     fit: BoxFit.cover,
@@ -1053,9 +1050,8 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
 
   Widget _buildTrackListTile(List<_Track> tracks, int index) {
     final track = tracks[index];
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        !track.artworkUrl!.contains('default-artwork');
+    final hasArtwork = track.artworkUrl.isNotEmpty &&
+        !track.artworkUrl.contains('default-artwork');
 
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
@@ -1067,7 +1063,7 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
               borderRadius: BorderRadius.circular(8),
               child: hasArtwork
                   ? CachedNetworkImage(
-                      imageUrl: track.artworkUrl!,
+                      imageUrl: track.artworkUrl,
                       width: 50,
                       height: 50,
                       fit: BoxFit.cover,
@@ -1130,7 +1126,7 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
 
   Widget _buildPlaylistListCard(_PlaylistInfo playlist) {
     final hasArtwork =
-        playlist.artworkUrl != null && playlist.artworkUrl!.isNotEmpty;
+        playlist.artworkUrl.isNotEmpty;
 
     return GestureDetector(
       onTap: () => context.push(
@@ -1152,7 +1148,7 @@ class _IndieGenrePageState extends ConsumerState<IndieGenrePage>
                 borderRadius: BorderRadius.circular(12),
                 child: hasArtwork
                     ? CachedNetworkImage(
-                        imageUrl: playlist.artworkUrl!,
+                        imageUrl: playlist.artworkUrl,
                         width: 72,
                         height: 72,
                         fit: BoxFit.cover,
