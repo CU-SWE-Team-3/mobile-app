@@ -206,11 +206,24 @@ class FcmService {
     // visible notification payload (data-only messages have no notification).
     final notif = message.notification;
     if (notif == null) return;
+    final type = (data['type'] ?? data['notificationType'] ?? '').toString();
+    final isMessage = type.toUpperCase() == 'MESSAGE';
+    final conversationId = _messageConversationId(data);
     final actionLink = data['actionLink']?.toString() ?? '';
-    final payload = actionLink.isNotEmpty ? actionLink : '/notifications';
+    final payload = isMessage && conversationId.isNotEmpty
+        ? '/messages/chat/$conversationId'
+        : actionLink.isNotEmpty
+            ? actionLink
+            : '/notifications';
+    final title = isMessage
+        ? 'Message from ${_messageSenderName(data)}'
+        : notif.title ?? 'BioBeats';
+    final body = isMessage
+        ? _messageBody(data, notif.body)
+        : _safeBody(notif.body, fallback: 'Tap to open BioBeats');
     unawaited(LocalNotificationService.showNotification(
-      title: notif.title ?? 'BioBeats',
-      body: notif.body ?? 'Tap to open BioBeats',
+      title: title,
+      body: body,
       payload: payload,
     ));
   }
@@ -329,6 +342,65 @@ class FcmService {
       if (id.isNotEmpty) return id;
     }
     return '';
+  }
+
+  static String _messageSenderName(Map<String, dynamic> data) {
+    for (final key in const ['senderName', 'senderDisplayName', 'displayName']) {
+      final value = data[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+    for (final key in const ['sender', 'senderId', 'from', 'user', 'actor']) {
+      final value = data[key];
+      if (value is Map) {
+        final map = Map<String, dynamic>.from(value);
+        for (final nameKey in const ['displayName', 'username', 'name']) {
+          final name = map[nameKey]?.toString().trim();
+          if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+            return name;
+          }
+        }
+      } else {
+        final jsonValue = value?.toString();
+        if (jsonValue == null || jsonValue.isEmpty) continue;
+        try {
+          final parsed = jsonDecode(jsonValue);
+          if (parsed is Map) {
+            final map = Map<String, dynamic>.from(parsed);
+            for (final nameKey in const ['displayName', 'username', 'name']) {
+              final name = map[nameKey]?.toString().trim();
+              if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+                return name;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return 'Someone';
+  }
+
+  static String _messageBody(Map<String, dynamic> data, String? notificationBody) {
+    for (final key in const ['contentSnippet', 'content', 'messageText', 'text']) {
+      final value = data[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+    return _safeBody(notificationBody, fallback: 'Tap to open chat');
+  }
+
+  static String _safeBody(String? value, {required String fallback}) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty || _looksLikeObjectId(trimmed)) {
+      return fallback;
+    }
+    return trimmed;
+  }
+
+  static bool _looksLikeObjectId(String value) {
+    return RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(value);
   }
 
   static String _fingerprint(String token) {

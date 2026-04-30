@@ -436,9 +436,10 @@ class SocketService {
         (content == null || content.isEmpty || _looksLikeObjectId(content))
             ? 'Tap to open chat'
             : content;
+    final senderName = _senderNameFrom(message);
     unawaited(
       LocalNotificationService.showNotification(
-        title: 'New message',
+        title: 'Message from $senderName',
         body: body,
         payload: '/messages/chat/$conversationId',
       ),
@@ -599,6 +600,30 @@ class SocketService {
     return _idValue(message['senderId']).isNotEmpty
         ? _idValue(message['senderId'])
         : _idValue(message['sender']);
+  }
+
+  String _senderNameFrom(Map<String, dynamic> message) {
+    for (final key in const ['sender', 'senderId', 'from', 'user']) {
+      final value = message[key];
+      if (value is Map) {
+        final map = Map<String, dynamic>.from(value);
+        for (final nameKey in const ['displayName', 'username', 'name']) {
+          final name = map[nameKey]?.toString().trim();
+          if (name != null &&
+              name.isNotEmpty &&
+              !_looksLikeObjectId(name)) {
+            return name;
+          }
+        }
+      }
+    }
+    for (final key in const ['senderName', 'senderDisplayName', 'displayName']) {
+      final name = message[key]?.toString().trim();
+      if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+        return name;
+      }
+    }
+    return 'Someone';
   }
 
   String _idValue(dynamic value) {
