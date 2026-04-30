@@ -45,6 +45,10 @@ flutter {
 }
 
 dependencies {
+<<<<<<< HEAD
+    implementation("com.google.firebase:firebase-messaging:24.1.2")
+=======
     implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
     implementation("com.google.firebase:firebase-messaging")
+>>>>>>> e40c171d5ea8493aa35896758b61804331fa2ca3
 }
