@@ -3,6 +3,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/utils/profile_navigation.dart';
+import '../../../search/data/search_repository.dart';
+import '../../../search/domain/entities/search_result.dart';
 
 class SearchResultsUsersPage extends StatefulWidget {
   const SearchResultsUsersPage({super.key});
@@ -13,7 +15,7 @@ class SearchResultsUsersPage extends StatefulWidget {
 
 class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
   final _controller = TextEditingController();
-  List<Map<String, dynamic>> _results = [];
+  List<SearchResultUser> _results = [];
   String _lastQuery = '';
   bool _isLoading = false;
   bool _hasError = false;
@@ -23,6 +25,21 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  // Fetched in parallel with the main search; failure is silently swallowed so
+  // a broken blocked-users endpoint never hides valid search results.
+  Future<Set<String>> _fetchBlockedIds() async {
+    try {
+      final response = await dioClient.dio.get('/network/blocked-users');
+      final raw = response.data['data'];
+      if (raw is List) {
+        return raw.map((u) => u['_id'] as String).toSet();
+      }
+    } on DioException {
+      // proceed with empty set
+    }
+    return {};
   }
 
   Future<void> _search(String query) async {
@@ -35,23 +52,20 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
       _lastQuery = q;
     });
     try {
-      final results = await Future.wait([
-        dioClient.dio.get('/users/search',
-            queryParameters: {'q': q, 'page': 1, 'limit': 20}),
-        dioClient.dio.get('/network/blocked-users'),
+      final repo = SearchRepository(dioClient.dio);
+      // Run both in parallel; _fetchBlockedIds never throws.
+      final rawResults = await Future.wait<Object?>([
+        repo.globalSearch(q),
+        _fetchBlockedIds(),
       ]);
 
-      final usersRaw = results[0].data['data'] as List? ?? [];
-      final users = usersRaw.cast<Map<String, dynamic>>();
-
-      final blockedRaw = results[1].data['data'];
-      final blockedIds = (blockedRaw is List)
-          ? blockedRaw.map((u) => u['_id'] as String).toSet()
-          : <String>{};
+      final searchResult = rawResults[0] as SearchResults;
+      final blockedIds = rawResults[1] as Set<String>;
 
       setState(() {
-        _results =
-            users.where((u) => !blockedIds.contains(u['_id'])).toList();
+        _results = searchResult.users
+            .where((u) => !blockedIds.contains(u.id))
+            .toList();
         _isLoading = false;
       });
     } on DioException {
@@ -65,6 +79,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: const ValueKey('search_users_scaffold'),
       backgroundColor: const Color(0xFF111111),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111111),
@@ -78,7 +93,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: TextField(
-              key: const ValueKey('search_users_field'),
+              key: const ValueKey('search_field'),
               controller: _controller,
               autofocus: false,
               textInputAction: TextInputAction.search,
@@ -92,7 +107,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                     const Icon(Icons.search, color: Colors.white38),
                 suffixIcon: _controller.text.isNotEmpty
                     ? GestureDetector(
-                        key: const ValueKey('search_users_clear_button'),
+                        key: const ValueKey('search_clear_button'),
                         onTap: () {
                           _controller.clear();
                           setState(() {
@@ -120,10 +135,12 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
           Expanded(
             child: _isLoading
                 ? const Center(
+                    key: ValueKey('search_users_loading'),
                     child: CircularProgressIndicator(
                         color: Color(0xFFFF5500)))
                 : _hasError
                     ? Center(
+                        key: const ValueKey('search_users_error'),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -134,7 +151,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                             ),
                             const SizedBox(height: 12),
                             ElevatedButton(
-                              key: const ValueKey('search_users_retry_button'),
+                              key: const ValueKey('search_retry_button'),
                               onPressed: () => _search(_lastQuery),
                               style: ElevatedButton.styleFrom(
                                   backgroundColor:
@@ -147,6 +164,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                       )
                     : !_hasSearched
                         ? Center(
+                            key: const ValueKey('search_users_prompt'),
                             child: Text(
                               'Search for people',
                               style: TextStyle(
@@ -155,6 +173,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                           )
                         : _results.isEmpty
                             ? Center(
+                                key: const ValueKey('search_users_no_results'),
                                 child: Text(
                                   'No people found for "$_lastQuery"',
                                   style: TextStyle(
@@ -163,41 +182,36 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                                 ),
                               )
                             : ListView.builder(
+                                key: const ValueKey('search_users_list'),
                                 itemCount: _results.length,
                                 itemBuilder: (context, i) {
                                   final user = _results[i];
-                                  final displayName =
-                                      user['displayName'] as String? ?? '';
-                                  final avatarUrl =
-                                      user['avatarUrl'] as String?;
-                                  final permalink =
-                                      user['permalink'] as String? ?? '';
-                                  final userId =
-                                      user['_id'] as String? ?? '';
-                                  final followerCount =
-                                      _safeInt(user['followerCount']);
-                                  final initial = displayName.isNotEmpty
-                                      ? displayName[0].toUpperCase()
-                                      : '?';
                                   final isDefaultAvatar =
-                                      avatarUrl == null ||
-                                          avatarUrl.isEmpty ||
-                                          avatarUrl
+                                      user.avatarUrl == null ||
+                                          user.avatarUrl!.isEmpty ||
+                                          user.avatarUrl!
                                               .contains('default-avatar');
+                                  final initial =
+                                      user.displayName.isNotEmpty
+                                          ? user.displayName[0]
+                                              .toUpperCase()
+                                          : '?';
 
                                   return InkWell(
-                                    key: const ValueKey('search_users_tile'),
+                                    key: ValueKey('search_users_tile_${user.id}'),
                                     onTap: () {
-                                      if (permalink.isNotEmpty) {
+                                      if (user.permalink?.isNotEmpty ==
+                                          true) {
                                         navigateToUserProfile(
                                           context,
-                                          userId: userId,
-                                          permalink: permalink,
-                                          displayName: displayName,
+                                          userId: user.id,
+                                          permalink: user.permalink!,
+                                          displayName: user.displayName,
                                         );
                                       }
                                     },
                                     child: Padding(
+                                      key: const ValueKey('search_user_tile'),
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 16, vertical: 10),
                                       child: Row(
@@ -218,7 +232,8 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                                                 : ClipOval(
                                                     child:
                                                         CachedNetworkImage(
-                                                      imageUrl: avatarUrl,
+                                                      imageUrl:
+                                                          user.avatarUrl!,
                                                       width: 56,
                                                       height: 56,
                                                       fit: BoxFit.cover,
@@ -245,7 +260,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 Text(
-                                                  displayName,
+                                                  user.displayName,
                                                   style: const TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 16,
@@ -263,7 +278,7 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
                                                         size: 14),
                                                     const SizedBox(width: 4),
                                                     Text(
-                                                      '$followerCount Followers',
+                                                      '${user.followerCount} Followers',
                                                       style: const TextStyle(
                                                           color: Colors.grey,
                                                           fontSize: 12),
@@ -284,11 +299,4 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
       ),
     );
   }
-}
-
-int _safeInt(dynamic val) {
-  if (val == null) return 0;
-  if (val is int) return val;
-  if (val is double) return val.toInt();
-  return int.tryParse(val.toString()) ?? 0;
 }

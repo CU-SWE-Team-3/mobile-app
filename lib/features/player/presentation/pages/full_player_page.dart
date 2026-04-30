@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -1031,7 +1033,10 @@ class _WaveformPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (waveform == null || waveform!.isEmpty) {
+    final y = size.height / 2;
+    final splitX = (size.width * progress).clamp(0.0, size.width);
+
+    if (!isPlaying) {
       const strokeWidth = 2.0;
       final playedPaint = Paint()
         ..color = AppTheme.primary
@@ -1041,18 +1046,29 @@ class _WaveformPainter extends CustomPainter {
         ..color = Colors.white.withOpacity(0.25)
         ..strokeWidth = strokeWidth
         ..style = PaintingStyle.stroke;
-      final y = size.height / 2;
-      final splitX = size.width * progress;
       canvas.drawLine(Offset(0, y), Offset(splitX, y), playedPaint);
       canvas.drawLine(Offset(splitX, y), Offset(size.width, y), unplayedPaint);
+      if (progress > 0) {
+        canvas.drawCircle(
+          Offset(splitX, y),
+          4.5,
+          Paint()
+            ..color = AppTheme.primary
+            ..style = PaintingStyle.fill,
+        );
+      }
       return;
     }
 
-    final heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
+    final heights = (waveform != null && waveform!.isNotEmpty)
+        ? waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList()
+        : _buildFallbackHeights(size.width);
 
     final barCount = heights.length;
+    if (barCount == 0) return;
     const spacing = 2.0;
-    final barWidth = (size.width - (barCount - 1) * spacing) / barCount;
+    final usableWidth = size.width - (barCount - 1) * spacing;
+    final barWidth = barCount <= 0 ? size.width : usableWidth / barCount;
 
     final playedPaint = Paint()
       ..color = AppTheme.primary
@@ -1064,14 +1080,24 @@ class _WaveformPainter extends CustomPainter {
     for (int i = 0; i < barCount; i++) {
       final barHeight = heights[i] * size.height;
       final x = i * (barWidth + spacing);
-      final y = (size.height - barHeight) / 2;
+      final top = (size.height - barHeight) / 2;
       final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, y, barWidth, barHeight),
+        Rect.fromLTWH(x, top, barWidth, barHeight),
         const Radius.circular(2),
       );
       canvas.drawRRect(
           rect, i / barCount < progress ? playedPaint : unplayedPaint);
     }
+  }
+
+  List<double> _buildFallbackHeights(double width) {
+    final count = (width / 6).floor().clamp(18, 72);
+    return List<double>.generate(count, (index) {
+      final waveA = (sin(index * 0.52) + 1) / 2;
+      final waveB = (cos(index * 0.21) + 1) / 2;
+      final value = (waveA * 0.65) + (waveB * 0.35);
+      return value.clamp(0.18, 0.92);
+    });
   }
 
   @override

@@ -621,6 +621,8 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
               duration: t.durationSeconds != null
                   ? Duration(seconds: t.durationSeconds!)
                   : null,
+              waveform: t.waveform,
+              trackPermalink: t.permalink,
             ))
         .toList();
     if (queue.isEmpty) return;
@@ -817,6 +819,8 @@ class _PlaylistTrack {
   final String? hlsUrl;
   final int playCount;
   final int? durationSeconds;
+  final List<int>? waveform;
+  final String? permalink;
 
   const _PlaylistTrack({
     required this.id,
@@ -826,6 +830,8 @@ class _PlaylistTrack {
     this.hlsUrl,
     required this.playCount,
     this.durationSeconds,
+    this.waveform,
+    this.permalink,
   });
 
   factory _PlaylistTrack.fromJson(Map<String, dynamic> json) {
@@ -843,6 +849,10 @@ class _PlaylistTrack {
           json['streamUrl'] as String?,
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       durationSeconds: (json['duration'] as num?)?.toInt(),
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      permalink: json['permalink'] as String?,
     );
   }
 }

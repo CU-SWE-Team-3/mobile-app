@@ -380,6 +380,9 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                 physics: const BouncingScrollPhysics(),
                                 itemCount: tracks.length,
                                 itemBuilder: (_, i) => _LikeTile(
+                                  key: ValueKey(
+                                    'library_likes_track_tile_${tracks[i].id}',
+                                  ),
                                   track: tracks[i],
                                 ),
                               ),
@@ -465,7 +468,7 @@ class _SortSheet extends StatelessWidget {
 class _LikeTile extends ConsumerWidget {
   final TrackSummary track;
 
-  const _LikeTile({required this.track});
+  const _LikeTile({super.key, required this.track});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -494,7 +497,6 @@ class _LikeTile extends ConsumerWidget {
         track.artworkUrl!.startsWith('http');
 
     return GestureDetector(
-      key: const ValueKey('library_likes_track_tile'),
       onTap: () {
         if (track.audioUrl != null) {
           ref.read(playerProvider.notifier).playTrack(

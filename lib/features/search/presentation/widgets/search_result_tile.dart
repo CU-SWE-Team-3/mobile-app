@@ -9,6 +9,7 @@ class SearchResultTile extends StatelessWidget {
   final String? imageUrl;
   final SearchEntityType type;
   final VoidCallback onTap;
+  final Key? tileKey;
 
   /// When non-null, renders an × button that calls this callback.
   /// Used in history mode to permanently remove the entry.
@@ -21,6 +22,7 @@ class SearchResultTile extends StatelessWidget {
     this.imageUrl,
     required this.type,
     required this.onTap,
+    this.tileKey,
     this.onRemove,
   });
 
@@ -38,6 +40,7 @@ class SearchResultTile extends StatelessWidget {
     final sub = Colors.white.withValues(alpha: 0.55);
 
     return GestureDetector(
+      key: tileKey,
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
