@@ -25,15 +25,19 @@ class BioBeatsFirebaseMessagingService : FlutterFirebaseMessagingService() {
         val data = message.data
         val type = data["type"] ?: data["notificationType"] ?: ""
         if (!type.equals("MESSAGE", ignoreCase = true)) return
+        if (message.notification != null) return
 
         val conversationId = conversationIdFrom(data)
-        if (conversationId.isEmpty()) return
 
         createNotificationChannel()
         showMessageNotification(
             title = messageTitle(data, message.notification?.title),
             body = messageBody(data, message.notification?.body),
-            payload = "/messages/chat/$conversationId",
+            payload = if (conversationId.isNotEmpty()) {
+                "/messages/chat/$conversationId"
+            } else {
+                "/messages"
+            },
             idSeed = data["_id"] ?: data["id"] ?: data["messageId"] ?: conversationId,
         )
     }
@@ -104,13 +108,21 @@ class BioBeatsFirebaseMessagingService : FlutterFirebaseMessagingService() {
     }
 
     private fun messageTitle(data: Map<String, String>, fallbackTitle: String?): String {
-        val senderName = firstNonIdValue(
-            data,
-            "senderDisplayName",
-            "senderName",
-            "actorName",
-            "displayName",
-        ).ifEmpty { senderNameFromJson(data["senderId"] ?: data["sender"]) }
+        val senderName = payloadMaps(data)
+            .asSequence()
+            .map {
+                firstNonIdValue(
+                    it,
+                    "senderDisplayName",
+                    "senderName",
+                    "actorName",
+                    "displayName",
+                )
+            }
+            .firstOrNull { it.isNotEmpty() }
+            .orEmpty()
+            .ifEmpty { senderNameFromJson(data["senderId"] ?: data["sender"]) }
+            .ifEmpty { senderNameFromJson(data["actorId"] ?: data["actor"]) }
             .ifEmpty { actorNameFromJson(data["actors"]) }
 
         if (senderName.isNotEmpty()) return "Message from $senderName"
@@ -122,14 +134,21 @@ class BioBeatsFirebaseMessagingService : FlutterFirebaseMessagingService() {
     }
 
     private fun messageBody(data: Map<String, String>, fallbackBody: String?): String {
-        val body = firstNonIdValue(
-            data,
-            "contentSnippet",
-            "content",
-            "message",
-            "text",
-            "body",
-        )
+        val body = payloadMaps(data)
+            .asSequence()
+            .map {
+                firstNonIdValue(
+                    it,
+                    "contentSnippet",
+                    "content",
+                    "messageText",
+                    "message",
+                    "text",
+                    "body",
+                )
+            }
+            .firstOrNull { it.isNotEmpty() }
+            .orEmpty()
         if (body.isNotEmpty()) return body
 
         val fallback = fallbackBody?.trim().orEmpty()
@@ -139,9 +158,11 @@ class BioBeatsFirebaseMessagingService : FlutterFirebaseMessagingService() {
     }
 
     private fun conversationIdFrom(data: Map<String, String>): String {
-        for (key in listOf("conversationId", "targetConversationId", "chatId", "conversation")) {
-            val value = idValue(data[key])
-            if (value.isNotEmpty()) return value
+        for (map in payloadMaps(data)) {
+            for (key in listOf("conversationId", "targetConversationId", "chatId", "conversation")) {
+                val value = idValue(map[key])
+                if (value.isNotEmpty()) return value
+            }
         }
 
         val target = data["target"] ?: data["targetJson"]
@@ -150,7 +171,24 @@ class BioBeatsFirebaseMessagingService : FlutterFirebaseMessagingService() {
             if (value.isNotEmpty()) return value
         }
 
-        return idValue(data["targetId"])
+        return conversationIdFromActionLink(data["actionLink"])
+    }
+
+    private fun payloadMaps(data: Map<String, String>): List<Map<String, String>> {
+        val maps = mutableListOf(data)
+        for (key in listOf("extraData", "target", "targetJson", "payload", "data")) {
+            val parsed = mapFromJson(data[key])
+            if (parsed.isNotEmpty()) maps.add(parsed)
+        }
+        return maps
+    }
+
+    private fun mapFromJson(json: String?): Map<String, String> {
+        if (json.isNullOrBlank() || !json.trim().startsWith("{")) return emptyMap()
+        return runCatching {
+            val obj = JSONObject(json)
+            obj.keys().asSequence().associateWith { key -> obj.opt(key)?.toString().orEmpty() }
+        }.getOrDefault(emptyMap())
     }
 
     private fun conversationIdFromJson(json: String): String {
@@ -159,8 +197,16 @@ class BioBeatsFirebaseMessagingService : FlutterFirebaseMessagingService() {
             idValue(obj.opt("conversationId"))
                 .ifEmpty { idValue(obj.opt("conversation")) }
                 .ifEmpty { idValue(obj.opt("chatId")) }
-                .ifEmpty { idValue(obj) }
         }.getOrDefault("")
+    }
+
+    private fun conversationIdFromActionLink(actionLink: String?): String {
+        if (actionLink.isNullOrBlank()) return ""
+        return Regex("""(?:^|/)messages/chat/([^/?#]+)""")
+            .find(actionLink)
+            ?.groupValues
+            ?.getOrNull(1)
+            .orEmpty()
     }
 
     private fun senderNameFromJson(json: String?): String {
@@ -195,7 +241,11 @@ class BioBeatsFirebaseMessagingService : FlutterFirebaseMessagingService() {
     private fun idValue(value: Any?): String {
         if (value == null) return ""
         if (value is JSONObject) {
-            return value.optString("_id").ifEmpty { value.optString("id") }.trim()
+            return value.optString("_id")
+                .ifEmpty { value.optString("id") }
+                .ifEmpty { value.optString("conversationId") }
+                .ifEmpty { value.optString("chatId") }
+                .trim()
         }
 
         val text = value.toString().trim()
@@ -203,12 +253,16 @@ class BioBeatsFirebaseMessagingService : FlutterFirebaseMessagingService() {
 
         return runCatching {
             val obj = JSONObject(text)
-            obj.optString("_id").ifEmpty { obj.optString("id") }.trim()
+            obj.optString("_id")
+                .ifEmpty { obj.optString("id") }
+                .ifEmpty { obj.optString("conversationId") }
+                .ifEmpty { obj.optString("chatId") }
+                .trim()
         }.getOrDefault(text)
     }
 
     private fun looksLikeObjectId(value: String): Boolean {
-        return Regex("^[a-fA-F0-9]{24}$").matches(value)
+        return Regex("^[a-fA-F0-9]{20,32}$").matches(value)
     }
 
     private fun isAppInForeground(): Boolean {

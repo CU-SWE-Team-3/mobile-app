@@ -176,8 +176,8 @@ class AccountSettingsPage extends ConsumerWidget {
                   GestureDetector(
                     onTap: () async {
                       Navigator.of(context).pop();
-                      ref.read(sessionUserIdProvider.notifier).state = '';
                       await ref.read(authProvider.notifier).logout();
+                      ref.read(sessionUserIdProvider.notifier).state = '';
                       if (!context.mounted) return;
                       context.go('/start');
                     },
