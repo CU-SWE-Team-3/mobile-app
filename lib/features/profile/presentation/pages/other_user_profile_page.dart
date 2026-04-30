@@ -178,6 +178,46 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
     return int.tryParse(val.toString()) ?? 0;
   }
 
+  List<dynamic> _extractBlockedList(dynamic raw) {
+    if (raw is List) return raw;
+    if (raw is! Map) return const [];
+    final data = raw['data'];
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in const ['blockedUsers', 'users', 'blocked']) {
+        final value = data[key];
+        if (value is List) return value;
+      }
+    }
+    for (final key in const ['blockedUsers', 'users', 'blocked']) {
+      final value = raw[key];
+      if (value is List) return value;
+    }
+    return const [];
+  }
+
+  String _blockedUserId(dynamic raw) {
+    if (raw == null) return '';
+    if (raw is String) return raw;
+    if (raw is! Map) return raw.toString();
+    final map = Map<String, dynamic>.from(raw);
+    for (final key in const ['_id', 'id', 'userId', 'blockedUserId']) {
+      final value = map[key]?.toString() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    for (final key in const ['blockedUser', 'user', 'target']) {
+      final value = map[key];
+      if (value is Map) {
+        final id = _blockedUserId(value);
+        if (id.isNotEmpty) return id;
+      } else {
+        final id = value?.toString() ?? '';
+        if (id.isNotEmpty) return id;
+      }
+    }
+    return '';
+  }
+
   /// Tries multiple strategies to determine follow status.
   Future<bool> _checkIsFollowing(String myId, String targetId) async {
     // ── Strategy 1: dedicated endpoint ──────────────────────────────
@@ -231,8 +271,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       // ── Blocked status ─────────────────────────────────────────────
       try {
         final blockedRes = await dioClient.dio.get('/network/blocked-users');
-        final blockedList = blockedRes.data['data'] as List? ?? [];
-        _isBlocked = blockedList.any((u) => u['_id'] == _targetUserId);
+        final blockedList = _extractBlockedList(blockedRes.data);
+        _isBlocked = blockedList.any((u) => _blockedUserId(u) == _targetUserId);
       } catch (_) {
         final cached = prefs.getStringList('blockedUserIds') ?? [];
         _isBlocked = cached.contains(_targetUserId);
@@ -344,8 +384,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   }
 
   Future<void> _toggleBlock(String userId) async {
-    Navigator.of(context).pop();
-
     if (_isBlocked) {
       try {
         await dioClient.dio.delete('/network/$userId/block');
@@ -406,7 +444,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
         setState(() => _isBlocked = true);
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('User blocked')));
-        context.pop();
       } catch (e) {
         if (!mounted) return;
         final statusCode = (e is DioException) ? e.response?.statusCode : null;
@@ -414,7 +451,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
           setState(() => _isBlocked = true);
           ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('User is already blocked')));
-          context.pop();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Failed to block user. Try again.'),
@@ -440,7 +476,10 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             title: Text(_isBlocked ? 'Unblock user' : 'Block user',
                 style: const TextStyle(color: Colors.white)),
             onTap: _targetUserId.isNotEmpty
-                ? () => _toggleBlock(_targetUserId)
+                ? () {
+                    Navigator.of(context).pop();
+                    _toggleBlock(_targetUserId);
+                  }
                 : null,
           ),
           const SizedBox(height: 8),
@@ -511,7 +550,66 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       );
 
   Widget _buildBody() =>
-      _isPrivate ? _buildPrivateProfile() : _buildPublicProfile();
+      _isBlocked
+          ? _buildBlockedProfile()
+          : _isPrivate && !_isFollowing
+              ? _buildPrivateProfile()
+              : _buildPublicProfile();
+
+  Widget _buildBlockedProfile() {
+    final initial = _username.isNotEmpty ? _username[0].toUpperCase() : '?';
+    final isDefault =
+        _avatarUrl.isEmpty || _avatarUrl.contains('default-avatar');
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildAvatarRing(
+              initial: initial,
+              isDefaultAvatar: isDefault,
+              radius: 44,
+            ),
+            const SizedBox(height: 18),
+            Text(
+              _username.isEmpty ? 'Blocked user' : _username,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'You blocked this user. Their profile and tracks are hidden.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 22),
+            ElevatedButton(
+              key: const ValueKey('other_profile_unblock_button'),
+              onPressed: _targetUserId.isEmpty
+                  ? null
+                  : () => _toggleBlock(_targetUserId),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF5500),
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+              ),
+              child: const Text('Unblock user'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildPrivateProfile() {
     final initial = _username.isNotEmpty ? _username[0].toUpperCase() : '?';
