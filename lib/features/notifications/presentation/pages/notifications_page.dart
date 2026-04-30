@@ -497,8 +497,19 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
         context.push('/messages');
         break;
       case NotificationType.system:
+        context.go(_systemNotificationRoute(n));
         break;
     }
+  }
+
+  String _systemNotificationRoute(AppNotification n) {
+    final text = (n.commentText ?? '').toLowerCase();
+    if (text.contains('picked for you') ||
+        text.contains('recommended') ||
+        text.contains('new tracks')) {
+      return '/home/recommended';
+    }
+    return '/home';
   }
 
   void _showFilterSheet(BuildContext context) {
