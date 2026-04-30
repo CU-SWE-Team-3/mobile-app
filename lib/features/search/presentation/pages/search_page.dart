@@ -444,6 +444,11 @@ class _TabBarState extends State<_TabBar>
   static const _orange = Color(0xFFFF5500);
   static const _indicatorH = 2.0;
   static const _barH = 44.0;
+  static const _testKeys = <SearchFilter, ValueKey<String>>{
+    SearchFilter.tracks: ValueKey('search_tab_tracks'),
+    SearchFilter.users: ValueKey('search_tab_users'),
+    SearchFilter.playlists: ValueKey('search_tab_playlists'),
+  };
 
   late final AnimationController _animCtrl;
   late Animation<double> _indicatorAnim;

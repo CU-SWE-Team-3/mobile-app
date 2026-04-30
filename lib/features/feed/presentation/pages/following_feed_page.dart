@@ -90,7 +90,7 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
             ),
             const SizedBox(height: 12),
             ElevatedButton(
-              key: const ValueKey('feed_following_retry_button'),
+              key: const ValueKey('feed_retry_button'),
               onPressed: () => ref.read(followingFeedProvider.notifier).load(),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF5500),
@@ -112,7 +112,7 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
       );
     } else {
       body = ListView.builder(
-        key: const ValueKey('feed_following_list'),
+        key: const ValueKey('feed_track_list'),
         controller: _scrollController,
         itemCount: state.tracks.length + (state.isLoadingMore ? 1 : 0),
         itemBuilder: (context, i) {
@@ -154,6 +154,7 @@ class _FollowingFeedPageState extends ConsumerState<FollowingFeedPage> {
 
 class _ActivityTile extends StatelessWidget {
   const _ActivityTile({
+    super.key,
     required this.track,
     required this.activityLabel,
     required this.relativeTime,
@@ -172,6 +173,7 @@ class _ActivityTile extends StatelessWidget {
         track.actorAvatarUrl != null && track.actorAvatarUrl!.isNotEmpty;
 
     return Padding(
+      key: const ValueKey('feed_track_tile'),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

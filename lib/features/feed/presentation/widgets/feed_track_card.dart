@@ -94,6 +94,9 @@ class _FeedTrackCardState extends ConsumerState<FeedTrackCard> {
       key: const ValueKey('feed_track_tile'),
       fit: StackFit.expand,
       children: [
+        const Positioned.fill(
+          child: SizedBox(key: ValueKey('feed_track_tile')),
+        ),
         // ── Background artwork ───────────────────────────────────────────
         hasArtwork
             ? CachedNetworkImage(

@@ -100,7 +100,7 @@ class _TrendingChartsPageState extends State<TrendingChartsPage> {
                       ),
                     )
                   : ListView.builder(
-                      key: const ValueKey('trending_charts_list'),
+                      key: const ValueKey('trending_track_list'),
                       itemCount: _tracks.length,
                       itemBuilder: (context, i) {
                         final track = _tracks[i];
