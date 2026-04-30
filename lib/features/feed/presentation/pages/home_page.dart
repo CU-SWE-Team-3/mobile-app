@@ -789,10 +789,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     List<_FeedTrack> tracks, {
     bool showMixRibbon = false,
     bool compact = false,
+    Key? listKey,
   }) {
     return SizedBox(
       height: compact ? 216 : 232,
       child: ListView.separated(
+        key: listKey,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: tracks.length,
@@ -830,7 +832,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               final genre = _genres[index];
               final selected = index == _selectedGenreIndex;
               return GestureDetector(
-                key: const ValueKey('home_genre_chip'),
+                key: ValueKey('home_genre_chip_${genre.label.toLowerCase()}'),
                 onTap: () {
                   setState(() => _selectedGenreIndex = index);
                   _fetchTrending();
@@ -914,10 +916,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildTrackRowsSection(List<_FeedTrack> tracks) {
+  Widget _buildTrackRowsSection(List<_FeedTrack> tracks, {Key? listKey}) {
     return SizedBox(
       height: 200,
       child: ListView.separated(
+        key: listKey,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: (tracks.length / 3).ceil(),
@@ -975,10 +978,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildBuzzingShelf() {
+  Widget _buildBuzzingShelf({Key? listKey}) {
     return SizedBox(
       height: 184,
       child: ListView.separated(
+        key: listKey,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: _genres.length,
@@ -1024,6 +1028,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         _madeForYouCards.isNotEmpty ? _madeForYouCards : recommendationTracks;
 
     return Scaffold(
+      key: const ValueKey('home_scaffold'),
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
@@ -1109,6 +1114,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         color: const Color(0xFFFF5500),
         backgroundColor: const Color(0xFF1A1A1A),
         child: ListView(
+          key: const ValueKey('home_content_list'),
           padding: const EdgeInsets.only(top: 12, bottom: 140),
           children: [
             _buildLikesBanner(),
@@ -1117,27 +1123,27 @@ class _HomePageState extends ConsumerState<HomePage> {
               showSeeAll: true,
               onSeeAll: () => context.push('/home/recommended'),
             ),
-            _buildSquareShelf(recommendationTracks),
+            _buildSquareShelf(recommendationTracks, listKey: const ValueKey('home_recommended_list')),
             const SizedBox(height: 28),
             _buildTrendingSection(),
             const SizedBox(height: 28),
             _buildSectionHeader('Mixed for $_displayName'),
-            _buildSquareShelf(mixedTracks, showMixRibbon: true, compact: true),
+            _buildSquareShelf(mixedTracks, showMixRibbon: true, compact: true, listKey: const ValueKey('home_mixed_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('Liked by people you follow'),
-            _buildTrackRowsSection(followLikedTracks),
+            _buildTrackRowsSection(followLikedTracks, listKey: const ValueKey('home_liked_by_following_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('Made for you'),
             _buildMadeForYou(madeForYouTracks),
             const SizedBox(height: 28),
             _buildSectionHeader('Curated by SoundCloud'),
-            _buildSquareShelf(curatedTracks, compact: true),
+            _buildSquareShelf(curatedTracks, compact: true, listKey: const ValueKey('home_curated_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('Liked By'),
-            _buildSquareShelf(likedByTracks, compact: true),
+            _buildSquareShelf(likedByTracks, compact: true, listKey: const ValueKey('home_liked_by_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('Discover with Stations'),
-            _buildStationShelf(stationTracks),
+            _buildStationShelf(stationTracks, listKey: const ValueKey('home_station_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('New crew, suggested for you'),
             const Padding(
@@ -1146,9 +1152,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             const SizedBox(height: 28),
             _buildSectionHeader('Artists to watch out for'),
-            _buildBuzzingShelf(),
+            _buildBuzzingShelf(listKey: const ValueKey('home_buzzing_list')),
             if (_isLoading && _tracks.isEmpty)
               const Padding(
+                key: ValueKey('home_loading'),
                 padding: EdgeInsets.symmetric(vertical: 20),
                 child: Center(
                   child: CircularProgressIndicator(color: Color(0xFFFF5500)),
@@ -1156,6 +1163,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               )
             else if (_hasError)
               const Padding(
+                key: ValueKey('home_error'),
                 padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: Text(
                   'Some home content could not be loaded.',
@@ -1168,10 +1176,11 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildStationShelf(List<_FeedTrack> tracks) {
+  Widget _buildStationShelf(List<_FeedTrack> tracks, {Key? listKey}) {
     return SizedBox(
       height: 192,
       child: ListView.separated(
+        key: listKey,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: tracks.length,
