@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/network/dio_client.dart';
+import '../../../engagement/presentation/widgets/like_button.dart';
+import '../../../playlist/domain/entities/playlist.dart';
 
 class ChillGenrePage extends ConsumerStatefulWidget {
   const ChillGenrePage({super.key});
@@ -16,7 +18,6 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
     with TickerProviderStateMixin {
   static const _pageBackground = Color(0xFF111111);
   static const _panelBackground = Color(0xFF1A1A1A);
-  static const _chillQuery = 'Chill';
   static const _chillGenreQueries = [
     'Chill',
     'chill',
@@ -266,7 +267,8 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
           _buildSectionHeader(
             title: 'Playlists',
             actionLabel: showSeeAllAction ? 'See all' : null,
-            onAction: showSeeAllAction ? () => _tabController.animateTo(1) : null,
+            onAction:
+                showSeeAllAction ? () => _tabController.animateTo(1) : null,
           ),
           const SizedBox(height: 14),
           Padding(
@@ -299,16 +301,27 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: hasArtwork
-                  ? CachedNetworkImage(
-                      imageUrl: playlist.artworkUrl,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => _artworkFallback(),
-                    )
-                  : _artworkFallback(),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: hasArtwork
+                        ? CachedNetworkImage(
+                            imageUrl: playlist.artworkUrl,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => _artworkFallback(),
+                          )
+                        : _artworkFallback(),
+                  ),
+                ),
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: PlaylistLikeButton(playlist: playlist.toPlaylist()),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
@@ -324,7 +337,9 @@ class _ChillGenrePageState extends ConsumerState<ChillGenrePage>
           ),
           const SizedBox(height: 2),
           Text(
-            playlist.ownerName.isEmpty ? 'Discovery Playlists' : playlist.ownerName,
+            playlist.ownerName.isEmpty
+                ? 'Discovery Playlists'
+                : playlist.ownerName,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -435,4 +450,11 @@ class _PlaylistInfo {
           .toString(),
     );
   }
+
+  Playlist toPlaylist() => Playlist(
+        id: id,
+        title: title,
+        artworkUrl: artworkUrl,
+        ownerName: ownerName.isEmpty ? 'Discovery Playlists' : ownerName,
+      );
 }

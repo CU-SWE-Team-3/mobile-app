@@ -1,10 +1,11 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/profile_navigation.dart';
+import '../../../engagement/presentation/widgets/like_button.dart';
 import '../../../player/presentation/providers/player_provider.dart';
+import '../../../playlist/domain/entities/playlist.dart';
 import '../providers/search_provider.dart';
 import '../widgets/search_result_tile.dart';
 import '../widgets/search_section_header.dart';
@@ -17,15 +18,13 @@ class _Genre {
   final Color color;
   final int imageWidth;
   final int imageHeight;
-  final String? routeOverride;
   const _Genre(
     this.name,
     this.assetPath,
     this.color,
     this.imageWidth,
-    this.imageHeight, {
-    this.routeOverride,
-  });
+    this.imageHeight,
+  );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -45,22 +44,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   static const _sectionGap = 8.0;
 
   static const List<_Genre> _genres = [
-    _Genre('Hip Hop & Rap', 'assets/images/HipHop_&_Rap.png',
-        Color(0xFFFF5500), 502, 443),
-    _Genre('Electronic', 'assets/images/Electronic.png', Color(0xFF1A6EDD),
-        434, 575),
+    _Genre('Hip Hop & Rap', 'assets/images/HipHop_&_Rap.png', Color(0xFFFF5500),
+        502, 443),
+    _Genre('Electronic', 'assets/images/Electronic.png', Color(0xFF1A6EDD), 434,
+        575),
     _Genre('Pop', 'assets/images/Pop.png', Color(0xFFDD1A8C), 431, 579),
     _Genre('R&B', 'assets/images/R&B.png', Color(0xFF9B59B6), 495, 206),
     _Genre('Chill', 'assets/images/Chill.png', Color(0xFF1AAD6E), 501, 212),
     _Genre('Party', 'assets/images/Party.png', Color(0xFFDDAA1A), 500, 429),
-    _Genre(
-        'Workout', 'assets/images/Workout.png', Color(0xFFE53935), 510, 489),
+    _Genre('Workout', 'assets/images/Workout.png', Color(0xFFE53935), 510, 489),
     _Genre('Techno', 'assets/images/Techno.png', Color(0xFF5C6BC0), 416, 600),
     _Genre('House', 'assets/images/House.png', Color(0xFF7B1FA2), 416, 600),
     _Genre('Feel Good', 'assets/images/Feel_good.png', Color(0xFF43A047), 548,
         264),
-    _Genre(
-        'At Home', 'assets/images/At_home.png', Color(0xFFFF8F00), 556, 274),
+    _Genre('At Home', 'assets/images/At_home.png', Color(0xFFFF8F00), 556, 274),
     _Genre(
       'Healing Era',
       'assets/images/Healing_era.png',
@@ -241,8 +238,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                       ? GestureDetector(
                           key: const ValueKey('search_clear_button'),
                           onTap: _clearAndReset,
-                          child:
-                              const Icon(Icons.close, color: Colors.white38),
+                          child: const Icon(Icons.close, color: Colors.white38),
                         )
                       : null,
                   filled: true,
@@ -273,7 +269,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
 
   Widget _body(SearchState state) {
     return switch (state.mode) {
-      SearchMode.idle => _VibesGrid(genres: _genres),
+      SearchMode.idle => const _VibesGrid(genres: _genres),
       SearchMode.history => _historyPanel(state.history),
       SearchMode.results => _resultsBody(state),
     };
@@ -345,8 +341,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               onPressed: () =>
                   ref.read(searchProvider.notifier).submit(state.query),
               style: ElevatedButton.styleFrom(backgroundColor: _orange),
-              child:
-                  const Text('Retry', style: TextStyle(color: Colors.white)),
+              child: const Text('Retry', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -406,12 +401,25 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               imageUrl: p.artworkUrl,
               type: SearchEntityType.playlist,
               onTap: () => _tapPlaylist(p),
+              trailing: PlaylistLikeButton(
+                playlist: _playlistFromSearchResult(p),
+                iconSize: 20,
+              ),
             ),
         ],
         const SizedBox(height: 24),
       ],
     );
   }
+
+  Playlist _playlistFromSearchResult(SearchResultPlaylist playlist) => Playlist(
+        id: playlist.id,
+        title: playlist.title,
+        artworkUrl: playlist.artworkUrl,
+        ownerName: playlist.creatorName ?? '',
+        trackCount: playlist.trackCount,
+        creatorId: playlist.creatorId,
+      );
 }
 
 // ── Tab Bar ───────────────────────────────────────────────────────────────────
@@ -431,25 +439,18 @@ class _TabBar extends StatefulWidget {
   State<_TabBar> createState() => _TabBarState();
 }
 
-class _TabBarState extends State<_TabBar>
-    with SingleTickerProviderStateMixin {
+class _TabBarState extends State<_TabBar> with SingleTickerProviderStateMixin {
   static const _tabs = [
-    (filter: SearchFilter.all,       label: 'All'),
-    (filter: SearchFilter.tracks,    label: 'Tracks'),
-    (filter: SearchFilter.users,     label: 'Profiles'),
+    (filter: SearchFilter.all, label: 'All'),
+    (filter: SearchFilter.tracks, label: 'Tracks'),
+    (filter: SearchFilter.users, label: 'Profiles'),
     (filter: SearchFilter.playlists, label: 'Playlists'),
-    (filter: SearchFilter.albums,    label: 'Albums'),
+    (filter: SearchFilter.albums, label: 'Albums'),
   ];
 
   static const _orange = Color(0xFFFF5500);
   static const _indicatorH = 2.0;
   static const _barH = 44.0;
-  static const _testKeys = <SearchFilter, ValueKey<String>>{
-    SearchFilter.tracks: ValueKey('search_tab_tracks'),
-    SearchFilter.users: ValueKey('search_tab_users'),
-    SearchFilter.playlists: ValueKey('search_tab_playlists'),
-  };
-
   late final AnimationController _animCtrl;
   late Animation<double> _indicatorAnim;
   final _scrollCtrl = ScrollController();
@@ -562,9 +563,8 @@ class _TabBarState extends State<_TabBar>
                               child: Text(
                                 _tabs[i].label,
                                 style: TextStyle(
-                                  color: selected
-                                      ? Colors.white
-                                      : Colors.white54,
+                                  color:
+                                      selected ? Colors.white : Colors.white54,
                                   fontSize: 14,
                                   fontWeight: selected
                                       ? FontWeight.w600
@@ -579,15 +579,12 @@ class _TabBarState extends State<_TabBar>
                   ),
                   // ── Sliding underline indicator ───────────────────────
                   AnimatedBuilder(
-                    animation:
-                        Listenable.merge([_animCtrl, _scrollCtrl]),
+                    animation: Listenable.merge([_animCtrl, _scrollCtrl]),
                     builder: (_, __) {
-                      final scrollOffset = _scrollCtrl.hasClients
-                          ? _scrollCtrl.offset
-                          : 0.0;
+                      final scrollOffset =
+                          _scrollCtrl.hasClients ? _scrollCtrl.offset : 0.0;
                       // Convert content-space x → viewport-space x.
-                      final viewportX =
-                          _indicatorAnim.value - scrollOffset;
+                      final viewportX = _indicatorAnim.value - scrollOffset;
                       return Positioned(
                         left: viewportX,
                         bottom: 0,
@@ -679,7 +676,6 @@ class _GenreCard extends StatelessWidget {
   const _GenreCard({required this.genre});
 
   String get _route => switch (genre.name) {
-        _ when genre.routeOverride != null => genre.routeOverride!,
         'Hip Hop & Rap' => '/home/genre/hiphop',
         'Folk' => '/home/genre/folk',
         'Indie' => '/home/genre/indie',

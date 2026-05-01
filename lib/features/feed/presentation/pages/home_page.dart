@@ -8,10 +8,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/like_button.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
 import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
 
 class _FeedTrack {
   final String id;
@@ -66,8 +68,7 @@ class _FeedTrack {
     final media = _asMap(track['media']);
     final isActivity = target != null || json.containsKey('activityType');
     final actor = isActivity ? _activityActor(json) : null;
-    final trackId =
-        track['_id']?.toString() ?? track['id']?.toString() ?? '';
+    final trackId = track['_id']?.toString() ?? track['id']?.toString() ?? '';
     final fallbackHlsUrl = trackId.isEmpty
         ? ''
         : 'https://biobeatsstorage2026.blob.core.windows.net/biobeats-audio/hls/$trackId/playlist.m3u8';
@@ -221,6 +222,46 @@ class _GenreTheme {
       trendingQueries.isEmpty ? <String>[query] : trendingQueries;
 }
 
+class _HomePlaylistSummary {
+  final String id;
+  final String title;
+  final String ownerName;
+  final String? artworkUrl;
+  final int trackCount;
+
+  const _HomePlaylistSummary({
+    required this.id,
+    required this.title,
+    required this.ownerName,
+    this.artworkUrl,
+    this.trackCount = 0,
+  });
+
+  factory _HomePlaylistSummary.fromJson(Map<String, dynamic> json) {
+    final creator = _FeedTrack._asMap(json['creator'] ?? json['user']);
+    return _HomePlaylistSummary(
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      ownerName: (json['ownerName'] ??
+              creator?['displayName'] ??
+              creator?['username'] ??
+              '')
+          .toString(),
+      artworkUrl: (json['artworkUrl'] ?? json['artwork_url'])?.toString(),
+      trackCount: (json['trackCount'] as num?)?.toInt() ??
+          (json['tracks'] is List ? (json['tracks'] as List).length : 0),
+    );
+  }
+
+  Playlist toPlaylist({String? fallbackArtworkUrl}) => Playlist(
+        id: id,
+        title: title,
+        artworkUrl: artworkUrl ?? fallbackArtworkUrl,
+        ownerName: ownerName,
+        trackCount: trackCount,
+      );
+}
+
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -306,6 +347,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   List<_FeedTrack> _curatedTracks = [];
   List<_FeedTrack> _likedByFollowingTracks = [];
   Map<String, List<_FeedTrack>> _buzzingGenreTracks = {};
+  Map<String, _HomePlaylistSummary> _buzzingGenrePlaylists = {};
 
   @override
   void initState() {
@@ -611,18 +653,62 @@ class _HomePageState extends ConsumerState<HomePage> {
     final entries = await Future.wait(
       _genres.map((genre) async {
         try {
-          final tracks = await _fetchTrendingForGenre(genre, limit: 5);
-          return MapEntry(genre.query, tracks);
+          final results = await Future.wait([
+            _fetchTrendingForGenre(genre, limit: 5),
+            _fetchPlaylistForGenre(genre),
+          ]);
+          return (
+            query: genre.query,
+            tracks: results[0] as List<_FeedTrack>,
+            playlist: results[1] as _HomePlaylistSummary?,
+          );
         } catch (e) {
           debugPrint('Buzzing ${genre.query} error: $e');
-          return MapEntry(genre.query, <_FeedTrack>[]);
+          return (
+            query: genre.query,
+            tracks: <_FeedTrack>[],
+            playlist: null,
+          );
         }
       }),
     );
 
     if (mounted) {
-      setState(() => _buzzingGenreTracks = Map.fromEntries(entries));
+      setState(() {
+        _buzzingGenreTracks = {
+          for (final entry in entries) entry.query: entry.tracks,
+        };
+        _buzzingGenrePlaylists = {
+          for (final entry in entries)
+            if (entry.playlist != null) entry.query: entry.playlist!,
+        };
+      });
     }
+  }
+
+  Future<_HomePlaylistSummary?> _fetchPlaylistForGenre(
+    _GenreTheme genre,
+  ) async {
+    for (final query in genre.effectiveTrendingQueries) {
+      try {
+        final response = await dioClient.dio.get(
+          '/playlists',
+          queryParameters: {
+            'genre': query,
+            'releaseType': 'playlist',
+          },
+        );
+        final data = response.data['data'] as Map<String, dynamic>? ?? {};
+        final raw = data['playlists'] as List<dynamic>? ?? [];
+        for (final item in raw.whereType<Map<String, dynamic>>()) {
+          final playlist = _HomePlaylistSummary.fromJson(item);
+          if (playlist.id.isNotEmpty) return playlist;
+        }
+      } catch (e) {
+        debugPrint('Buzzing playlist ${genre.label} query "$query" error: $e');
+      }
+    }
+    return null;
   }
 
   void _playTrackCollection(
@@ -722,6 +808,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         waveform: track.waveform,
         artistId: track.artistId,
         artistPermalink: track.artistPermalink,
+        trackPermalink: track.trackPermalink,
         initialIsLiked: track.isLiked,
         initialLikeCount: track.likeCount,
         initialRepostCount: track.repostCount,
@@ -1095,6 +1182,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           final genre = _genres[index];
           final tracks =
               _buzzingGenreTracks[genre.query] ?? const <_FeedTrack>[];
+          final playlist = _buzzingGenrePlaylists[genre.query];
           return _BuzzingCard(
             genre: genre,
             track: tracks.isNotEmpty ? tracks.first : null,
@@ -1104,6 +1192,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 builder: (_) => _GenreStationPage(
                   genre: genre,
                   tracks: tracks,
+                  playlist: playlist,
                 ),
               ),
             ),
@@ -1227,27 +1316,35 @@ class _HomePageState extends ConsumerState<HomePage> {
               showSeeAll: true,
               onSeeAll: () => context.push('/home/recommended'),
             ),
-            _buildSquareShelf(recommendationTracks, listKey: const ValueKey('home_recommended_list')),
+            _buildSquareShelf(recommendationTracks,
+                listKey: const ValueKey('home_recommended_list')),
             const SizedBox(height: 28),
             _buildTrendingSection(),
             const SizedBox(height: 28),
             _buildSectionHeader('Mixed for $_displayName'),
-            _buildSquareShelf(mixedTracks, showMixRibbon: true, compact: true, listKey: const ValueKey('home_mixed_list')),
+            _buildSquareShelf(mixedTracks,
+                showMixRibbon: true,
+                compact: true,
+                listKey: const ValueKey('home_mixed_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('Liked by people you follow'),
-            _buildTrackRowsSection(followLikedTracks, listKey: const ValueKey('home_liked_by_following_list')),
+            _buildTrackRowsSection(followLikedTracks,
+                listKey: const ValueKey('home_liked_by_following_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('Made for you'),
             _buildMadeForYou(madeForYouTracks),
             const SizedBox(height: 28),
             _buildSectionHeader('Curated by SoundCloud'),
-            _buildSquareShelf(curatedTracks, compact: true, listKey: const ValueKey('home_curated_list')),
+            _buildSquareShelf(curatedTracks,
+                compact: true, listKey: const ValueKey('home_curated_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('Liked By'),
-            _buildSquareShelf(likedByTracks, compact: true, listKey: const ValueKey('home_liked_by_list')),
+            _buildSquareShelf(likedByTracks,
+                compact: true, listKey: const ValueKey('home_liked_by_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('Discover with Stations'),
-            _buildStationShelf(stationTracks, listKey: const ValueKey('home_station_list')),
+            _buildStationShelf(stationTracks,
+                listKey: const ValueKey('home_station_list')),
             const SizedBox(height: 28),
             _buildSectionHeader('New crew, suggested for you'),
             const Padding(
@@ -2060,10 +2157,12 @@ class _BuzzingCard extends StatelessWidget {
 class _GenreStationPage extends ConsumerWidget {
   final _GenreTheme genre;
   final List<_FeedTrack> tracks;
+  final _HomePlaylistSummary? playlist;
 
   const _GenreStationPage({
     required this.genre,
     required this.tracks,
+    this.playlist,
   });
 
   void _playTrack(
@@ -2101,18 +2200,9 @@ class _GenreStationPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final heroTrack = tracks.isNotEmpty ? tracks.first : null;
-    final engagementParams = heroTrack == null
-        ? null
-        : EngagementParams(
-            trackId: heroTrack.id,
-            isLiked: heroTrack.isLiked,
-            isReposted: heroTrack.isReposted,
-            likeCount: heroTrack.likeCount,
-            repostCount: heroTrack.repostCount,
-          );
-    final engagement = engagementParams == null
-        ? null
-        : ref.watch(engagementProvider(engagementParams));
+    final playlistEntity = playlist?.toPlaylist(
+      fallbackArtworkUrl: heroTrack?.artworkUrl,
+    );
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -2209,27 +2299,18 @@ class _GenreStationPage extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    IconButton(
-                      onPressed: engagementParams == null ||
-                              engagement!.isLoadingLike
-                          ? null
-                          : () => ref
-                              .read(
-                                engagementProvider(engagementParams).notifier,
-                              )
-                              .toggleLike(),
-                      icon: Icon(
-                        engagement?.isLiked == true
-                            ? Icons.favorite
-                            : Icons.favorite_border,
+                    if (playlistEntity != null)
+                      PlaylistLikeButton(playlist: playlistEntity)
+                    else
+                      IconButton(
+                        onPressed: null,
+                        icon: const Icon(Icons.favorite_border),
+                        color: Colors.white38,
+                        style: IconButton.styleFrom(
+                          disabledBackgroundColor:
+                              Colors.white.withValues(alpha: 0.08),
+                        ),
                       ),
-                      color: engagement?.isLiked == true
-                          ? const Color(0xFFFF5500)
-                          : Colors.white,
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.12),
-                      ),
-                    ),
                   ],
                 ),
               ],

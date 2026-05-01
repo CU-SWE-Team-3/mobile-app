@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +16,7 @@ import 'package:soundcloud_clone/features/messaging/domain/entities/participant.
 import 'package:soundcloud_clone/features/messaging/presentation/providers/messaging_providers.dart';
 import 'package:soundcloud_clone/features/messaging/presentation/widgets/send_to_sheet.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/station/presentation/providers/station_providers.dart';
 
 import '../pages/likers_list_page.dart';
 import '../pages/reposters_list_page.dart';
@@ -32,6 +34,7 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
   final List<int>? waveform;
   final String? artistId;
   final String? artistPermalink;
+  final String? trackPermalink;
   final List<PlayerTrack>? queue;
   final bool showSendTo;
   final bool showShare;
@@ -50,6 +53,7 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
     this.waveform,
     this.artistId,
     this.artistPermalink,
+    this.trackPermalink,
     this.queue,
     this.showSendTo = true,
     this.showShare = true,
@@ -312,10 +316,11 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                   );
                 },
               ),
-              _OptionTile(
-                icon: Icons.wifi_tethering_outlined,
-                label: 'Start station',
-                onTap: () => _showSoon('Start station coming soon'),
+              _StationOptionTile(
+                trackId: widget.trackId,
+                title: widget.title,
+                artistName: widget.artistName,
+                artworkUrl: widget.artworkUrl,
               ),
               _isDownloading
                   ? const ListTile(
@@ -792,6 +797,71 @@ class _SheetArtworkPlaceholder extends StatelessWidget {
       child: const Center(
         child: Icon(Icons.music_note_rounded, color: Colors.white24, size: 34),
       ),
+    );
+  }
+}
+
+// Composite tile: "Start station" (navigate) + like-station toggle (heart icon).
+class _StationOptionTile extends ConsumerWidget {
+  final String trackId;
+  final String? title;
+  final String? artistName;
+  final String? artworkUrl;
+
+  const _StationOptionTile({
+    required this.trackId,
+    this.title,
+    this.artistName,
+    this.artworkUrl,
+  });
+
+  String get _stationId => 'track_$trackId';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final likeState = ref.watch(stationLikeProvider(_stationId));
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      leading: const Icon(Icons.wifi_tethering_outlined,
+          color: Colors.white, size: 24),
+      title: const Text(
+        'Start station',
+        style: TextStyle(color: Colors.white, fontSize: 15),
+      ),
+      trailing: GestureDetector(
+        onTap: () {
+          if (!likeState.isLoading) {
+            ref.read(stationLikeProvider(_stationId).notifier).toggle();
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: likeState.isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Color(0xFFFF5500)),
+                )
+              : Icon(
+                  likeState.isLiked ? Icons.favorite : Icons.favorite_border,
+                  color: likeState.isLiked
+                      ? const Color(0xFFFF5500)
+                      : Colors.white54,
+                  size: 22,
+                ),
+        ),
+      ),
+      onTap: () {
+        Navigator.pop(context);
+        context.push('/station', extra: {
+          'trackId': trackId,
+          'title': title,
+          'artistName': artistName,
+          'artworkUrl': artworkUrl,
+        });
+      },
     );
   }
 }

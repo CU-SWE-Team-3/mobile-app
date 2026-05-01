@@ -26,12 +26,15 @@ class AppShell extends StatelessWidget {
             Positioned.fill(
               child: navigationShell,
             ),
-            const Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: MiniPlayerWidget(),
-            ),
+            // Hide mini player on the Feed branch (index 1) — the feed is a
+            // full-screen immersive experience and manages its own layout.
+            if (navigationShell.currentIndex != 1)
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: MiniPlayerWidget(),
+              ),
           ],
         ),
         bottomNavigationBar: _BottomNavBar(

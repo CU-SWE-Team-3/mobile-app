@@ -21,7 +21,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    repo = HistoryRepository();
+    repo = HistoryRepository('test_user');
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────

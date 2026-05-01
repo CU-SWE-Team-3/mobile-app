@@ -349,7 +349,20 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                       top: Radius.circular(16)),
                                 ),
                                 builder: (_) =>
-                                    TrackOptionsSheet(trackId: trackId),
+                                    TrackOptionsSheet(
+                                      trackId: trackId,
+                                      title: playerState.currentTrack?.title,
+                                      artistName: playerState.currentTrack?.artist,
+                                      artworkUrl: playerState.currentTrackArtworkUrl,
+                                      audioUrl: playerState.currentTrack?.audioUrl,
+                                      waveform: playerState.currentTrack?.waveform,
+                                      artistId: playerState.currentTrack?.artistId,
+                                      artistPermalink: playerState.currentTrack?.artistPermalink,
+                                      trackPermalink: playerState.currentTrack?.trackPermalink,
+                                      initialIsLiked: engState.isLiked,
+                                      initialLikeCount: engState.likeCount,
+                                      initialRepostCount: engState.repostCount,
+                                    ),
                               );
                             },
                           ),

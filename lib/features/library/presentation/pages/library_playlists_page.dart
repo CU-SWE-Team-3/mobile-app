@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../playlist/domain/entities/playlist.dart';
 import '../../../playlist/presentation/pages/playlist_details_page.dart';
 import '../../../playlist/presentation/providers/playlists_provider.dart';
@@ -38,7 +39,16 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final playlists = ref.watch(playlistsProvider);
+    final ownedPlaylists = ref.watch(playlistsProvider);
+    final likedPlaylistsAsync = ref.watch(likedPlaylistsProvider);
+    final ownedIds = ownedPlaylists.map((p) => p.id).toSet();
+    final playlists = likedPlaylistsAsync.maybeWhen(
+      data: (likedPlaylists) => [
+        ...ownedPlaylists,
+        ...likedPlaylists.where((p) => !ownedIds.contains(p.id)),
+      ],
+      orElse: () => ownedPlaylists,
+    );
 
     return Scaffold(
       backgroundColor: _bg,
@@ -47,17 +57,25 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
           children: [
             _TopBar(onAdd: () => _openCreateSheet(context)),
             Expanded(
-              child: playlists.isEmpty
-                  ? _EmptyState(onCreateTap: () => _openCreateSheet(context))
-                  : _PlaylistList(
-                      playlists: playlists,
-                      onCreateNew: () => _openCreateSheet(context),
-                      onImport: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const _ImportPage()),
-                      ),
-                    ),
+              child: playlists.isEmpty &&
+                      likedPlaylistsAsync.isLoading &&
+                      ownedPlaylists.isEmpty
+                  ? const Center(
+                      child: CircularProgressIndicator(color: _primary),
+                    )
+                  : playlists.isEmpty
+                      ? _EmptyState(
+                          onCreateTap: () => _openCreateSheet(context))
+                      : _PlaylistList(
+                          playlists: playlists,
+                          ownedIds: ownedIds,
+                          onCreateNew: () => _openCreateSheet(context),
+                          onImport: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const _ImportPage()),
+                          ),
+                        ),
             ),
           ],
         ),
@@ -229,11 +247,13 @@ class _EmptyState extends StatelessWidget {
 
 class _PlaylistList extends StatefulWidget {
   final List<Playlist> playlists;
+  final Set<String> ownedIds;
   final VoidCallback onCreateNew;
   final VoidCallback onImport;
 
   const _PlaylistList({
     required this.playlists,
+    required this.ownedIds,
     required this.onCreateNew,
     required this.onImport,
   });
@@ -364,6 +384,7 @@ class _PlaylistListState extends State<_PlaylistList> {
             itemBuilder: (_, i) => _PlaylistTile(
               key: ValueKey('playlist_tile_${_filtered[i].id}'),
               playlist: _filtered[i],
+              isOwned: widget.ownedIds.contains(_filtered[i].id),
             ),
           ),
         ),
@@ -378,7 +399,6 @@ class _ActionButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ActionButton({
-    super.key,
     required this.icon,
     required this.label,
     required this.onTap,
@@ -414,15 +434,16 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-class _PlaylistTile extends StatefulWidget {
+class _PlaylistTile extends ConsumerStatefulWidget {
   final Playlist playlist;
-  const _PlaylistTile({super.key, required this.playlist});
+  final bool isOwned;
+  const _PlaylistTile({super.key, required this.playlist, required this.isOwned});
 
   @override
-  State<_PlaylistTile> createState() => _PlaylistTileState();
+  ConsumerState<_PlaylistTile> createState() => _PlaylistTileState();
 }
 
-class _PlaylistTileState extends State<_PlaylistTile> {
+class _PlaylistTileState extends ConsumerState<_PlaylistTile> {
   String _avatarUrl = '';
 
   @override
@@ -440,6 +461,13 @@ class _PlaylistTileState extends State<_PlaylistTile> {
   @override
   Widget build(BuildContext context) {
     final playlist = widget.playlist;
+    final engParams = EngagementParams(
+      trackId: playlist.id,
+      targetModel: 'Playlist',
+      isLiked: true,
+    );
+    final engState = widget.isOwned ? null : ref.watch(engagementProvider(engParams));
+
     final hasArtwork = playlist.artworkUrl != null &&
         playlist.artworkUrl!.startsWith('https://') &&
         !playlist.artworkUrl!.contains('default');
@@ -457,11 +485,13 @@ class _PlaylistTileState extends State<_PlaylistTile> {
         fit: BoxFit.cover,
         placeholder: (_, __) => const ColoredBox(
           color: Color(0xFF2A2A2A),
-          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+          child: Center(
+              child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
         ),
         errorWidget: (_, __, ___) => const ColoredBox(
           color: Color(0xFF2A2A2A),
-          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+          child: Center(
+              child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
         ),
       );
     } else if (hasFirstTrackArtwork) {
@@ -470,11 +500,13 @@ class _PlaylistTileState extends State<_PlaylistTile> {
         fit: BoxFit.cover,
         placeholder: (_, __) => const ColoredBox(
           color: Color(0xFF2A2A2A),
-          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+          child: Center(
+              child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
         ),
         errorWidget: (_, __, ___) => const ColoredBox(
           color: Color(0xFF2A2A2A),
-          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+          child: Center(
+              child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
         ),
       );
     } else if (playlist.trackCount == 0 && hasValidAvatar) {
@@ -483,17 +515,20 @@ class _PlaylistTileState extends State<_PlaylistTile> {
         fit: BoxFit.cover,
         placeholder: (_, __) => const ColoredBox(
           color: Color(0xFF2A2A2A),
-          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+          child: Center(
+              child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
         ),
         errorWidget: (_, __, ___) => const ColoredBox(
           color: Color(0xFF2A2A2A),
-          child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+          child: Center(
+              child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
         ),
       );
     } else {
       thumbnailChild = const ColoredBox(
         color: Color(0xFF2A2A2A),
-        child: Center(child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
+        child: Center(
+            child: Icon(Icons.music_note, color: Colors.white38, size: 24)),
       );
     }
 
@@ -510,75 +545,97 @@ class _PlaylistTileState extends State<_PlaylistTile> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: Row(
             children: [
-            // Thumbnail
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: thumbnailChild,
+              // Thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: thumbnailChild,
+                ),
               ),
-            ),
-            const SizedBox(width: 14),
-            // Info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    playlist.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+              const SizedBox(width: 14),
+              // Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      playlist.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    playlist.ownerName,
-                    style: const TextStyle(color: _secondary, fontSize: 12),
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      const Text(
-                        'Playlist',
-                        style: TextStyle(color: _secondary, fontSize: 11),
-                      ),
-                      const Text(' · ',
-                          style: TextStyle(color: _secondary, fontSize: 11)),
-                      Text(
-                        '${playlist.trackCount} Tracks',
-                        style: const TextStyle(color: _secondary, fontSize: 11),
-                      ),
-                      if (!playlist.isPublic) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      playlist.ownerName,
+                      style: const TextStyle(color: _secondary, fontSize: 12),
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Text(
+                          'Playlist',
+                          style: TextStyle(color: _secondary, fontSize: 11),
+                        ),
                         const Text(' · ',
                             style: TextStyle(color: _secondary, fontSize: 11)),
-                        const Icon(Icons.lock_outline,
-                            color: _secondary, size: 11),
+                        Text(
+                          '${playlist.trackCount} Tracks',
+                          style:
+                              const TextStyle(color: _secondary, fontSize: 11),
+                        ),
+                        if (!playlist.isPublic) ...[
+                          const Text(' · ',
+                              style:
+                                  TextStyle(color: _secondary, fontSize: 11)),
+                          const Icon(Icons.lock_outline,
+                              color: _secondary, size: 11),
+                        ],
                       ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () => showModalBottomSheet(
-                context: context,
-                backgroundColor: _surface,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                    ),
+                  ],
                 ),
-                useSafeArea: true,
-                builder: (_) => PlaylistOptionsSheet(playlist: playlist),
               ),
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Icon(Icons.more_vert_rounded, color: _secondary, size: 20),
+              if (!widget.isOwned && engState != null)
+                GestureDetector(
+                  onTap: engState.isLoadingLike
+                      ? null
+                      : () => ref
+                          .read(engagementProvider(engParams).notifier)
+                          .toggleLike(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      engState.isLiked ? Icons.favorite : Icons.favorite_border,
+                      color: engState.isLiked
+                          ? const Color(0xFFFF5500)
+                          : Colors.white54,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              GestureDetector(
+                onTap: () => showModalBottomSheet(
+                  context: context,
+                  backgroundColor: _surface,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  useSafeArea: true,
+                  builder: (_) => PlaylistOptionsSheet(playlist: playlist),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.more_vert_rounded,
+                      color: _secondary, size: 20),
+                ),
               ),
-            ),
             ],
           ),
         ),
@@ -630,8 +687,7 @@ class _CreateSheetState extends State<_CreateSheet> {
         child: SafeArea(
           top: false,
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -700,8 +756,7 @@ class _CreateSheetState extends State<_CreateSheet> {
                     labelStyle: const TextStyle(color: _secondary),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide:
-                          const BorderSide(color: Color(0xFF3A3A3A)),
+                      borderSide: const BorderSide(color: Color(0xFF3A3A3A)),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -723,7 +778,8 @@ class _CreateSheetState extends State<_CreateSheet> {
                     Switch(
                       key: const ValueKey('playlist_privacy_toggle'),
                       value: _isPublic,
-                      onChanged: _saving ? null : (v) => setState(() => _isPublic = v),
+                      onChanged:
+                          _saving ? null : (v) => setState(() => _isPublic = v),
                       activeThumbColor: Colors.white,
                       activeTrackColor: _primary,
                       inactiveThumbColor: Colors.white,
@@ -742,7 +798,8 @@ class _CreateSheetState extends State<_CreateSheet> {
 
   Future<void> _save() async {
     if (_saving) return;
-    final title = _ctrl.text.trim().isEmpty ? 'Untitled Playlist' : _ctrl.text.trim();
+    final title =
+        _ctrl.text.trim().isEmpty ? 'Untitled Playlist' : _ctrl.text.trim();
     setState(() => _saving = true);
     try {
       await widget.onSave(title, _isPublic);
@@ -777,8 +834,7 @@ class _ImportPage extends StatelessWidget {
           children: [
             // Top bar
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Row(
                 children: [
                   GestureDetector(

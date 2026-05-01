@@ -19,12 +19,14 @@ class PlaylistOptionsSheet extends ConsumerWidget {
   final Playlist playlist;
   final bool showCopyOption;
   final bool popPageOnDelete;
+  final bool canManage;
 
   const PlaylistOptionsSheet({
     super.key,
     required this.playlist,
     this.showCopyOption = false,
     this.popPageOnDelete = false,
+    this.canManage = true,
   });
 
   @override
@@ -96,58 +98,60 @@ class PlaylistOptionsSheet extends ConsumerWidget {
               ),
             ),
             const Divider(color: Colors.white12, height: 28),
-            // Edit playlist
-            _optionRow(
-              icon: Icons.edit_outlined,
-              label: 'Edit',
-              onTap: () {
-                final router = GoRouter.of(context);
-                Navigator.pop(context);
-                router.push('/playlist/edit', extra: playlist);
-              },
-            ),
-            // Privacy settings — navigates to full privacy page
-            _optionRow(
-              icon: Icons.shield_outlined,
-              label: 'Privacy settings',
-              onTap: () {
-                Navigator.pop(context);
-                context.push('/playlist/privacy', extra: playlist);
-              },
-            ),
-            // Delete
-            _optionRow(
-              key: const ValueKey('playlist_delete_button'),
-              icon: Icons.delete_outline,
-              label: 'Delete',
-              onTap: () {
-                final nav = Navigator.of(context);
-                final messenger = ScaffoldMessenger.of(context);
-                final shouldPopPage = popPageOnDelete;
-                nav.pop();
-                ref
-                    .read(playlistsProvider.notifier)
-                    .remove(playlist.id)
-                    .then((_) {
-                  if (shouldPopPage) {
-                    nav.maybePop();
-                  } else {
+            if (canManage) ...[
+              // Edit playlist
+              _optionRow(
+                icon: Icons.edit_outlined,
+                label: 'Edit',
+                onTap: () {
+                  final router = GoRouter.of(context);
+                  Navigator.pop(context);
+                  router.push('/playlist/edit', extra: playlist);
+                },
+              ),
+              // Privacy settings — navigates to full privacy page
+              _optionRow(
+                icon: Icons.shield_outlined,
+                label: 'Privacy settings',
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push('/playlist/privacy', extra: playlist);
+                },
+              ),
+              // Delete
+              _optionRow(
+                key: const ValueKey('playlist_delete_button'),
+                icon: Icons.delete_outline,
+                label: 'Delete',
+                onTap: () {
+                  final nav = Navigator.of(context);
+                  final messenger = ScaffoldMessenger.of(context);
+                  final shouldPopPage = popPageOnDelete;
+                  nav.pop();
+                  ref
+                      .read(playlistsProvider.notifier)
+                      .remove(playlist.id)
+                      .then((_) {
+                    if (shouldPopPage) {
+                      nav.maybePop();
+                    } else {
+                      messenger.showSnackBar(const SnackBar(
+                        content: Text('Playlist deleted'),
+                        backgroundColor: _surface,
+                        behavior: SnackBarBehavior.floating,
+                      ));
+                    }
+                  }).catchError((_) {
                     messenger.showSnackBar(const SnackBar(
-                      content: Text('Playlist deleted'),
-                      backgroundColor: _surface,
+                      content:
+                          Text('Could not delete playlist. Please try again.'),
+                      backgroundColor: Color(0xFF3A1A1A),
                       behavior: SnackBarBehavior.floating,
                     ));
-                  }
-                }).catchError((_) {
-                  messenger.showSnackBar(const SnackBar(
-                    content: Text(
-                        'Could not delete playlist. Please try again.'),
-                    backgroundColor: Color(0xFF3A1A1A),
-                    behavior: SnackBarBehavior.floating,
-                  ));
-                });
-              },
-            ),
+                  });
+                },
+              ),
+            ],
             // Copy playlist (details page only)
             if (showCopyOption)
               _optionRow(
@@ -205,8 +209,7 @@ class PlaylistOptionsSheet extends ConsumerWidget {
               Icon(icon, color: Colors.white, size: 22),
               const SizedBox(width: 16),
               Text(label,
-                  style:
-                      const TextStyle(color: Colors.white, fontSize: 15)),
+                  style: const TextStyle(color: Colors.white, fontSize: 15)),
             ],
           ),
         ),

@@ -52,6 +52,7 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
           isPublic: p.isPublic,
           permalink: p.permalink,
           ownerPermalink: p.ownerPermalink,
+          creatorId: p.creatorId,
           secretToken: p.secretToken,
         );
       }).toList();
@@ -102,6 +103,7 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
           isPublic: p.isPublic,
           permalink: p.permalink,
           ownerPermalink: p.ownerPermalink,
+          creatorId: p.creatorId,
           secretToken: p.secretToken,
         );
       }).toList();
@@ -140,6 +142,7 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
                 isPublic: isPublic,
                 permalink: p.permalink,
                 ownerPermalink: p.ownerPermalink,
+                creatorId: p.creatorId,
                 secretToken: p.secretToken,
               )
             : p)
@@ -182,6 +185,7 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
                 isPublic: isPublic,
                 permalink: p.permalink,
                 ownerPermalink: p.ownerPermalink,
+                creatorId: p.creatorId,
                 secretToken: p.secretToken,
               )
             : p)
@@ -204,6 +208,7 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
                 isPublic: p.isPublic,
                 permalink: p.permalink,
                 ownerPermalink: p.ownerPermalink,
+                creatorId: p.creatorId,
                 secretToken: p.secretToken,
               )
             : p)

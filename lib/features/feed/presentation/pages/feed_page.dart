@@ -255,7 +255,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
             Expanded(child: _buildFeedBody(feedState)),
 
             // â”€â”€ Mini player bar (Following tab only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            const MiniPlayerWidget(),
+            MiniPlayerWidget(),
             // ── Body ───────────────────────────────────────────────
 
             // ── Mini player bar (Following tab only) ───────────────
