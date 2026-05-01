@@ -16,6 +16,7 @@ class _PrivacySettingsPageState extends ConsumerState<PrivacySettingsPage> {
   bool _isPrivate = false;
   bool _isLoading = true;
   bool _isSaving = false;
+  String? _loadError;
 
   static const _bg = Color(0xFF111111);
   static const _surface = Color(0xFF1E1E1E);
@@ -27,17 +28,12 @@ class _PrivacySettingsPageState extends ConsumerState<PrivacySettingsPage> {
   }
 
   Future<void> _loadPrivacy() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final permalink = prefs.getString('permalink') ?? '';
-      if (permalink.isEmpty) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
-      final response = await dioClient.dio.get('/profile/$permalink');
-      final data =
-          response.data['data']['user'] as Map<String, dynamic>? ?? {};
+      final data = await _fetchOwnProfile();
       if (mounted) {
         setState(() {
           _isPrivate = data['isPrivate'] as bool? ?? false;
@@ -45,8 +41,42 @@ class _PrivacySettingsPageState extends ConsumerState<PrivacySettingsPage> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadError = 'Could not load privacy settings.';
+        });
+      }
     }
+  }
+
+  Future<Map<String, dynamic>> _fetchOwnProfile() async {
+    try {
+      final response = await dioClient.dio.get('/profile/me');
+      final data = _extractUser(response.data);
+      if (data != null) return data;
+      throw StateError('Unexpected /profile/me response');
+    } on DioException {
+      final prefs = await SharedPreferences.getInstance();
+      final permalink = prefs.getString('permalink') ?? '';
+      if (permalink.isEmpty) rethrow;
+      final response = await dioClient.dio.get('/profile/$permalink');
+      final data = _extractUser(response.data);
+      if (data != null) return data;
+      throw StateError('Unexpected /profile/$permalink response');
+    }
+  }
+
+  Map<String, dynamic>? _extractUser(dynamic raw) {
+    if (raw is! Map) return null;
+    final data = raw['data'];
+    if (data is Map) {
+      final user = data['user'];
+      if (user is Map) return Map<String, dynamic>.from(user);
+    }
+    final user = raw['user'];
+    if (user is Map) return Map<String, dynamic>.from(user);
+    return null;
   }
 
   Future<void> _savePrivacy(bool value) async {
@@ -101,7 +131,34 @@ class _PrivacySettingsPageState extends ConsumerState<PrivacySettingsPage> {
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFFFF5500)),
             )
-          : ListView(
+          : _loadError != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _loadError!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        TextButton(
+                          onPressed: _loadPrivacy,
+                          child: const Text(
+                            'Retry',
+                            style: TextStyle(color: Color(0xFFFF5500)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView(
               children: [
                 const SizedBox(height: 16),
                 Container(
@@ -150,6 +207,7 @@ class _PrivacySettingsPageState extends ConsumerState<PrivacySettingsPage> {
                                 ),
                               )
                             : Switch(
+                                key: const ValueKey('settings_privacy_toggle'),
                                 value: _isPrivate,
                                 onChanged: _savePrivacy,
                                 activeThumbColor: const Color(0xFFFF5500),
