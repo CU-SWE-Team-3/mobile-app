@@ -14,6 +14,7 @@ class CommentsState {
   final String? error;
   final int currentPage;
   final int totalPages;
+  final int total;
 
   const CommentsState({
     this.comments = const [],
@@ -22,6 +23,7 @@ class CommentsState {
     this.error,
     this.currentPage = 1,
     this.totalPages = 1,
+    this.total = 0,
   });
 
   bool get hasMore => currentPage <= totalPages;
@@ -33,6 +35,7 @@ class CommentsState {
     String? error,
     int? currentPage,
     int? totalPages,
+    int? total,
   }) {
     return CommentsState(
       comments: comments ?? this.comments,
@@ -41,6 +44,7 @@ class CommentsState {
       error: error,
       currentPage: currentPage ?? this.currentPage,
       totalPages: totalPages ?? this.totalPages,
+      total: total ?? this.total,
     );
   }
 }
@@ -77,6 +81,7 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
         isLoading: false,
         currentPage: result.page + 1,
         totalPages: result.totalPages,
+        total: result.total,
       );
     } on DioException catch (e) {
       state = state.copyWith(
@@ -145,7 +150,11 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
         }
       }
 
-      state = state.copyWith(comments: updated, isPosting: false);
+      state = state.copyWith(
+        comments: updated,
+        isPosting: false,
+        total: state.total + 1,
+      );
       return true;
     } on DioException catch (e) {
       state = state.copyWith(
@@ -182,7 +191,10 @@ class CommentsNotifier extends StateNotifier<CommentsState> {
         updated.removeWhere((c) => c.id == commentId);
       }
 
-      state = state.copyWith(comments: updated);
+      state = state.copyWith(
+        comments: updated,
+        total: state.total > 0 ? state.total - 1 : 0,
+      );
     } on DioException {
       // Silently fail
     }

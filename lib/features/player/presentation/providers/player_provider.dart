@@ -103,6 +103,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   final AppAudioHandler _audioHandler;
   final PlayerApiService _api;
   final EngagementRemoteDataSource _engagementApi;
+  double _lastAudibleVolume = 0.7;
   
 
   late final StreamSubscription<Duration> _positionSub;
@@ -420,6 +421,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final clamped = volume.clamp(0.0, 1.0);
     await _audioHandler.setVolume(clamped);
     state = state.copyWith(volume: clamped);
+    if (clamped > 0.0) {
+      _lastAudibleVolume = clamped;
+    }
+  }
+
+  Future<void> toggleMute() async {
+    if (state.volume > 0.0) {
+      await setVolume(0.0);
+    } else {
+      await setVolume(_lastAudibleVolume);
+    }
   }
 
   /// Aliases used by the full-screen player UI.
