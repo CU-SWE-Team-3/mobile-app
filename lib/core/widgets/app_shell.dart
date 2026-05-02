@@ -82,7 +82,7 @@ class _BottomNavBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Container(
-          height: 80,
+          height: 55,
           decoration: const BoxDecoration(
             border: Border(top: BorderSide(color: Color(0xFF3B3B3B))),
           ),
@@ -93,7 +93,7 @@ class _BottomNavBar extends StatelessWidget {
                   child: InkWell(
                     onTap: () => onTap(index),
                     child: Padding(
-                      padding: const EdgeInsets.only(top: 8, bottom: 6),
+                      padding: const EdgeInsets.only(top: 4, bottom: 3),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -104,16 +104,16 @@ class _BottomNavBar extends StatelessWidget {
                             color: currentIndex == index
                                 ? Colors.white
                                 : const Color(0xFFB4B4B4),
-                            size: 22,
+                            size: 30,
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             _items[index].label,
                             style: TextStyle(
                               color: currentIndex == index
                                   ? Colors.white
                                   : const Color(0xFFB4B4B4),
-                              fontSize: 10,
+                              fontSize: 8,
                               fontWeight: currentIndex == index
                                   ? FontWeight.w500
                                   : FontWeight.w400,

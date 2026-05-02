@@ -11,6 +11,10 @@ import '../../../player/presentation/providers/follow_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../providers/feed_provider.dart';
 
+final discoverManualPlaybackTrackIdProvider = StateProvider<String?>(
+  (ref) => null,
+);
+
 class FeedTrackCard extends ConsumerStatefulWidget {
   final FeedTrack track;
   final bool isActive;
@@ -95,31 +99,48 @@ class _FeedTrackCardState extends ConsumerState<FeedTrackCard> {
     );
   }
 
-  Future<void> _playMiddlePreview() async {
+  Future<void> _openFullPlayerFromBeginning() async {
     final playerTrack = widget.track.toPlayerTrack();
     final notifier = ref.read(playerProvider.notifier);
-    await notifier.playTrack(playerTrack);
+    final playerState = ref.read(playerProvider);
+    final manualTrackId = ref.read(discoverManualPlaybackTrackIdProvider);
 
-    final duration = playerTrack.duration ?? Duration.zero;
-    if (duration <= const Duration(seconds: 30)) return;
+    if (manualTrackId == playerTrack.id &&
+        playerState.currentTrack?.id == playerTrack.id &&
+        playerState.error == null) {
+      notifier.togglePlayPause();
+      return;
+    }
 
-    final start = Duration(
-      milliseconds: ((duration.inMilliseconds - 30000) / 2).round(),
-    );
-    await notifier.seekTo(start);
+    ref.read(discoverManualPlaybackTrackIdProvider.notifier).state =
+        playerTrack.id;
+
+    if (playerState.currentTrack?.id == playerTrack.id &&
+        playerState.error == null) {
+      await notifier.seekTo(Duration.zero);
+      notifier.resume();
+    } else {
+      await notifier.playTrack(playerTrack);
+    }
+
+    if (mounted) {
+      context.push('/player');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final track = widget.track;
     final playerState = ref.watch(playerProvider);
+    final manualTrackId = ref.watch(discoverManualPlaybackTrackIdProvider);
     final isCurrentTrack = playerState.currentTrack?.id == track.id;
-    final isPlaying = isCurrentTrack && playerState.isPlaying;
+    final isManualCurrentTrack =
+        manualTrackId == track.id && isCurrentTrack && playerState.error == null;
     final progressDuration = playerState.duration > Duration.zero
         ? playerState.duration
         : track.toPlayerTrack().duration ?? Duration.zero;
     final playProgress =
-        isCurrentTrack && progressDuration.inMilliseconds > 0
+        isManualCurrentTrack && progressDuration.inMilliseconds > 0
             ? (playerState.position.inMilliseconds /
                     progressDuration.inMilliseconds)
                 .clamp(0.0, 1.0)
@@ -343,16 +364,12 @@ class _FeedTrackCardState extends ConsumerState<FeedTrackCard> {
                           ),
                           const SizedBox(width: 18),
                           _CardPlayButton(
-                            isLoading: playerState.isLoading && isCurrentTrack,
-                            isPlaying: isPlaying,
+                            isLoading:
+                                isManualCurrentTrack && playerState.isLoading,
+                            isPlaying:
+                                isManualCurrentTrack && playerState.isPlaying,
                             progress: playProgress,
-                            onTap: isCurrentTrack && playerState.error == null
-                                ? ref
-                                    .read(playerProvider.notifier)
-                                    .togglePlayPause
-                                : () {
-                                    _playMiddlePreview();
-                                  },
+                            onTap: _openFullPlayerFromBeginning,
                           ),
                         ],
                       ),

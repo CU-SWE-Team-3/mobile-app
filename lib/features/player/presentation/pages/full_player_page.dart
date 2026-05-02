@@ -498,13 +498,13 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                           ));
                         },
                         child: SizedBox(
-                          height: 120,
+                          height: 140,
                           width: constraints.maxWidth,
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
                               Positioned.fill(
-                                top: 40,
+                                top: 32,
                                 child: CustomPaint(
                                   painter: _WaveformPainter(
                                       progress: progress,
@@ -1057,14 +1057,14 @@ class _WaveformPainter extends CustomPainter {
     final splitX = (size.width * progress).clamp(0.0, size.width);
 
     if (!isPlaying) {
-      const strokeWidth = 2.5;
+      const strokeWidth = 4.0;
       final playedPaint = Paint()
         ..color = AppTheme.primary
         ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
       final unplayedPaint = Paint()
-        ..color = Colors.white.withOpacity(0.25)
+        ..color = Colors.white.withOpacity(0.85)
         ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
@@ -1097,7 +1097,7 @@ class _WaveformPainter extends CustomPainter {
       ..color = AppTheme.primary
       ..style = PaintingStyle.fill;
     final unplayedPaint = Paint()
-      ..color = Colors.white.withOpacity(0.25)
+      ..color = Colors.white.withOpacity(0.85)
       ..style = PaintingStyle.fill;
 
     for (int i = 0; i < barCount; i++) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,10 +25,14 @@ class FeedPage extends ConsumerStatefulWidget {
 }
 
 class _FeedPageState extends ConsumerState<FeedPage> {
+  static const _discoverPreviewLength = Duration(seconds: 30);
+
   _Tab _tab = _Tab.following;
   final PageController _pageController = PageController();
   final ScrollController _followingScrollController = ScrollController();
   int _currentPage = 0;
+  Timer? _discoverPreviewTimer;
+  int _discoverPreviewRequestId = 0;
 
   // Track which tabs have had their initial load triggered so we only fire once
   // per provider lifecycle (the providers themselves hold the data).
@@ -122,6 +128,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
   @override
   void dispose() {
+    _stopDiscoverPlayback();
     _pageController.dispose();
     _followingScrollController.dispose();
     super.dispose();
@@ -131,6 +138,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
   void _switchTab(_Tab tab) {
     if (_tab == tab) return;
+    final wasDiscover = _tab == _Tab.discover;
     setState(() {
       _tab = tab;
       _currentPage = 0;
@@ -138,7 +146,13 @@ class _FeedPageState extends ConsumerState<FeedPage> {
     if (_pageController.hasClients) {
       _pageController.jumpToPage(0);
     }
+    if (wasDiscover && tab != _Tab.discover) {
+      _stopDiscoverPlayback();
+    }
     _ensureLoaded(tab);
+    if (tab == _Tab.discover) {
+      _playCurrentDiscoverPreviewIfReady();
+    }
   }
 
   void _ensureLoaded(_Tab tab) {
@@ -170,6 +184,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
   void _onPageChanged(int index, List<FeedTrack> tracks) {
     if (index < 0 || index >= tracks.length) return;
+    _stopDiscoverPlayback(clearManualFlag: false);
     setState(() => _currentPage = index);
     final track = tracks[index];
     _playDiscoverPreview(track);
@@ -177,17 +192,111 @@ class _FeedPageState extends ConsumerState<FeedPage> {
   }
 
   Future<void> _playDiscoverPreview(FeedTrack track) async {
-    final playerTrack = track.toPlayerTrack();
-    final notifier = ref.read(playerProvider.notifier);
-    await notifier.playTrack(playerTrack);
+    if (_tab != _Tab.discover) return;
+    final requestId = ++_discoverPreviewRequestId;
+    _cancelDiscoverPreviewTimer();
+    ref.read(discoverManualPlaybackTrackIdProvider.notifier).state = null;
 
+    final playerTrack = track.toPlayerTrack();
     final duration = playerTrack.duration ?? Duration.zero;
-    if (duration <= const Duration(seconds: 30)) return;
+    final notifier = ref.read(playerProvider.notifier);
+    if (duration <= _discoverPreviewLength) {
+      await notifier.playTrack(playerTrack);
+      if (!mounted ||
+          _tab != _Tab.discover ||
+          requestId != _discoverPreviewRequestId) {
+        return;
+      }
+      _scheduleDiscoverPreviewStop(
+        track.id,
+        requestId,
+        Duration.zero,
+        duration,
+      );
+      return;
+    }
 
     final start = Duration(
-      milliseconds: ((duration.inMilliseconds - 30000) / 2).round(),
+      milliseconds: ((duration.inMilliseconds -
+                  _discoverPreviewLength.inMilliseconds) /
+              2)
+          .round(),
     );
+    await notifier.playTrack(playerTrack);
     await notifier.seekTo(start);
+    if (!mounted ||
+        _tab != _Tab.discover ||
+        requestId != _discoverPreviewRequestId) {
+      return;
+    }
+    _scheduleDiscoverPreviewStop(
+      track.id,
+      requestId,
+      start,
+      _discoverPreviewLength,
+    );
+  }
+
+  void _playCurrentDiscoverPreviewIfReady() {
+    final tracks = ref.read(discoverFeedProvider).tracks;
+    if (tracks.isEmpty) return;
+
+    final index = _currentPage.clamp(0, tracks.length - 1).toInt();
+    _playDiscoverPreview(tracks[index]);
+  }
+
+  void _scheduleDiscoverPreviewStop(
+    String trackId,
+    int requestId,
+    Duration previewStart,
+    Duration length,
+  ) {
+    if (length <= Duration.zero) return;
+    _discoverPreviewTimer = Timer(length, () {
+      if (!mounted ||
+          requestId != _discoverPreviewRequestId ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return;
+      }
+
+      final playerState = ref.read(playerProvider);
+      final previewEnd = previewStart + length;
+      final nearPreviewEnd =
+          playerState.position >= previewEnd - const Duration(seconds: 2);
+      if (playerState.currentTrack?.id == trackId &&
+          playerState.isPlaying &&
+          nearPreviewEnd) {
+        ref.read(playerProvider.notifier).pause();
+      }
+    });
+  }
+
+  void _cancelDiscoverPreviewTimer() {
+    _discoverPreviewTimer?.cancel();
+    _discoverPreviewTimer = null;
+  }
+
+  void _stopDiscoverPlayback({bool clearManualFlag = true}) {
+    _discoverPreviewRequestId++;
+    _cancelDiscoverPreviewTimer();
+
+    final playerState = ref.read(playerProvider);
+    final discoverTrackIds =
+        ref.read(discoverFeedProvider).tracks.map((track) => track.id).toSet();
+    final manualTrackId = ref.read(discoverManualPlaybackTrackIdProvider);
+    final currentTrackId = playerState.currentTrack?.id;
+    final isDiscoverTrack =
+        currentTrackId != null && discoverTrackIds.contains(currentTrackId);
+    final isManualDiscoverTrack =
+        currentTrackId != null && currentTrackId == manualTrackId;
+
+    if (playerState.isPlaying && (isDiscoverTrack || isManualDiscoverTrack)) {
+      ref.read(playerProvider.notifier).pause();
+    }
+
+    if (clearManualFlag) {
+      ref.read(discoverManualPlaybackTrackIdProvider.notifier).state = null;
+    }
   }
 
   void _maybeLoadMoreFollowing(int index, int totalTracks) {

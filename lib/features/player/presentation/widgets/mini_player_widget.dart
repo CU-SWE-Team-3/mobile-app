@@ -4,9 +4,12 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/core/providers/session_provider.dart';
+import 'package:soundcloud_clone/core/themes/app_theme.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/providers/follow_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 class MiniPlayerWidget extends ConsumerStatefulWidget {
@@ -29,17 +32,24 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
     final progress = durationMs <= 0
         ? 0.0
         : (playerState.position.inMilliseconds / durationMs).clamp(0.0, 1.0);
+    final myUserId = ref.watch(sessionUserIdProvider);
+    final artistId = currentTrack.artistId;
+    final showFollowButton = artistId != null && artistId != myUserId;
+    final followArtistId = artistId ?? '';
+    final followState = showFollowButton
+        ? ref.watch(followProvider(followArtistId))
+        : const FollowState(isChecking: false);
     final engParams = EngagementParams(trackId: currentTrack.id);
     final engState = ref.watch(engagementProvider(engParams));
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(34),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
-            height: 68,
+            height: 60,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
@@ -67,8 +77,8 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                     currentTrack.coverUrl!.isNotEmpty)
                   Positioned(
                     right: -6,
-                    top: 7,
-                    bottom: 7,
+                    top: 6,
+                    bottom: 6,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(20),
                       child: Opacity(
@@ -86,21 +96,21 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 14, 8),
+                  padding: const EdgeInsets.fromLTRB(12, 7, 14, 7),
                   child: Row(
                     children: [
                       GestureDetector(
                         key: const ValueKey('mini_player_play_button'),
                         onTap: notifier.togglePlayPause,
                         child: SizedBox(
-                          width: 50,
-                          height: 50,
+                          width: 44,
+                          height: 44,
                           child: Stack(
                             alignment: Alignment.center,
                             children: [
                               SizedBox(
-                                width: 50,
-                                height: 50,
+                                width: 44,
+                                height: 44,
                                 child: CircularProgressIndicator(
                                   value: progress,
                                   strokeWidth: 3,
@@ -114,8 +124,8 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                                 ),
                               ),
                               Container(
-                                width: 42,
-                                height: 42,
+                                width: 36,
+                                height: 36,
                                 decoration: BoxDecoration(
                                   color: Colors.white,
                                   shape: BoxShape.circle,
@@ -131,14 +141,14 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                                 child: Icon(
                                   isPlaying ? Icons.pause : Icons.play_arrow,
                                   color: Colors.black,
-                                  size: 24,
+                                  size: 22,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: GestureDetector(
                           key: const ValueKey('mini_player_expand_button'),
@@ -154,11 +164,11 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 14,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              const SizedBox(height: 3),
+                              const SizedBox(height: 2),
                               GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onTap: () {
@@ -182,7 +192,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     color: Color(0xFFD4D4D4),
-                                    fontSize: 11,
+                                    fontSize: 15,
                                   ),
                                 ),
                               ),
@@ -190,7 +200,41 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 6),
+                      if (showFollowButton)
+                        GestureDetector(
+                          key: const ValueKey('mini_player_follow_button'),
+                          onTap: (followState.isLoading || followState.isChecking)
+                              ? null
+                              : () => ref
+                                  .read(followProvider(followArtistId).notifier)
+                                  .toggle(followArtistId),
+                          child: SizedBox(
+                            width: 34,
+                            height: 34,
+                            child: followState.isLoading || followState.isChecking
+                                ? const Center(
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : Icon(
+                                    followState.isFollowing
+                                        ? Icons.person
+                                        : Icons.person_add_outlined,
+                                    color: followState.isFollowing
+                                        ? AppTheme.primary
+                                        : Colors.white,
+                                    size: 22,
+                                  ),
+                          ),
+                        ),
+                      if (showFollowButton) const SizedBox(width: 2),
                       GestureDetector(
                         key: const ValueKey('mini_player_like_button'),
                         onTap: engState.isLoadingLike
@@ -244,8 +288,8 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                                 }
                               },
                         child: SizedBox(
-                          width: 42,
-                          height: 42,
+                          width: 36,
+                          height: 36,
                           child: Icon(
                             engState.isLiked
                                 ? Icons.favorite
@@ -253,7 +297,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
                             color: engState.isLiked
                                 ? const Color(0xFFFF5500)
                                 : Colors.white,
-                            size: 28,
+                            size: 24,
                           ),
                         ),
                       ),
