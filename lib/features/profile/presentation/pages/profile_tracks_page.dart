@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
 import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
@@ -66,6 +67,34 @@ class ProfileTracksPage extends ConsumerWidget {
     if (queue.isEmpty) return;
     if (shuffle) queue.shuffle(Random());
     ref.read(playerProvider.notifier).playQueue(queue);
+  }
+
+  void _openTrackOptions(BuildContext context, UploadTrack track) {
+    final trackId = track.id;
+    if (trackId == null || trackId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track options are not available yet.')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: trackId,
+        title: track.title,
+        artistName: track.artist,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.hlsUrl,
+        waveform: track.waveform,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
+      ),
+    );
   }
 
   @override
@@ -203,6 +232,8 @@ class ProfileTracksPage extends ConsumerWidget {
                           ),
                           track: tracks[index],
                           onTap: () => _playFrom(context, ref, tracks, index),
+                          onMore: () =>
+                              _openTrackOptions(context, tracks[index]),
                         ),
                       );
                     },
@@ -226,11 +257,13 @@ class ProfileTracksPage extends ConsumerWidget {
 class _TrackTile extends StatelessWidget {
   final UploadTrack track;
   final VoidCallback onTap;
+  final VoidCallback onMore;
 
   const _TrackTile({
     super.key,
     required this.track,
     required this.onTap,
+    required this.onMore,
   });
 
   @override
@@ -305,7 +338,14 @@ class _TrackTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.more_vert_rounded, color: sub, size: 20),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onMore,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
+              ),
+            ),
           ],
         ),
       ),

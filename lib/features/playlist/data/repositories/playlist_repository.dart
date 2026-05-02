@@ -4,6 +4,18 @@ import 'package:flutter/foundation.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../domain/entities/playlist.dart';
 
+class PlaylistTrackSnapshot {
+  final int count;
+  final String? firstTrackArtworkUrl;
+  final bool containsTrack;
+
+  const PlaylistTrackSnapshot({
+    required this.count,
+    required this.firstTrackArtworkUrl,
+    this.containsTrack = false,
+  });
+}
+
 /// Single owner of all network calls to /playlists/*.
 /// Every method throws on API failure — callers decide how to surface errors.
 /// Never returns raw Response objects; returns parsed primitives or domain types.
@@ -75,8 +87,15 @@ class PlaylistRepository {
   }
 
   /// PATCH /playlists/{id} — toggle public/private visibility.
-  Future<void> updatePrivacy(String id, bool isPublic) async {
-    await _dio.patch('/playlists/$id', data: {'isPrivate': !isPublic});
+  Future<Playlist?> updatePrivacy(String id, bool isPublic) async {
+    final response =
+        await _dio.patch('/playlists/$id', data: {'isPrivate': !isPublic});
+    final data = response.data is Map ? response.data['data'] : null;
+    final raw = data is Map ? data['playlist'] : null;
+    if (raw is Map) {
+      return Playlist.fromJson(Map<String, dynamic>.from(raw));
+    }
+    return null;
   }
 
   /// DELETE /playlists/{id}.
@@ -116,6 +135,47 @@ class PlaylistRepository {
     if (!ids.contains(trackId)) ids.add(trackId);
     await replaceTracks(playlistId, ids);
     return ids.length;
+  }
+
+  Future<PlaylistTrackSnapshot> trackSnapshot(
+    String playlistId, {
+    String? trackId,
+  }) async {
+    final playlistData = await fetchById(playlistId);
+    final rawTracks = (playlistData['tracks'] as List<dynamic>?) ?? [];
+    String? firstArtwork;
+    var containsTrack = false;
+    for (var index = 0; index < rawTracks.length; index++) {
+      final raw = rawTracks[index];
+      String id = '';
+      String? artwork;
+      if (raw is String) {
+        id = raw;
+      } else if (raw is Map) {
+        final map = Map<String, dynamic>.from(raw);
+        final nestedTrack = map['track'];
+        final trackMap =
+            nestedTrack is Map ? Map<String, dynamic>.from(nestedTrack) : map;
+        id = (trackMap['_id'] ?? trackMap['id'] ?? map['_id'] ?? map['id'])
+                ?.toString() ??
+            '';
+        artwork = (trackMap['artworkUrl'] ??
+            trackMap['coverUrl'] ??
+            map['artworkUrl'] ??
+            map['coverUrl']) as String?;
+      }
+      if (index == 0) {
+        firstArtwork = _isUsableArtworkUrl(artwork) ? artwork : null;
+      }
+      if (trackId != null && id == trackId) {
+        containsTrack = true;
+      }
+    }
+    return PlaylistTrackSnapshot(
+      count: rawTracks.length,
+      firstTrackArtworkUrl: firstArtwork,
+      containsTrack: containsTrack,
+    );
   }
 
   /// Fetches the current track list, removes [trackId], PUTs back.
@@ -187,4 +247,10 @@ class PlaylistRepository {
         .where((id) => id.isNotEmpty)
         .toList();
   }
+
+  bool _isUsableArtworkUrl(String? url) =>
+      url != null &&
+      url.isNotEmpty &&
+      url.startsWith('http') &&
+      !url.contains('default');
 }

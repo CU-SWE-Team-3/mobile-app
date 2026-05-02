@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../feed/presentation/providers/feed_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/widgets/mini_player_widget.dart';
 
@@ -1090,6 +1091,35 @@ class _TrackRow extends StatelessWidget {
   final VoidCallback? onTap;
   const _TrackRow({required this.track, this.onTap});
 
+  void _openOptions(BuildContext context) {
+    final trackId = (track['_id'] ?? track['id'] ?? '').toString();
+    if (trackId.isEmpty) return;
+    final artist = _readArtist(track);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: trackId,
+        title: track['title']?.toString(),
+        artistName: _readArtistName(track),
+        artworkUrl: (track['artworkUrl'] ?? track['coverUrl']) as String?,
+        audioUrl: (track['hlsUrl'] ?? track['audioUrl'])?.toString(),
+        waveform: (track['waveform'] as List?)
+            ?.whereType<num>()
+            .map((value) => value.toInt())
+            .toList(),
+        artistId: (artist['_id'] ?? artist['id'])?.toString(),
+        artistPermalink: artist['permalink']?.toString(),
+        initialLikeCount: _safeInt(track['likeCount']),
+        initialRepostCount: _safeInt(track['repostCount']),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = track['title'] as String? ?? '';
@@ -1165,7 +1195,14 @@ class _TrackRow extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          const Icon(Icons.more_vert, color: Colors.grey, size: 20),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _openOptions(context),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(Icons.more_vert, color: Colors.grey, size: 20),
+            ),
+          ),
         ]),
       ),
     );

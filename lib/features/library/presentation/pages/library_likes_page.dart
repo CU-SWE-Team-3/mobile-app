@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/utils/profile_navigation.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/widgets/mini_player_widget.dart';
 import '../../../premium/data/services/track_download_service.dart';
@@ -681,114 +682,27 @@ class _LikeTileState extends ConsumerState<_LikeTile> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFF1A1A1A),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.queue_play_next_rounded,
-                  color: Colors.white70),
-              title: const Text('Play next',
-                  style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(ctx);
-                final playerState = ref.read(playerProvider);
-                final notifier = ref.read(playerProvider.notifier);
-                notifier.addToQueue(_buildPlayerTrack());
-                final endIndex = playerState.queue.length;
-                final insertAt = playerState.currentQueueIndex + 1;
-                if (endIndex > insertAt) {
-                  notifier.reorderQueue(endIndex, insertAt);
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Playing next'),
-                      duration: Duration(seconds: 2)),
-                );
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.add_to_queue_rounded, color: Colors.white70),
-              title: const Text('Play last',
-                  style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(ctx);
-                ref
-                    .read(playerProvider.notifier)
-                    .addToQueue(_buildPlayerTrack());
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Added to queue'),
-                      duration: Duration(seconds: 2)),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_outline_rounded,
-                  color: Colors.white70),
-              title: const Text('Go to artist profile',
-                  style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(ctx);
-                final id = widget.track.artistId;
-                final permalink = widget.track.artistPermalink;
-                if (id != null && permalink != null) {
-                  navigateToUserProfile(
-                    context,
-                    userId: id,
-                    permalink: permalink,
-                    displayName: widget.track.artistName,
-                  );
-                }
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.favorite_border_rounded,
-                  color: Colors.white70),
-              title: const Text('Remove from likes',
-                  style: TextStyle(color: Colors.white)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                final removed = await ref
-                    .read(engagementProvider(params).notifier)
-                    .removeLike();
-                if (removed && context.mounted) {
-                  widget.onRemove();
-                }
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: widget.track.id,
+        title: widget.track.title,
+        artistName: widget.track.artistName,
+        artworkUrl: widget.track.artworkUrl,
+        audioUrl: widget.track.audioUrl,
+        waveform: widget.track.waveform,
+        artistId: widget.track.artistId,
+        artistPermalink: widget.track.artistPermalink,
+        initialIsLiked: true,
+        initialIsReposted: params.isReposted,
+        initialLikeCount: widget.track.likeCount,
+        initialRepostCount: widget.track.repostCount,
+        onUnlike: widget.onRemove,
       ),
     );
   }
-
-  PlayerTrack _buildPlayerTrack() => PlayerTrack(
-        id: widget.track.id,
-        title: widget.track.title,
-        artist: widget.track.artistName,
-        artistId: widget.track.artistId,
-        audioUrl: widget.track.audioUrl ?? '',
-        coverUrl: widget.track.artworkUrl,
-        waveform: widget.track.waveform,
-        artistPermalink: widget.track.artistPermalink,
-      );
 
   Widget _placeholder() => const ColoredBox(
         color: Color(0xFF2A2A2A),

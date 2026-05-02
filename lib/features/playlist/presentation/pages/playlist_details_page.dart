@@ -1,4 +1,4 @@
-﻿import 'dart:math';
+import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +32,12 @@ String _formatDuration(int? seconds) {
   final s = seconds % 60;
   return '$m:${s.toString().padLeft(2, '0')}';
 }
+
+bool _isUsableArtworkUrl(String? url) =>
+    url != null &&
+    url.isNotEmpty &&
+    url.startsWith('http') &&
+    !url.contains('default');
 
 class PlaylistDetailsPage extends ConsumerStatefulWidget {
   final Playlist? playlist;
@@ -233,6 +239,8 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     final prevTracks = List<_PlaylistTrack>.from(_tracks);
     setState(() {
       _tracks.removeWhere((t) => t.id == track.id);
+      _firstTrackArtworkUrl =
+          _tracks.isNotEmpty ? _tracks.first.artworkUrl : null;
       _isOperationInFlight = true;
     });
 
@@ -241,13 +249,22 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
           .read(playlistRepositoryProvider)
           .removeTrack(playlistId, track.id);
       if (mounted) {
-        ref
-            .read(playlistsProvider.notifier)
-            .updateTrackCount(playlistId, newCount);
+        ref.read(playlistsProvider.notifier).updateTrackPreview(
+              playlistId,
+              newCount,
+              firstTrackArtworkUrl: _isUsableArtworkUrl(_firstTrackArtworkUrl)
+                  ? _firstTrackArtworkUrl
+                  : null,
+              replaceArtwork: true,
+            );
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _tracks = prevTracks);
+        setState(() {
+          _tracks = prevTracks;
+          _firstTrackArtworkUrl =
+              prevTracks.isNotEmpty ? prevTracks.first.artworkUrl : null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Failed to remove track. Please try again.'),
           backgroundColor: Color(0xFF3A1A1A),
@@ -341,10 +358,10 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
 
     // Resolve artwork image: playlist artwork ΓåÆ first track artwork ΓåÆ user avatar
     // Only treat a URL as valid if it's a real HTTPS URL (not a default/relative path).
-    bool isValidArtwork(String? url) =>
-        url != null && url.startsWith('https://') && !url.contains('default');
-    final hasArtwork = isValidArtwork(p.artworkUrl);
-    final hasFirstTrack = isValidArtwork(_firstTrackArtworkUrl);
+    final effectiveTrackCount =
+        _isLoadingTracks ? p.trackCount : _tracks.length;
+    final hasArtwork = _isUsableArtworkUrl(p.artworkUrl);
+    final hasFirstTrack = _isUsableArtworkUrl(_firstTrackArtworkUrl);
     final hasValidAvatar = resolvedAvatarUrl.isNotEmpty &&
         !resolvedAvatarUrl.contains('default-avatar');
 
@@ -367,7 +384,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
         placeholder: (_, __) => const _ArtworkPlaceholder(),
         errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
       );
-    } else if (p.trackCount == 0 && hasValidAvatar) {
+    } else if (effectiveTrackCount == 0 && hasValidAvatar) {
       artworkWidget = CachedNetworkImage(
         imageUrl: resolvedAvatarUrl,
         fit: BoxFit.cover,
@@ -499,6 +516,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                             borderRadius:
                                 BorderRadius.vertical(top: Radius.circular(16)),
                           ),
+                          isScrollControlled: true,
                           builder: (_) => PlaylistOptionsSheet(
                             playlist: p,
                             showCopyOption: true,

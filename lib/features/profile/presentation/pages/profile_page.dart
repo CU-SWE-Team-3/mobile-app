@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
 import 'package:soundcloud_clone/features/playlist/presentation/providers/playlists_provider.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
@@ -291,17 +292,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           .toList();
       for (var i = 0; i < playlists.length; i++) {
         final p = playlists[i];
-        if (_ProfilePlaylist.isUsableArtworkUrl(p.artworkUrl) ||
-            _ProfilePlaylist.isUsableArtworkUrl(p.firstTrackArtworkUrl)) {
-          continue;
-        }
-        final detailedArtwork = await _fetchPlaylistFirstArtwork(p.id);
-        if (detailedArtwork == null) continue;
+        final snapshot = await _fetchPlaylistSnapshot(p.id);
+        if (snapshot == null) continue;
         playlists[i] = _ProfilePlaylist(
           id: p.id,
           title: p.title,
           artworkUrl: p.artworkUrl,
-          firstTrackArtworkUrl: detailedArtwork,
+          firstTrackArtworkUrl: snapshot.firstTrackArtworkUrl,
+          trackCount: snapshot.trackCount,
           ownerName: p.ownerName,
         );
       }
@@ -316,7 +314,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
   }
 
-  Future<String?> _fetchPlaylistFirstArtwork(String playlistId) async {
+  Future<_ProfilePlaylistSnapshot?> _fetchPlaylistSnapshot(
+      String playlistId) async {
     try {
       final response =
           await _withRetry(() => dioClient.dio.get('/playlists/$playlistId'));
@@ -325,15 +324,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       final playlist = data is Map ? data['playlist'] : null;
       final tracks = playlist is Map ? playlist['tracks'] as List? : null;
       if (tracks == null) return null;
-      for (final item in tracks) {
-        if (item is! Map) continue;
-        final track = item['track'];
-        final rawTrack = track is Map ? track : item;
-        final artworkUrl = rawTrack['artworkUrl']?.toString();
-        if (_ProfilePlaylist.isUsableArtworkUrl(artworkUrl)) {
-          return artworkUrl;
+      String? firstTrackArtworkUrl;
+      if (tracks.isNotEmpty) {
+        final first = tracks.first;
+        if (first is Map) {
+          final track = first['track'];
+          final rawTrack = track is Map ? track : first;
+          final artworkUrl = rawTrack['artworkUrl']?.toString();
+          if (_ProfilePlaylist.isUsableArtworkUrl(artworkUrl)) {
+            firstTrackArtworkUrl = artworkUrl;
+          }
         }
       }
+      return _ProfilePlaylistSnapshot(
+        trackCount: tracks.length,
+        firstTrackArtworkUrl: firstTrackArtworkUrl,
+      );
     } catch (_) {}
     return null;
   }
@@ -1138,7 +1144,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               track: _Track(t.title, t.artist, _fmtDuration(t.duration)),
               artworkUrl: t.artworkUrl,
               onTap: () => _playFrom(fullIdx < 0 ? e.key : fullIdx),
-              onMore: () {},
+              onMore: () => _openTrackOptions(t),
             );
           }).toList(),
         );
@@ -1147,6 +1153,63 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   // ── section header ───────────────────────────────────────────────────
+  void _openTrackOptions(UploadTrack track) {
+    final trackId = track.id;
+    if (trackId == null || trackId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track options are not available yet.')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: trackId,
+        title: track.title,
+        artistName: track.artist,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.hlsUrl,
+        waveform: track.waveform,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
+      ),
+    );
+  }
+
+  void _openSummaryTrackOptions(
+    TrackSummary track, {
+    bool isLiked = false,
+    bool isReposted = false,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: track.id,
+        title: track.title,
+        artistName: track.artistName,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.audioUrl,
+        waveform: track.waveform,
+        artistId: track.artistId,
+        artistPermalink: track.artistPermalink,
+        initialIsLiked: isLiked,
+        initialIsReposted: isReposted,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
+      ),
+    );
+  }
+
   Widget _sectionHeader(String title, {VoidCallback? onSeeAll}) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
         child: Row(
@@ -1246,7 +1309,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ],
                   ),
                 ),
-                Icon(Icons.more_vert_rounded, color: sub, size: 20),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openSummaryTrackOptions(r, isReposted: true),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1320,7 +1390,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ],
                   ),
                 ),
-                Icon(Icons.more_vert_rounded, color: sub, size: 20),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openSummaryTrackOptions(r, isLiked: true),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1379,7 +1456,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             if (_ProfilePlaylist.isUsableArtworkUrl(own)) {
               return own;
             }
-            return p.firstTrackArtworkUrl;
+            if (p.trackCount > 0) {
+              return _ProfilePlaylist.isUsableArtworkUrl(p.firstTrackArtworkUrl)
+                  ? p.firstTrackArtworkUrl
+                  : null;
+            }
+            return _ProfilePlaylist.isUsableArtworkUrl(_avatarUrl)
+                ? _avatarUrl
+                : null;
           }();
           return GestureDetector(
             key: ValueKey('profile_playlist_tile_$i'),
@@ -1530,6 +1614,7 @@ class _ProfilePlaylist {
   final String title;
   final String? artworkUrl;
   final String? firstTrackArtworkUrl;
+  final int trackCount;
   final String ownerName;
 
   const _ProfilePlaylist({
@@ -1537,6 +1622,7 @@ class _ProfilePlaylist {
     required this.title,
     this.artworkUrl,
     this.firstTrackArtworkUrl,
+    this.trackCount = 0,
     required this.ownerName,
   });
 
@@ -1570,11 +1656,23 @@ class _ProfilePlaylist {
       title: json['title'] as String? ?? '',
       artworkUrl: json['artworkUrl'] as String?,
       firstTrackArtworkUrl: firstTrackArtwork,
+      trackCount: (json['trackCount'] as num?)?.toInt() ??
+          (tracks != null ? tracks.length : 0),
       ownerName: (json['ownerName'] as String?) ??
           (creator?['displayName'] as String?) ??
           '',
     );
   }
+}
+
+class _ProfilePlaylistSnapshot {
+  final int trackCount;
+  final String? firstTrackArtworkUrl;
+
+  const _ProfilePlaylistSnapshot({
+    required this.trackCount,
+    this.firstTrackArtworkUrl,
+  });
 }
 
 // ── track tile ───────────────────────────────────────────────────────────

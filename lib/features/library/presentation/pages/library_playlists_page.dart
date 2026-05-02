@@ -526,14 +526,15 @@ class _PlaylistTileState extends ConsumerState<_PlaylistTile> {
         widget.isOwned ? null : ref.watch(engagementProvider(engParams));
 
     final hasArtwork = playlist.artworkUrl != null &&
-        playlist.artworkUrl!.startsWith('https://') &&
+        playlist.artworkUrl!.startsWith('http') &&
         !playlist.artworkUrl!.contains('default');
     final hasFirstTrackArtwork = !hasArtwork &&
         playlist.firstTrackArtworkUrl != null &&
-        playlist.firstTrackArtworkUrl!.startsWith('https://') &&
+        playlist.firstTrackArtworkUrl!.startsWith('http') &&
         !playlist.firstTrackArtworkUrl!.contains('default');
-    final hasValidAvatar =
-        _avatarUrl.isNotEmpty && !_avatarUrl.contains('default-avatar');
+    final hasValidAvatar = _avatarUrl.isNotEmpty &&
+        _avatarUrl.startsWith('http') &&
+        !_avatarUrl.contains('default-avatar');
 
     Widget thumbnailChild;
     if (hasArtwork) {
@@ -685,6 +686,7 @@ class _PlaylistTileState extends ConsumerState<_PlaylistTile> {
                         BorderRadius.vertical(top: Radius.circular(16)),
                   ),
                   useSafeArea: true,
+                  isScrollControlled: true,
                   builder: (_) => PlaylistOptionsSheet(playlist: playlist),
                 ),
                 child: const Padding(

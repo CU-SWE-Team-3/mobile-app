@@ -8,6 +8,7 @@ import '../../../../core/utils/profile_navigation.dart';
 import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/widgets/mini_player_widget.dart';
 
@@ -242,7 +243,34 @@ class _RepostTile extends ConsumerWidget {
                 ],
               ),
             ),
-            Icon(Icons.more_vert_rounded, color: sub, size: 20),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => showModalBottomSheet(
+                context: context,
+                backgroundColor: const Color(0xFF1A1A1A),
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                builder: (_) => TrackOptionsSheet(
+                  trackId: track.id,
+                  title: track.title,
+                  artistName: track.artistName,
+                  artworkUrl: track.artworkUrl,
+                  audioUrl: track.audioUrl,
+                  waveform: track.waveform,
+                  artistId: track.artistId,
+                  artistPermalink: track.artistPermalink,
+                  initialIsReposted: true,
+                  initialLikeCount: track.likeCount,
+                  initialRepostCount: track.repostCount,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
+              ),
+            ),
           ],
         ),
       ),

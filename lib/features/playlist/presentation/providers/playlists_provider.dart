@@ -36,17 +36,18 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
     try {
       final serverList = await _repository.fetchAll(userId);
       if (!mounted) return;
-      // Preserve already-backfilled firstTrackArtworkUrl from cached state so
-      // _backfillArtwork doesn't re-fetch every playlist on every startup.
+      // Preserve cached firstTrackArtworkUrl from cached state so empty
+      // playlists can use the owner avatar, while playlists with tracks can
+      // keep their first-track cover or placeholder until refresh completes.
       final cached = {for (final p in state) p.id: p};
       state = serverList.map((p) {
         final prev = cached[p.id];
-        if (prev?.firstTrackArtworkUrl == null) return p;
+        if (prev == null) return p;
         return Playlist(
           id: p.id,
           title: p.title,
           artworkUrl: p.artworkUrl,
-          firstTrackArtworkUrl: prev!.firstTrackArtworkUrl,
+          firstTrackArtworkUrl: prev.firstTrackArtworkUrl,
           ownerName: p.ownerName,
           trackCount: p.trackCount,
           isPublic: p.isPublic,
@@ -76,38 +77,14 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
 
   Future<void> _fetchAndStoreFirstTrackArtwork(String playlistId) async {
     try {
-      final playlistData = await _repository.fetchById(playlistId);
-      final tracks = playlistData['tracks'] as List? ?? [];
-      String? artwork;
-      for (final raw in tracks) {
-        if (raw is Map<String, dynamic>) {
-          final url = raw['artworkUrl'] as String?;
-          if (url != null &&
-              url.startsWith('https://') &&
-              !url.contains('default')) {
-            artwork = url;
-            break;
-          }
-        }
-      }
-      if (artwork == null || !mounted) return;
-      state = state.map((p) {
-        if (p.id != playlistId) return p;
-        return Playlist(
-          id: p.id,
-          title: p.title,
-          artworkUrl: p.artworkUrl,
-          firstTrackArtworkUrl: artwork,
-          ownerName: p.ownerName,
-          trackCount: p.trackCount,
-          isPublic: p.isPublic,
-          permalink: p.permalink,
-          ownerPermalink: p.ownerPermalink,
-          creatorId: p.creatorId,
-          secretToken: p.secretToken,
-        );
-      }).toList();
-      await _persist();
+      final snapshot = await _repository.trackSnapshot(playlistId);
+      if (!mounted) return;
+      updateTrackPreview(
+        playlistId,
+        snapshot.count,
+        firstTrackArtworkUrl: snapshot.firstTrackArtworkUrl,
+        replaceArtwork: true,
+      );
     } catch (_) {}
   }
 
@@ -128,26 +105,30 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
 
   /// Calls PATCH /playlists/{id} to update visibility, then mirrors the change
   /// into local state. Throws on API failure (state is not mutated on error).
-  Future<void> updateVisibility(String id, bool isPublic) async {
-    await _repository.updatePrivacy(id, isPublic);
-    state = state
-        .map((p) => p.id == id
-            ? Playlist(
-                id: p.id,
-                title: p.title,
-                artworkUrl: p.artworkUrl,
-                firstTrackArtworkUrl: p.firstTrackArtworkUrl,
-                ownerName: p.ownerName,
-                trackCount: p.trackCount,
-                isPublic: isPublic,
-                permalink: p.permalink,
-                ownerPermalink: p.ownerPermalink,
-                creatorId: p.creatorId,
-                secretToken: p.secretToken,
-              )
-            : p)
-        .toList();
+  Future<Playlist?> updateVisibility(String id, bool isPublic) async {
+    final updated = await _repository.updatePrivacy(id, isPublic);
+    Playlist? localUpdated;
+    state = state.map((p) {
+      if (p.id != id) return p;
+      localUpdated = Playlist(
+        id: p.id,
+        title: updated?.title.isNotEmpty == true ? updated!.title : p.title,
+        artworkUrl: updated?.artworkUrl ?? p.artworkUrl,
+        firstTrackArtworkUrl: p.firstTrackArtworkUrl,
+        ownerName: updated?.ownerName.isNotEmpty == true
+            ? updated!.ownerName
+            : p.ownerName,
+        trackCount: updated?.trackCount ?? p.trackCount,
+        isPublic: isPublic,
+        permalink: updated?.permalink ?? p.permalink,
+        ownerPermalink: updated?.ownerPermalink ?? p.ownerPermalink,
+        creatorId: updated?.creatorId ?? p.creatorId,
+        secretToken: isPublic ? null : (updated?.secretToken ?? p.secretToken),
+      );
+      return localUpdated!;
+    }).toList();
     await _persist();
+    return localUpdated;
   }
 
   Future<void> _persist() async {
@@ -196,13 +177,26 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
   /// Updates the cached track count after a server-side track mutation.
   /// Local-only — no API call. Persist is fire-and-forget.
   void updateTrackCount(String id, int newCount) {
+    updateTrackPreview(id, newCount);
+  }
+
+  void updateTrackPreview(
+    String id,
+    int newCount, {
+    String? firstTrackArtworkUrl,
+    bool replaceArtwork = false,
+  }) {
     state = state
         .map((p) => p.id == id
             ? Playlist(
                 id: p.id,
                 title: p.title,
                 artworkUrl: p.artworkUrl,
-                firstTrackArtworkUrl: p.firstTrackArtworkUrl,
+                firstTrackArtworkUrl: newCount == 0
+                    ? null
+                    : (replaceArtwork
+                        ? firstTrackArtworkUrl
+                        : (firstTrackArtworkUrl ?? p.firstTrackArtworkUrl)),
                 ownerName: p.ownerName,
                 trackCount: newCount,
                 isPublic: p.isPublic,
