@@ -561,6 +561,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: _ProfileBottomNavBar(
+        currentIndex: 3,
+        onTap: (index) {
+          const routes = ['/home', '/feed', '/search', '/library', '/upgrade'];
+          context.go(routes[index]);
+        },
+      ),
       body: Stack(
         children: [
           SafeArea(
@@ -609,6 +616,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                             _insightsRow(context),
                             _spotlight(),
                             _sectionHeader('Tracks',
+                                fontSize: 24,
                                 onSeeAll: () =>
                                     context.push('/profile/tracks')),
                             _tracksSection(myTracksAsync),
@@ -668,8 +676,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               key: const ValueKey('profile_avatar_view_button'),
               onTap: () => context.push('/profile/avatar-view'),
               child: Container(
-                width: 88,
-                height: 88,
+                width: 112,
+                height: 112,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: _orange, width: 2.5),
@@ -679,8 +687,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           !_avatarUrl.contains('default-avatar')
                       ? CachedNetworkImage(
                           imageUrl: _avatarUrl,
-                          width: 84,
-                          height: 84,
+                          width: 108,
+                          height: 108,
                           fit: BoxFit.cover,
                           errorWidget: (_, __, ___) => const _AvatarFallback(),
                         )
@@ -767,24 +775,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 GestureDetector(
                   key: const ValueKey('profile_edit_button'),
                   onTap: _openEdit,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white38),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.edit_outlined,
-                            color: Colors.white, size: 16),
-                        SizedBox(width: 6),
-                        Text('Edit',
-                            style:
-                                TextStyle(color: Colors.white, fontSize: 13)),
-                      ],
-                    ),
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(Icons.edit_outlined,
+                        color: Colors.white70, size: 22),
                   ),
                 ),
                 const Spacer(),
@@ -853,9 +847,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             .push(MaterialPageRoute(builder: (_) => const YourInsightsPage())),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-              color: _surface, borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           child: Row(
             children: [
               const Text('Your insights',
@@ -1210,14 +1202,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  Widget _sectionHeader(String title, {VoidCallback? onSeeAll}) => Padding(
+  Widget _sectionHeader(String title,
+          {VoidCallback? onSeeAll, double fontSize = 20}) =>
+      Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
         child: Row(
           children: [
             Text(title,
-                style: const TextStyle(
+                style: TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: fontSize,
                     fontWeight: FontWeight.w700)),
             const Spacer(),
             if (onSeeAll != null)
@@ -1593,15 +1587,99 @@ class _AvatarFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 84,
-      height: 84,
+      width: double.infinity,
+      height: double.infinity,
       color: const Color(0xFF2A2A2A),
-      child: const Icon(Icons.person, size: 48, color: Colors.white38),
+      child: const Icon(Icons.person, size: 64, color: Colors.white38),
     );
   }
 }
 
 // ── data models ──────────────────────────────────────────────────────────
+class _ProfileBottomNavBar extends StatelessWidget {
+  final int currentIndex;
+  final void Function(int) onTap;
+
+  const _ProfileBottomNavBar({
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  static const _navColor = Color(0xFF2C2C2C);
+
+  static const _items = <({String label, IconData active, IconData inactive})>[
+    (label: 'Home', active: Icons.home, inactive: Icons.home_outlined),
+    (
+      label: 'Feed',
+      active: Icons.web_asset,
+      inactive: Icons.web_asset_outlined
+    ),
+    (label: 'Search', active: Icons.search, inactive: Icons.search),
+    (
+      label: 'Library',
+      active: Icons.library_music,
+      inactive: Icons.library_music_outlined,
+    ),
+    (label: 'Upgrade', active: Icons.graphic_eq, inactive: Icons.graphic_eq),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: _navColor,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          height: 55,
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0xFF3B3B3B))),
+          ),
+          child: Row(
+            children: [
+              for (int index = 0; index < _items.length; index++)
+                Expanded(
+                  child: InkWell(
+                    onTap: () => onTap(index),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 3),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            currentIndex == index
+                                ? _items[index].active
+                                : _items[index].inactive,
+                            color: currentIndex == index
+                                ? Colors.white
+                                : const Color(0xFFB4B4B4),
+                            size: 30,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _items[index].label,
+                            style: TextStyle(
+                              color: currentIndex == index
+                                  ? Colors.white
+                                  : const Color(0xFFB4B4B4),
+                              fontSize: 8,
+                              fontWeight: currentIndex == index
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Track {
   final String title;
   final String artist;

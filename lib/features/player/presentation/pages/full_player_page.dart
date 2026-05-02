@@ -112,6 +112,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
+              
               content:
                   Text('Requires a Go+ Subscription for offline listening.'),
               backgroundColor: Color(0xFF333333),

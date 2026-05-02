@@ -11,9 +11,16 @@ class ListeningHistoryPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyState = ref.watch(serverHistoryProvider);
+    final localHistoryState = ref.watch(historyProvider);
     final playerState = ref.watch(playerProvider);
     final notifier = ref.read(playerProvider.notifier);
     final historyNotifier = ref.read(serverHistoryProvider.notifier);
+    final localHistoryNotifier = ref.read(historyProvider.notifier);
+    final entries = _mergeHistory(
+      localHistoryState.history,
+      historyState.history,
+    );
+    final isLoading = historyState.isLoading && localHistoryState.isLoading;
 
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
@@ -26,10 +33,14 @@ class ListeningHistoryPage extends ConsumerWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          if (historyState.history.isNotEmpty)
+          if (entries.isNotEmpty)
             TextButton(
               key: const ValueKey('player_history_clear_button'),
-              onPressed: () => _confirmClear(context, historyNotifier),
+              onPressed: () => _confirmClear(
+                context,
+                historyNotifier,
+                localHistoryNotifier,
+              ),
               child: const Text(
                 'Clear',
                 style: TextStyle(color: Color(0xFFFF5500), fontSize: 14),
@@ -37,11 +48,11 @@ class ListeningHistoryPage extends ConsumerWidget {
             ),
         ],
       ),
-      body: historyState.isLoading
+      body: isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFFFF5500)),
             )
-          : historyState.history.isEmpty
+          : entries.isEmpty
               ? const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -63,9 +74,12 @@ class ListeningHistoryPage extends ConsumerWidget {
               : RefreshIndicator(
                   color: const Color(0xFFFF5500),
                   backgroundColor: const Color(0xFF1A1A1A),
-                  onRefresh: historyNotifier.refresh,
+                  onRefresh: () async {
+                    await historyNotifier.refresh();
+                    await localHistoryNotifier.refresh();
+                  },
                   child: _GroupedHistoryList(
-                    entries: historyState.history,
+                    entries: entries,
                     playerState: playerState,
                     onTrackTap: (track) => notifier.playTrack(track),
                   ),
@@ -74,7 +88,10 @@ class ListeningHistoryPage extends ConsumerWidget {
   }
 
   void _confirmClear(
-      BuildContext context, ServerHistoryNotifier historyNotifier) {
+    BuildContext context,
+    ServerHistoryNotifier historyNotifier,
+    HistoryNotifier localHistoryNotifier,
+  ) {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -99,6 +116,7 @@ class ListeningHistoryPage extends ConsumerWidget {
             onPressed: () {
               Navigator.of(ctx).pop();
               historyNotifier.clearHistory();
+              localHistoryNotifier.clearHistory();
             },
             child:
                 const Text('Clear', style: TextStyle(color: Color(0xFFFF5500))),
@@ -106,6 +124,22 @@ class ListeningHistoryPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  static List<HistoryEntry> _mergeHistory(
+    List<HistoryEntry> local,
+    List<HistoryEntry> server,
+  ) {
+    final merged = <HistoryEntry>[];
+    for (final entry in [...local, ...server]) {
+      final duplicate = merged.any((existing) =>
+          existing.track.id == entry.track.id &&
+          existing.playedAt.difference(entry.playedAt).inMilliseconds.abs() <
+              3000);
+      if (!duplicate) merged.add(entry);
+    }
+    merged.sort((a, b) => b.playedAt.compareTo(a.playedAt));
+    return merged;
   }
 }
 
@@ -130,6 +164,7 @@ class _GroupedHistoryList extends StatelessWidget {
     final sections = grouped.entries.toList();
 
     return ListView.builder(
+      key: const ValueKey('listening_history_list'),
       padding: const EdgeInsets.only(top: 8, bottom: 32),
       itemCount: sections.fold<int>(
         0,
@@ -147,12 +182,24 @@ class _GroupedHistoryList extends StatelessWidget {
           final sectionEnd = cursor + section.value.length;
           if (flatIndex < sectionEnd) {
             final entry = section.value[flatIndex - cursor];
-            return _HistoryTile(
-              entry: entry,
-              progress: _trackProgress(playerState, entry.track),
+            final localIndex = flatIndex - cursor;
+            return TweenAnimationBuilder<double>(
+              duration: Duration(milliseconds: 220 + localIndex * 25),
+              tween: Tween(begin: 0, end: 1),
+              builder: (context, value, child) => Opacity(
+                opacity: value,
+                child: Transform.translate(
+                  offset: Offset(0, 10 * (1 - value)),
+                  child: child,
+                ),
+              ),
+              child: _HistoryTile(
+                entry: entry,
+                progress: _trackProgress(playerState, entry.track),
               isPlaying: playerState.currentTrack?.id == entry.track.id &&
                   playerState.isPlaying,
               onTap: () => onTrackTap(entry.track),
+              ),
             );
           }
           cursor = sectionEnd;
@@ -250,7 +297,7 @@ class _HistoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final track = entry.track;
     return ListTile(
-      key: const ValueKey('player_history_track_tile'),
+      key: const ValueKey('listening_history_tile'),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(4),
