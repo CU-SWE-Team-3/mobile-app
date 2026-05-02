@@ -52,6 +52,7 @@ class LibraryStationsPage extends ConsumerWidget {
                     ),
                   ),
                   const Spacer(),
+<<<<<<< HEAD
                   GestureDetector(
                     onTap: () {},
                     child: Container(
@@ -65,6 +66,8 @@ class LibraryStationsPage extends ConsumerWidget {
                           color: Colors.white, size: 18),
                     ),
                   ),
+=======
+>>>>>>> 75c6d2637abd2dc5f4e557cdba3dec5b6dfce4ac
                 ],
               ),
             ),

@@ -397,7 +397,10 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
               color: Colors.white, size: 20),
           onPressed: () => Navigator.maybePop(context),
         ),
+<<<<<<< HEAD
         actions: [],
+=======
+>>>>>>> 75c6d2637abd2dc5f4e557cdba3dec5b6dfce4ac
       ),
       // CustomScrollView lets the header (SliverToBoxAdapter) and the
       // reorderable track list (SliverReorderableList) share one scroll axis.

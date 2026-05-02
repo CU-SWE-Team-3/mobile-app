@@ -124,12 +124,6 @@ class _FollowingListPageState extends State<FollowingListPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.cast, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(
@@ -385,11 +379,6 @@ class _TrueFriendsPageState extends State<_TrueFriendsPage> {
           style: TextStyle(
               color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
         ),
-        actions: [
-          IconButton(
-              icon: const Icon(Icons.cast, color: Colors.white),
-              onPressed: () {}),
-        ],
       ),
       body: _isLoading
           ? const Center(

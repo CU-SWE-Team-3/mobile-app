@@ -100,7 +100,11 @@ class MessagingRemoteDataSource {
           attachmentId != null &&
           attachmentType.isNotEmpty &&
           attachmentId.isNotEmpty) ...{
+<<<<<<< HEAD
         'attachmentType': _attachmentTypeForApi(attachmentType),
+=======
+        'attachmentType': attachmentType[0].toUpperCase() + attachmentType.substring(1),
+>>>>>>> 75c6d2637abd2dc5f4e557cdba3dec5b6dfce4ac
         'attachmentId': attachmentId,
       },
     };

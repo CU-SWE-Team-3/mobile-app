@@ -129,10 +129,59 @@ class _YourInsightsPageState extends ConsumerState<YourInsightsPage>
       body: SafeArea(
         child: Column(
           children: [
+<<<<<<< HEAD
             _TopBar(onBack: () => context.pop()),
             _InsightsTabs(
               selected: _selectedTab,
               onChanged: (index) => setState(() => _selectedTab = index),
+=======
+            // ── top bar ──────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => context.pop(),
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 18),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Your insights',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () {},
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.share_outlined,
+                          color: Colors.white, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+>>>>>>> 75c6d2637abd2dc5f4e557cdba3dec5b6dfce4ac
             ),
             Expanded(
               child: tracksAsync.when(

@@ -496,9 +496,13 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
       if (!mounted) return;
       setState(() => _localMessages!.removeWhere((m) => m.id == optimisticId));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This track is private and cannot be shared.'),
-          backgroundColor: Color(0xFF3A1A1A),
+        SnackBar(
+          content: Text(
+            attachment == null
+                ? 'This person only accepts messages from people they follow.'
+                : 'This track is private and cannot be shared.',
+          ),
+          backgroundColor: const Color(0xFF3A1A1A),
         ),
       );
     } on DioException catch (e) {

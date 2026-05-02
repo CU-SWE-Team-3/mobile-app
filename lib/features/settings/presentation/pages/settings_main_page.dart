@@ -36,18 +36,11 @@ class SettingsMainPage extends ConsumerWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: ListView(
         children: [
           const SizedBox(height: 8),
 
-          _SettingsMenuItem(title: 'Import my music', onTap: () {}),
           _SettingsMenuItem(
             title: 'Account',
             onTap: () => context.push('/settings/account'),
@@ -74,7 +67,10 @@ class SettingsMainPage extends ConsumerWidget {
             title: 'Privacy',
             onTap: () => context.push('/settings/privacy'),
           ),
-          _SettingsMenuItem(title: 'Inbox', onTap: () {}),
+          _SettingsMenuItem(
+            title: 'Inbox',
+            onTap: () => context.push('/settings/inbox'),
+          ),
           _SettingsMenuItem(
             title: 'Notifications',
             onTap: () => Navigator.push(
@@ -83,11 +79,6 @@ class SettingsMainPage extends ConsumerWidget {
                   builder: (_) => const NotificationsSettingsPage()),
             ),
           ),
-          _SettingsMenuItem(title: 'Add widgets', onTap: () {}),
-          _SettingsMenuItem(title: 'Analytics', onTap: () {}),
-          _SettingsMenuItem(title: 'Communications', onTap: () {}),
-          _SettingsMenuItem(title: 'Advertising', onTap: () {}),
-          _SettingsMenuItem(title: 'Support', onTap: () {}),
           _SettingsMenuItem(
             title: 'Legal',
             onTap: () => Navigator.push(

@@ -103,12 +103,6 @@ class _SignOutPageState extends ConsumerState<SignOutPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: const SizedBox.shrink(), // empty body, dialog shows immediately
     );

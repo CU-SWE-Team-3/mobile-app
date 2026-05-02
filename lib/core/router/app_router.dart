@@ -110,13 +110,9 @@ import '../../features/settings/presentation/pages/basic_settings_page.dart';
 import '../../features/settings/presentation/pages/social_settings_page.dart';
 import '../../features/settings/presentation/pages/notifications_settings_page.dart';
 import '../../features/settings/presentation/pages/privacy_settings_page.dart';
-import '../../features/settings/presentation/pages/communications_settings_page.dart';
-import '../../features/settings/presentation/pages/advertising_settings_page.dart';
-import '../../features/settings/presentation/pages/import_music_page.dart';
 import '../../features/settings/presentation/pages/inbox_settings_page.dart';
 import '../../features/settings/presentation/pages/legal_page.dart';
 import '../../features/settings/presentation/pages/add_widget_page.dart';
-import '../../features/settings/presentation/pages/analytics_page.dart';
 import '../../features/settings/presentation/pages/upload_settings_page.dart';
 import '../../features/settings/presentation/pages/sign_out_page.dart';
 
@@ -602,27 +598,9 @@ final appRouter = GoRouter(
             builder: (_, __) => const NotificationsSettingsPage()),
         GoRoute(
             path: 'privacy', builder: (_, __) => const PrivacySettingsPage()),
-        GoRoute(
-            path: 'communications',
-            builder: (_, __) => const CommunicationsSettingsPage()),
-        GoRoute(
-            path: 'advertising',
-            builder: (_, __) => const AdvertisingSettingsPage()),
-        GoRoute(
-            path: 'import-music',
-            builder: (_, __) => const ImportMusicPage(),
-            routes: [
-              GoRoute(
-                  path: 'import',
-                  builder: (_, __) => const ImportFromAppPage()),
-              GoRoute(
-                  path: 'manage',
-                  builder: (_, __) => const ManageImportedLikesPage()),
-            ]),
         GoRoute(path: 'inbox', builder: (_, __) => const InboxSettingsPage()),
         GoRoute(path: 'legal', builder: (_, __) => const LegalPage()),
         GoRoute(path: 'add-widget', builder: (_, __) => const AddWidgetPage()),
-        GoRoute(path: 'analytics', builder: (_, __) => const AnalyticsPage()),
         GoRoute(path: 'upload', builder: (_, __) => const UploadSettingsPage()),
         GoRoute(path: 'sign-out', builder: (_, __) => const SignOutPage()),
       ],
