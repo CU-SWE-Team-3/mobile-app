@@ -112,9 +112,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              
               content:
                   Text('Requires a Go+ Subscription for offline listening.'),
+              
               backgroundColor: Color(0xFF333333),
             ),
           );
@@ -366,24 +366,22 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                   borderRadius: BorderRadius.vertical(
                                       top: Radius.circular(16)),
                                 ),
-                                builder: (_) => TrackOptionsSheet(
-                                  trackId: trackId,
-                                  title: playerState.currentTrack?.title,
-                                  artistName: playerState.currentTrack?.artist,
-                                  artworkUrl:
-                                      playerState.currentTrackArtworkUrl,
-                                  audioUrl: playerState.currentTrack?.audioUrl,
-                                  waveform: playerState.currentTrack?.waveform,
-                                  artistId: playerState.currentTrack?.artistId,
-                                  artistPermalink:
-                                      playerState.currentTrack?.artistPermalink,
-                                  trackPermalink:
-                                      playerState.currentTrack?.trackPermalink,
-                                  initialIsLiked: engState.isLiked,
-                                  initialIsReposted: engState.isReposted,
-                                  initialLikeCount: engState.likeCount,
-                                  initialRepostCount: engState.repostCount,
-                                ),
+                                builder: (_) =>
+                                    TrackOptionsSheet(
+                                      trackId: trackId,
+                                      title: playerState.currentTrack?.title,
+                                      artistName: playerState.currentTrack?.artist,
+                                      artworkUrl: playerState.currentTrackArtworkUrl,
+                                      audioUrl: playerState.currentTrack?.audioUrl,
+                                      waveform: playerState.currentTrack?.waveform,
+                                      artistId: playerState.currentTrack?.artistId,
+                                      artistPermalink: playerState.currentTrack?.artistPermalink,
+                                      trackPermalink: playerState.currentTrack?.trackPermalink,
+                                      initialIsLiked: engState.isLiked,
+                                      initialIsReposted: engState.isReposted,
+                                      initialLikeCount: engState.likeCount,
+                                      initialRepostCount: engState.repostCount,
+                                    ),
                               );
                             },
                           ),
