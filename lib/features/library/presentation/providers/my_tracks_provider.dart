@@ -50,6 +50,16 @@ List<int>? _parseWaveform(dynamic value) {
   return value.map(_parseInt).whereType<int>().toList();
 }
 
+String? _firstString(Map<String, dynamic> map, List<String> keys) {
+  for (final key in keys) {
+    final value = map[key];
+    if (value == null) continue;
+    final text = value.toString().trim();
+    if (text.isNotEmpty) return text;
+  }
+  return null;
+}
+
 Iterable<dynamic> _firstList(Map<dynamic, dynamic> map) {
   for (final key in const ['tracks', 'items', 'results']) {
     final value = map[key];
@@ -120,6 +130,9 @@ final myTracksProvider =
       id: t['_id'] as String?,
       hlsUrl: t['hlsUrl'] as String? ?? audio['hlsUrl'] as String?,
       artworkUrl: t['artworkUrl'] as String?,
+      permalink: _firstString(t, const ['permalink', 'slug']),
+      shareUrl: _firstString(t, const ['shareUrl', 'trackLink']),
+      publicUrl: _firstString(t, const ['publicUrl', 'url']),
       waveform: _parseWaveform(t['waveform']),
       title: t['title'] as String? ?? '',
       artist: artistName.isNotEmpty ? artistName : currentArtistName,

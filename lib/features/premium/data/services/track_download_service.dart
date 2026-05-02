@@ -125,8 +125,7 @@ Future<TrackDownloadResult> downloadTrack({
   } on DioException catch (e) {
     final status = e.response?.statusCode;
     final data = e.response?.data;
-    final backendMsg =
-        (data is Map ? data['message'] as String? : null) ?? '';
+    final backendMsg = (data is Map ? data['message'] as String? : null) ?? '';
     debugPrint(
       '[Download] failed — status=$status, message="$backendMsg"',
     );

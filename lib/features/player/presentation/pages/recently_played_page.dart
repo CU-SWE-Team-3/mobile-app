@@ -12,7 +12,11 @@ class RecentlyPlayedPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final historyState = ref.watch(historyProvider);
     final playerState = ref.watch(playerProvider);
-    final tracks = historyState.recentlyPlayed;
+    final serverHistoryState = ref.watch(serverHistoryProvider);
+    final tracks = _uniqueRecentTracks(
+      _mergeHistory(historyState.history, serverHistoryState.history),
+    );
+    final isLoading = historyState.isLoading && serverHistoryState.isLoading;
     final notifier = ref.read(playerProvider.notifier);
 
     return Scaffold(
@@ -26,7 +30,7 @@ class RecentlyPlayedPage extends ConsumerWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: historyState.isLoading
+      body: isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFFFF5500)),
             )
@@ -50,47 +54,60 @@ class RecentlyPlayedPage extends ConsumerWidget {
                   ),
                 )
               : ListView.builder(
+                  key: const ValueKey('recently_played_list'),
                   padding: const EdgeInsets.only(top: 8, bottom: 32),
                   itemCount: tracks.length,
                   itemBuilder: (context, index) {
                     final track = tracks[index];
-                    final isCurrent = playerState.currentTrack?.id == track.id;
-                    return ListTile(
-                      key: const ValueKey('player_recently_played_track_tile'),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: track.coverUrl != null
-                            ? CachedNetworkImage(
-                                imageUrl: track.coverUrl!,
-                                width: 50,
-                                height: 50,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => _coverFallback(),
-                                errorWidget: (_, __, ___) => _coverFallback(),
-                              )
-                            : _coverFallback(),
+                    return TweenAnimationBuilder<double>(
+                      duration: Duration(milliseconds: 220 + index * 25),
+                      tween: Tween(begin: 0, end: 1),
+                      builder: (context, value, child) => Opacity(
+                        opacity: value,
+                        child: Transform.translate(
+                          offset: Offset(0, 10 * (1 - value)),
+                          child: child,
+                        ),
                       ),
-                      title: Text(
-                        track.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14),
+                      child: ListTile(
+                        key: const ValueKey('player_recently_played_track_tile'),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 4),
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: track.coverUrl != null
+                              ? CachedNetworkImage(
+                                  imageUrl: track.coverUrl!,
+                                  width: 50,
+                                  height: 50,
+                                  fit: BoxFit.cover,
+                                  placeholder: (_, __) => _coverFallback(),
+                                  errorWidget: (_, __, ___) =>
+                                      _coverFallback(),
+                                )
+                              : _coverFallback(),
+                        ),
+                        title: Text(
+                          track.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14),
+                        ),
+                        subtitle: Text(
+                          track.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 12),
+                        ),
+                        trailing: const Icon(
+                          Icons.play_circle_outline,
+                          color: Colors.white38,
+                          size: 28,
+                        ),
+                        onTap: () => notifier.playTrack(track),
                       ),
-                      subtitle: _TrackSubtitle(
-                        artist: track.artist,
-                        progress: _trackProgress(playerState, track),
-                      ),
-                      trailing: Icon(
-                        isCurrent && playerState.isPlaying
-                            ? Icons.pause_circle_outline
-                            : Icons.play_circle_outline,
-                        color: Colors.white38,
-                        size: 28,
-                      ),
-                      onTap: () => notifier.playTrack(track),
                     );
                   },
                 ),
@@ -106,6 +123,32 @@ class RecentlyPlayedPage extends ConsumerWidget {
         ),
         child: const Icon(Icons.music_note, color: Colors.white24, size: 22),
       );
+
+  static List<PlayerTrack> _uniqueRecentTracks(List<HistoryEntry> entries) {
+    final seen = <String>{};
+    final tracks = <PlayerTrack>[];
+    for (final entry in entries) {
+      if (seen.add(entry.track.id)) tracks.add(entry.track);
+      if (tracks.length == 20) break;
+    }
+    return tracks;
+  }
+
+  static List<HistoryEntry> _mergeHistory(
+    List<HistoryEntry> local,
+    List<HistoryEntry> server,
+  ) {
+    final merged = <HistoryEntry>[];
+    for (final entry in [...local, ...server]) {
+      final duplicate = merged.any((existing) =>
+          existing.track.id == entry.track.id &&
+          existing.playedAt.difference(entry.playedAt).inMilliseconds.abs() <
+              3000);
+      if (!duplicate) merged.add(entry);
+    }
+    merged.sort((a, b) => b.playedAt.compareTo(a.playedAt));
+    return merged;
+  }
 
   static double? _trackProgress(PlayerState playerState, PlayerTrack track) {
     if (playerState.currentTrack?.id != track.id) return null;

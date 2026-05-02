@@ -19,6 +19,7 @@ class SubscriptionState {
   final bool legacyArtistPro;
   // true when planType came from a local checkout fallback (backend returned null)
   final bool isLocalPlanFallback;
+  final bool hasResolved;
 
   const SubscriptionState({
     this.isPremium = false,
@@ -30,6 +31,7 @@ class SubscriptionState {
     this.offlineListening = false,
     this.legacyArtistPro = false,
     this.isLocalPlanFallback = false,
+    this.hasResolved = false,
   });
 
   SubscriptionState copyWith({
@@ -43,6 +45,7 @@ class SubscriptionState {
     bool? offlineListening,
     bool? legacyArtistPro,
     bool? isLocalPlanFallback,
+    bool? hasResolved,
   }) {
     return SubscriptionState(
       isPremium: isPremium ?? this.isPremium,
@@ -54,6 +57,7 @@ class SubscriptionState {
       offlineListening: offlineListening ?? this.offlineListening,
       legacyArtistPro: legacyArtistPro ?? this.legacyArtistPro,
       isLocalPlanFallback: isLocalPlanFallback ?? this.isLocalPlanFallback,
+      hasResolved: hasResolved ?? this.hasResolved,
     );
   }
 }
@@ -137,6 +141,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       legacyArtistPro: legacyArtistPro,
       cancelAtPeriodEnd: cancelAtPeriodEnd,
       isLocalPlanFallback: isLocalFallback,
+      hasResolved: true,
     );
   }
 
@@ -148,7 +153,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       final prefs = await SharedPreferences.getInstance();
       final permalink = prefs.getString('permalink') ?? '';
       if (permalink.isEmpty) {
-        state = state.copyWith(isLoading: false);
+        state = state.copyWith(isLoading: false, hasResolved: true);
         return;
       }
       final response = await _dioClient.dio.get('/profile/$permalink');
@@ -174,23 +179,20 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       await prefs.setBool('isPremium', isPremium);
       await prefs.setBool('subscriptionOfflineListening', offlineListening);
 
-      // ── Plan resolution ──────────────────────────────────────────────
-      // Priority: backend value → pendingSelectedPlan fallback → unknown.
+      // Priority: backend value -> pendingSelectedPlan fallback -> unknown.
       // Never clear pendingSelectedPlan while backend still returns null,
       // because Stripe webhook may not have fired yet.
       String? resolvedPlanType;
       bool isLocalFallback = false;
 
       if (remotePlanType != null) {
-        // Backend confirmed the plan — persist and clear the checkout fallback.
+        // Backend confirmed the plan - persist and clear the checkout fallback.
         resolvedPlanType = remotePlanType;
         await prefs.setString('subscriptionPlanType', remotePlanType);
         await prefs.remove('pendingSelectedPlan');
       } else if (isPremium) {
         // Backend doesn't expose planType yet (webhook lag or backend limitation).
-        // Try pendingSelectedPlan (checkout fallback) first, then subscriptionPlanType
-        // (persisted from the login response) — the profile endpoint does not include
-        // subscriptionPlan even though the login endpoint does.
+        // Try pendingSelectedPlan first, then subscriptionPlanType.
         final pending = prefs.getString('pendingSelectedPlan');
         final loginSaved = prefs.getString('subscriptionPlanType');
         final fallback = pending ?? loginSaved;
@@ -198,9 +200,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
           resolvedPlanType = fallback;
           isLocalFallback = true;
         }
-        // Do NOT write or remove subscriptionPlanType; leave it as-is.
       } else {
-        // Not premium — clear all plan data.
         await prefs.remove('subscriptionPlanType');
         await prefs.remove('pendingSelectedPlan');
       }
@@ -234,6 +234,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         offlineListening: offlineListening,
         legacyArtistPro: legacyArtistPro,
         isLocalPlanFallback: isLocalFallback,
+        hasResolved: true,
       );
 
       debugPrint(
@@ -242,7 +243,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         'offlineListening=$offlineListening',
       );
     } catch (_) {
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(isLoading: false, hasResolved: true);
     }
   }
 
@@ -315,7 +316,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
             ?.isNotEmpty ??
         false;
     debugPrint(
-      '[Subscription] cancel — token exists: $hasAuth, '
+      '[Subscription] cancel â€” token exists: $hasAuth, '
       'endpoint: DELETE /subscriptions/cancel',
     );
     if (!hasAuth) {
@@ -352,7 +353,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         errMsg = 'Cancellation is not available from backend yet.';
       }
       debugPrint(
-        '[Cancel] FAILED — status: $status, body: $body, '
+        '[Cancel] FAILED â€” status: $status, body: $body, '
         'errorType: ${e.runtimeType}\n'
         '[Cancel] [6] final UI message: $errMsg',
       );
@@ -360,7 +361,7 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     }
   }
 
-  /// DEV ONLY — resets all local premium state for re-testing the subscribe flow.
+  /// DEV ONLY â€” resets all local premium state for re-testing the subscribe flow.
   Future<void> devReset() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isPremium', false);
@@ -370,8 +371,8 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
     await prefs.remove('subscriptionExpiresAt');
     await prefs.setBool('cancelAtPeriodEnd', false);
     await prefs.setBool('pendingCheckout', false);
-    debugPrint('[Subscription] devReset — local premium state cleared');
-    state = const SubscriptionState();
+    debugPrint('[Subscription] devReset â€” local premium state cleared');
+    state = const SubscriptionState(hasResolved: true);
   }
 
   String _mapError(Object e) {
@@ -484,13 +485,13 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 }
 
 extension SubscriptionEntitlements on SubscriptionState {
-  /// True only for Pro/Artist Pro — the plan with unlimited uploads.
+  /// True only for Pro/Artist Pro â€” the plan with unlimited uploads.
   /// Go+ and Free are capped at 3 uploads (per API v1.10).
   bool get canUploadUnlimited =>
       isPremium &&
       (planType == 'Pro' || planType == 'Artist Pro' || legacyArtistPro);
 
-  /// True only for Go+ — the plan with offline downloads (per API v1.10).
+  /// True only for Go+ â€” the plan with offline downloads (per API v1.10).
   /// A backend offlineListening entitlement is also accepted when present.
   bool get canDownload => planType == 'Go+' || offlineListening;
 

@@ -1,8 +1,8 @@
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/providers/session_provider.dart';
@@ -245,116 +245,156 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
     );
     final engagementState = ref.watch(engagementProvider(engagementParams));
 
-    return Container(
-      color: const Color(0xFF111111),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (hasDetails)
-                _TrackSheetHeader(
-                    title: widget.title!,
-                    artist: widget.artistName!,
-                    artworkUrl: widget.artworkUrl),
-              if (widget.showSendTo) _InlineSendTo(trackId: widget.trackId),
-              if (widget.showShare) _ShareRow(trackId: widget.trackId),
-              const SizedBox(height: 12),
-              _OptionTile(
-                icon: engagementState.isLiked
-                    ? Icons.favorite
-                    : Icons.favorite_border,
-                label: engagementState.isLiked ? 'Unlike' : 'Like',
-                onTap: () => _toggleLike(engagementParams, engagementState),
+    return DraggableScrollableSheet(
+      initialChildSize: 0.52,
+      minChildSize: 0.26,
+      maxChildSize: 0.92,
+      snap: true,
+      snapSizes: const [0.52, 0.92],
+      expand: false,
+      builder: (context, scrollController) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xF2181818),
+                border: Border(
+                  top: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.14),
+                  ),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.38),
+                    blurRadius: 34,
+                    offset: const Offset(0, -12),
+                  ),
+                ],
               ),
-              _OptionTile(
-                  icon: Icons.format_list_bulleted,
-                  label: 'Play Next',
-                  onTap: _playNext),
-              _OptionTile(
-                  icon: Icons.format_list_numbered,
-                  label: 'Play Last',
-                  onTap: _playLast),
-              _OptionTile(
-                icon: Icons.playlist_add_outlined,
-                label: 'Add to playlist',
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          AddToPlaylistPage(trackId: widget.trackId),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    _SheetHandle(
+                      onClose: () => Navigator.maybePop(context),
                     ),
-                  );
-                },
-              ),
-              _StationOptionTile(
-                  trackId: widget.trackId,
-                  title: widget.title,
-                artistName: widget.artistName,
-                  artworkUrl: widget.artworkUrl),
-              _isDownloading
-                  ? const ListTile(
-                      leading: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.orange),
-                      ),
-                      title: Text('Downloading...',
-                          style: TextStyle(color: Colors.white70)),
-                    )
-                  : _OptionTile(
-                      key: const ValueKey('premium_download_button'),
-                      icon: Icons.download_outlined,
-                      label: 'Download',
-                      onTap: _handleDownload,
-                    ),
-              const Divider(color: Color(0xFF2A2A2A), height: 1),
-              _OptionTile(
-                icon: Icons.person_outline,
-                label: 'Go to artist profile',
-                onTap: () {
-                  if (widget.artistId != null &&
-                      widget.artistPermalink != null &&
-                      widget.artistName != null) {
-                    Navigator.pop(context);
-                    navigateToUserProfile(
-                      context,
-                      userId: widget.artistId!,
-                      permalink: widget.artistPermalink!,
-                      displayName: widget.artistName!,
-                    );
-                  } else {
-                    _showSoon('Artist profile unavailable');
-                  }
-                },
-              ),
-              _OptionTile(
-                icon: Icons.chat_bubble_outline,
-                label: 'View comments',
-                onTap: () {
-                  Navigator.pop(context);
-                  context.push(
-                    '/comments',
-                    extra: {
-                      'trackId': widget.trackId,
-                      'trackTitle': widget.title,
-                      'trackArtist': widget.artistName,
-                      'trackArtworkUrl': widget.artworkUrl,
-                      'currentPositionSeconds': 0,
-                    },
-                  );
-                },
-              ),
-              _OptionTile(
-                icon: Icons.repeat,
-                label: engagementState.isReposted
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: scrollController,
+                        physics: const ClampingScrollPhysics(),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (hasDetails)
+                              _TrackSheetHeader(
+                                  title: widget.title!,
+                                  artist: widget.artistName!,
+                                  artworkUrl: widget.artworkUrl),
+                            if (widget.showSendTo)
+                              _InlineSendTo(trackId: widget.trackId),
+                            if (widget.showShare)
+                              _ShareRow(trackId: widget.trackId),
+                            const SizedBox(height: 12),
+                            _OptionTile(
+                              icon: engagementState.isLiked
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              label:
+                                  engagementState.isLiked ? 'Unlike' : 'Like',
+                              onTap: () => _toggleLike(
+                                  engagementParams, engagementState),
+                            ),
+                            _OptionTile(
+                                icon: Icons.format_list_bulleted,
+                                label: 'Play Next',
+                                onTap: _playNext),
+                            _OptionTile(
+                                icon: Icons.format_list_numbered,
+                                label: 'Play Last',
+                                onTap: _playLast),
+                            _OptionTile(
+                              icon: Icons.playlist_add_outlined,
+                              label: 'Add to playlist',
+                              onTap: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => AddToPlaylistPage(
+                                        trackId: widget.trackId),
+                                  ),
+                                );
+                              },
+                            ),
+                            _StationOptionTile(
+                                trackId: widget.trackId,
+                                title: widget.title,
+                                artistName: widget.artistName,
+                                artworkUrl: widget.artworkUrl),
+                            _isDownloading
+                                ? const ListTile(
+                                    leading: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.orange),
+                                    ),
+                                    title: Text('Downloading...',
+                                        style:
+                                            TextStyle(color: Colors.white70)),
+                                  )
+                                : _OptionTile(
+                                    key: const ValueKey(
+                                        'premium_download_button'),
+                                    icon: Icons.download_outlined,
+                                    label: 'Download',
+                                    onTap: _handleDownload,
+                                  ),
+                            const Divider(color: Color(0xFF2A2A2A), height: 1),
+                            _OptionTile(
+                              icon: Icons.person_outline,
+                              label: 'Go to artist profile',
+                              onTap: () {
+                                if (widget.artistId != null &&
+                                    widget.artistPermalink != null &&
+                                    widget.artistName != null) {
+                                  Navigator.pop(context);
+                                  navigateToUserProfile(
+                                    context,
+                                    userId: widget.artistId!,
+                                    permalink: widget.artistPermalink!,
+                                    displayName: widget.artistName!,
+                                  );
+                                } else {
+                                  _showSoon('Artist profile unavailable');
+                                }
+                              },
+                            ),
+                            _OptionTile(
+                              icon: Icons.chat_bubble_outline,
+                              label: 'View comments',
+                              onTap: () {
+                                Navigator.pop(context);
+                                context.push(
+                                  '/comments',
+                                  extra: {
+                                    'trackId': widget.trackId,
+                                    'trackTitle': widget.title,
+                                    'trackArtist': widget.artistName,
+                                    'trackArtworkUrl': widget.artworkUrl,
+                                    'currentPositionSeconds': 0,
+                                  },
+                                );
+                              },
+                            ),
+                            _OptionTile(
+                              icon: Icons.repeat,
+                              label: engagementState.isReposted
                     ? 'Undo Repost'
-                    : 'Repost on SoundCloud',
-                onTap: engagementState.isLoadingRepost
+                    : 'Repost on BioBeats',
+                              onTap: engagementState.isLoadingRepost
                     ? () {}
                     : () {
                         Navigator.pop(context);
@@ -362,47 +402,88 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                             .read(engagementProvider(engagementParams).notifier)
                             .toggleRepost();
                       },
-              ),
-              const Divider(color: Color(0xFF2A2A2A), height: 1),
-              _OptionTile(
-                icon: Icons.people_outline,
-                label: 'People who liked this track',
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LikersListPage(trackId: widget.trackId),
+                            ),
+                            const Divider(color: Color(0xFF2A2A2A), height: 1),
+                            _OptionTile(
+                              icon: Icons.people_outline,
+                              label: 'People who liked this track',
+                              onTap: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        LikersListPage(trackId: widget.trackId),
+                                  ),
+                                );
+                              },
+                            ),
+                            _OptionTile(
+                              icon: Icons.people_alt_outlined,
+                              label: 'People who reposted this track',
+                              onTap: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => RepostersListPage(
+                                        trackId: widget.trackId),
+                                  ),
+                                );
+                              },
+                            ),
+                            _OptionTile(
+                                icon: Icons.graphic_eq,
+                                label: 'Behind this track',
+                                onTap: () =>
+                                    _showSoon('Behind this track coming soon')),
+                            _OptionTile(
+                                icon: Icons.outlined_flag,
+                                label: 'Report',
+                                onTap: () => _showSoon('Report coming soon')),
+                            const SizedBox(height: 10),
+                          ],
+                        ),
+                      ),
                     ),
-                  );
-                },
+                  ],
+                ),
               ),
-              _OptionTile(
-                icon: Icons.people_alt_outlined,
-                label: 'People who reposted this track',
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          RepostersListPage(trackId: widget.trackId),
-                    ),
-                  );
-                },
-              ),
-              _OptionTile(
-                  icon: Icons.graphic_eq,
-                  label: 'Behind this track',
-                  onTap: () => _showSoon('Behind this track coming soon')),
-              _OptionTile(
-                  icon: Icons.outlined_flag,
-                  label: 'Report',
-                  onTap: () => _showSoon('Report coming soon')),
-              const SizedBox(height: 10),
-            ],
+            ),
           ),
-        ),
+        );
+      },
+    );
+  }
+}
+
+class _SheetHandle extends StatelessWidget {
+  final VoidCallback onClose;
+
+  const _SheetHandle({required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 6),
+      child: Row(
+        children: [
+          const Spacer(),
+          Container(
+            width: 44,
+            height: 5,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.24),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Close',
+            onPressed: onClose,
+            icon: const Icon(Icons.close_rounded, color: Colors.white70),
+          ),
+        ],
       ),
     );
   }
