@@ -59,8 +59,8 @@ class _SignOutPageState extends ConsumerState<SignOutPage> {
             onPressed: () async {
               Navigator.pop(context);
               ref.read(playerProvider.notifier).stop();
-              ref.read(sessionUserIdProvider.notifier).state = '';
               await ref.read(authProvider.notifier).logout();
+              ref.read(sessionUserIdProvider.notifier).state = '';
               if (!context.mounted) return;
               context.go('/start');
             },
@@ -103,12 +103,6 @@ class _SignOutPageState extends ConsumerState<SignOutPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: const SizedBox.shrink(), // empty body, dialog shows immediately
     );

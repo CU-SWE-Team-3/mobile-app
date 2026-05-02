@@ -289,6 +289,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           })
           .map(_ProfilePlaylist.fromJson)
           .toList();
+      for (var i = 0; i < playlists.length; i++) {
+        final p = playlists[i];
+        if (_ProfilePlaylist.isUsableArtworkUrl(p.artworkUrl) ||
+            _ProfilePlaylist.isUsableArtworkUrl(p.firstTrackArtworkUrl)) {
+          continue;
+        }
+        final detailedArtwork = await _fetchPlaylistFirstArtwork(p.id);
+        if (detailedArtwork == null) continue;
+        playlists[i] = _ProfilePlaylist(
+          id: p.id,
+          title: p.title,
+          artworkUrl: p.artworkUrl,
+          firstTrackArtworkUrl: detailedArtwork,
+          ownerName: p.ownerName,
+        );
+      }
       if (mounted) {
         setState(() {
           _playlists = playlists;
@@ -298,6 +314,28 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } catch (_) {
       if (mounted) setState(() => _playlistsLoading = false);
     }
+  }
+
+  Future<String?> _fetchPlaylistFirstArtwork(String playlistId) async {
+    try {
+      final response =
+          await _withRetry(() => dioClient.dio.get('/playlists/$playlistId'));
+      final raw = response.data;
+      final data = raw is Map ? raw['data'] : null;
+      final playlist = data is Map ? data['playlist'] : null;
+      final tracks = playlist is Map ? playlist['tracks'] as List? : null;
+      if (tracks == null) return null;
+      for (final item in tracks) {
+        if (item is! Map) continue;
+        final track = item['track'];
+        final rawTrack = track is Map ? track : item;
+        final artworkUrl = rawTrack['artworkUrl']?.toString();
+        if (_ProfilePlaylist.isUsableArtworkUrl(artworkUrl)) {
+          return artworkUrl;
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> _fetchReposts() async {
@@ -420,10 +458,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       await prefs.setString('city', city);
       await prefs.setString('country', country);
       final avatarUrl = data['avatarUrl'] as String? ?? '';
-      if (avatarUrl.isNotEmpty) {
-        await prefs.setString('avatarUrl', avatarUrl);
-        debugPrint('[Profile] avatarUrl persisted: $avatarUrl');
-      }
+      await prefs.setString('avatarUrl', avatarUrl);
+      debugPrint('[Profile] avatarUrl persisted: $avatarUrl');
 
       // Always fetch counts from the network endpoints — they are authoritative.
       int followerCount = 0;
@@ -1340,9 +1376,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           // Artwork chain: own HTTPS artwork → first track HTTPS artwork → placeholder
           final cardArtwork = () {
             final own = p.artworkUrl;
-            if (own != null &&
-                own.startsWith('https://') &&
-                !own.contains('default')) {
+            if (_ProfilePlaylist.isUsableArtworkUrl(own)) {
               return own;
             }
             return p.firstTrackArtworkUrl;
@@ -1506,6 +1540,12 @@ class _ProfilePlaylist {
     required this.ownerName,
   });
 
+  static bool isUsableArtworkUrl(String? url) =>
+      url != null &&
+      url.isNotEmpty &&
+      url.startsWith('http') &&
+      !url.contains('default');
+
   factory _ProfilePlaylist.fromJson(Map<String, dynamic> json) {
     final creator = json['creator'] as Map<String, dynamic>?;
 
@@ -1515,11 +1555,11 @@ class _ProfilePlaylist {
     final tracks = json['tracks'] as List?;
     if (tracks != null && tracks.isNotEmpty) {
       final first = tracks.first;
-      if (first is Map<String, dynamic>) {
-        final url = first['artworkUrl'] as String?;
-        if (url != null &&
-            url.startsWith('https://') &&
-            !url.contains('default')) {
+      if (first is Map) {
+        final track = first['track'];
+        final rawTrack = track is Map ? track : first;
+        final url = rawTrack['artworkUrl']?.toString();
+        if (isUsableArtworkUrl(url)) {
           firstTrackArtwork = url;
         }
       }

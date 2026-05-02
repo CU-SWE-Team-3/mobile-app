@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -18,6 +20,7 @@ class MainActivity : AudioServiceActivity() {
     private val notificationChannelId = "biobeats_notifications"
     private val permissionRequestCode = 4242
     private var notificationChannel: MethodChannel? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -30,8 +33,13 @@ class MainActivity : AudioServiceActivity() {
             when (call.method) {
                 "initialize" -> {
                     createNotificationChannel()
-                    handleNotificationTap(intent)
+                    // Respond first so Dart unblocks and registers setMethodCallHandler
+                    // before the notificationTap event is delivered. If we called
+                    // invokeMethod here (before result.success), Dart would still be
+                    // awaiting the "initialize" response and the handler would not yet
+                    // be registered — the tap event would be silently dropped.
                     result.success(null)
+                    deliverInitialNotificationTap()
                 }
 
                 "requestPermission" -> {
@@ -53,10 +61,34 @@ class MainActivity : AudioServiceActivity() {
         }
     }
 
+    // Called when a notification is tapped while the app is already running
+    // (foreground or background). FLAG_ACTIVITY_SINGLE_TOP ensures Android
+    // calls onNewIntent instead of onCreate in this case.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleNotificationTap(intent)
+        val payload = intent.getStringExtra("biobeats_notification_payload") ?: return
+        intent.removeExtra("biobeats_notification_payload")
+        // Post to the next looper iteration so that Flutter engine state
+        // transitions triggered by super.onNewIntent() (plugin dispatch, deep-link
+        // processing) fully settle before the tap event is sent. Sending
+        // synchronously inside the onNewIntent stack frame can cause the
+        // MethodChannel message to be silently dropped on some Android versions.
+        mainHandler.post {
+            notificationChannel?.invokeMethod("notificationTap", payload)
+        }
+    }
+
+    // Delivers the startup notification tap for the killed-app cold-start case.
+    // Called after result.success(null) is sent for "initialize", so the Dart
+    // setMethodCallHandler is guaranteed to be registered by the time the
+    // notificationTap event arrives.
+    private fun deliverInitialNotificationTap() {
+        val payload = intent?.getStringExtra("biobeats_notification_payload") ?: return
+        intent.removeExtra("biobeats_notification_payload")
+        mainHandler.post {
+            notificationChannel?.invokeMethod("notificationTap", payload)
+        }
     }
 
     private fun createNotificationChannel() {
@@ -97,6 +129,12 @@ class MainActivity : AudioServiceActivity() {
             return
         }
 
+        // Use a unique ID per notification so each gets its own PendingIntent.
+        // With requestCode=0 and FLAG_UPDATE_CURRENT, every new notification
+        // would overwrite the PendingIntent extras of all previous ones —
+        // tapping an older notification would deliver the newest payload instead.
+        val notificationId = System.currentTimeMillis().toInt()
+
         val launchIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("biobeats_notification_payload", payload)
@@ -109,7 +147,7 @@ class MainActivity : AudioServiceActivity() {
             }
         val pendingIntent = PendingIntent.getActivity(
             this,
-            0,
+            notificationId,
             launchIntent,
             pendingIntentFlags
         )
@@ -129,12 +167,6 @@ class MainActivity : AudioServiceActivity() {
             .build()
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(System.currentTimeMillis().toInt(), notification)
-    }
-
-    private fun handleNotificationTap(intent: Intent?) {
-        val payload = intent?.getStringExtra("biobeats_notification_payload") ?: return
-        notificationChannel?.invokeMethod("notificationTap", payload)
-        intent.removeExtra("biobeats_notification_payload")
+        manager.notify(notificationId, notification)
     }
 }

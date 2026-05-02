@@ -41,12 +41,6 @@ class _SocialSettingsPageState extends ConsumerState<SocialSettingsPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16),

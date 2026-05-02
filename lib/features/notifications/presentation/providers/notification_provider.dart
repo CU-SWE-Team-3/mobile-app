@@ -289,6 +289,8 @@ class NotificationPreferences {
   final bool allowNewPlaylists;
   final bool allowMentions;
   final bool allowSystem;
+  // Controls who can send messages: 'Everyone' or 'Following'
+  final String messagePermission;
 
   const NotificationPreferences({
     required this.pushEnabled,
@@ -301,6 +303,7 @@ class NotificationPreferences {
     required this.allowNewPlaylists,
     required this.allowMentions,
     required this.allowSystem,
+    this.messagePermission = 'Everyone',
   });
 
   static const defaults = NotificationPreferences(
@@ -314,6 +317,7 @@ class NotificationPreferences {
     allowNewPlaylists: true,
     allowMentions: true,
     allowSystem: true,
+    messagePermission: 'Everyone',
   );
 
   factory NotificationPreferences.fromJson(Map<String, dynamic> json) {
@@ -328,6 +332,7 @@ class NotificationPreferences {
       allowNewPlaylists: json['allowNewPlaylists'] as bool? ?? true,
       allowMentions: json['allowMentions'] as bool? ?? true,
       allowSystem: json['allowSystem'] as bool? ?? true,
+      messagePermission: json['messagePermission'] as String? ?? 'Everyone',
     );
   }
 
@@ -342,6 +347,7 @@ class NotificationPreferences {
         'allowNewPlaylists': allowNewPlaylists,
         'allowMentions': allowMentions,
         'allowSystem': allowSystem,
+        'messagePermission': messagePermission,
       };
 
   NotificationPreferences copyWith({
@@ -355,6 +361,7 @@ class NotificationPreferences {
     bool? allowNewPlaylists,
     bool? allowMentions,
     bool? allowSystem,
+    String? messagePermission,
   }) {
     return NotificationPreferences(
       pushEnabled: pushEnabled ?? this.pushEnabled,
@@ -367,6 +374,7 @@ class NotificationPreferences {
       allowNewPlaylists: allowNewPlaylists ?? this.allowNewPlaylists,
       allowMentions: allowMentions ?? this.allowMentions,
       allowSystem: allowSystem ?? this.allowSystem,
+      messagePermission: messagePermission ?? this.messagePermission,
     );
   }
 }

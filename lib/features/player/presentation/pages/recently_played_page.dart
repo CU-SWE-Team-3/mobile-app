@@ -11,6 +11,7 @@ class RecentlyPlayedPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyState = ref.watch(historyProvider);
+    final playerState = ref.watch(playerProvider);
     final serverHistoryState = ref.watch(serverHistoryProvider);
     final tracks = _uniqueRecentTracks(
       _mergeHistory(historyState.history, serverHistoryState.history),
@@ -42,14 +43,12 @@ class RecentlyPlayedPage extends ConsumerWidget {
                       SizedBox(height: 16),
                       Text(
                         'Nothing played yet',
-                        style:
-                            TextStyle(color: Colors.white38, fontSize: 16),
+                        style: TextStyle(color: Colors.white38, fontSize: 16),
                       ),
                       SizedBox(height: 8),
                       Text(
                         'Tracks you listen to will show up here',
-                        style:
-                            TextStyle(color: Colors.white24, fontSize: 13),
+                        style: TextStyle(color: Colors.white24, fontSize: 13),
                       ),
                     ],
                   ),
@@ -149,5 +148,62 @@ class RecentlyPlayedPage extends ConsumerWidget {
     }
     merged.sort((a, b) => b.playedAt.compareTo(a.playedAt));
     return merged;
+  }
+
+  static double? _trackProgress(PlayerState playerState, PlayerTrack track) {
+    if (playerState.currentTrack?.id != track.id) return null;
+    final duration = playerState.duration > Duration.zero
+        ? playerState.duration
+        : (track.duration ?? Duration.zero);
+    if (duration <= Duration.zero) return null;
+    return (playerState.position.inMilliseconds / duration.inMilliseconds)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+}
+
+class _TrackSubtitle extends StatelessWidget {
+  final String artist;
+  final double? progress;
+
+  const _TrackSubtitle({required this.artist, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          artist,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+        if (progress != null) ...[
+          const SizedBox(height: 6),
+          _MiniProgressBar(progress: progress!),
+        ],
+      ],
+    );
+  }
+}
+
+class _MiniProgressBar extends StatelessWidget {
+  final double progress;
+
+  const _MiniProgressBar({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: LinearProgressIndicator(
+        minHeight: 3,
+        value: progress,
+        backgroundColor: Colors.white12,
+        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF5500)),
+      ),
+    );
   }
 }

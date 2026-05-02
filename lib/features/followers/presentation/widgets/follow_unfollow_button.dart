@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../feed/presentation/providers/feed_provider.dart';
 
 class FollowUnfollowButton extends StatefulWidget {
   final String userId;
@@ -37,6 +39,10 @@ class _FollowUnfollowButtonState extends State<FollowUnfollowButton> {
         await dioClient.dio.post('/network/${widget.userId}/follow');
         setState(() => _isFollowing = true);
       }
+      if (!mounted) return;
+      final container = ProviderScope.containerOf(context, listen: false);
+      container.invalidate(followingFeedProvider);
+      await container.read(followingFeedProvider.notifier).load();
     } on DioException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

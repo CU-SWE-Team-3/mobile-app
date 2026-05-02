@@ -12,6 +12,7 @@ class ListeningHistoryPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final historyState = ref.watch(serverHistoryProvider);
     final localHistoryState = ref.watch(historyProvider);
+    final playerState = ref.watch(playerProvider);
     final notifier = ref.read(playerProvider.notifier);
     final historyNotifier = ref.read(serverHistoryProvider.notifier);
     final localHistoryNotifier = ref.read(historyProvider.notifier);
@@ -56,19 +57,16 @@ class ListeningHistoryPage extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.access_time,
-                          color: Colors.white12, size: 72),
+                      Icon(Icons.access_time, color: Colors.white12, size: 72),
                       SizedBox(height: 16),
                       Text(
                         'No listening history yet',
-                        style:
-                            TextStyle(color: Colors.white38, fontSize: 16),
+                        style: TextStyle(color: Colors.white38, fontSize: 16),
                       ),
                       SizedBox(height: 8),
                       Text(
                         'Your played tracks will be grouped by date',
-                        style:
-                            TextStyle(color: Colors.white24, fontSize: 13),
+                        style: TextStyle(color: Colors.white24, fontSize: 13),
                       ),
                     ],
                   ),
@@ -82,6 +80,7 @@ class ListeningHistoryPage extends ConsumerWidget {
                   },
                   child: _GroupedHistoryList(
                     entries: entries,
+                    playerState: playerState,
                     onTrackTap: (track) => notifier.playTrack(track),
                   ),
                 ),
@@ -109,8 +108,8 @@ class ListeningHistoryPage extends ConsumerWidget {
           TextButton(
             key: const ValueKey('player_history_clear_cancel_button'),
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel',
-                style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
             key: const ValueKey('player_history_clear_confirm_button'),
@@ -119,8 +118,8 @@ class ListeningHistoryPage extends ConsumerWidget {
               historyNotifier.clearHistory();
               localHistoryNotifier.clearHistory();
             },
-            child: const Text('Clear',
-                style: TextStyle(color: Color(0xFFFF5500))),
+            child:
+                const Text('Clear', style: TextStyle(color: Color(0xFFFF5500))),
           ),
         ],
       ),
@@ -150,10 +149,12 @@ class ListeningHistoryPage extends ConsumerWidget {
 
 class _GroupedHistoryList extends StatelessWidget {
   final List<HistoryEntry> entries;
+  final PlayerState playerState;
   final void Function(PlayerTrack track) onTrackTap;
 
   const _GroupedHistoryList({
     required this.entries,
+    required this.playerState,
     required this.onTrackTap,
   });
 
@@ -194,7 +195,10 @@ class _GroupedHistoryList extends StatelessWidget {
               ),
               child: _HistoryTile(
                 entry: entry,
-                onTap: () => onTrackTap(entry.track),
+                progress: _trackProgress(playerState, entry.track),
+              isPlaying: playerState.currentTrack?.id == entry.track.id &&
+                  playerState.isPlaying,
+              onTap: () => onTrackTap(entry.track),
               ),
             );
           }
@@ -234,6 +238,17 @@ class _GroupedHistoryList extends StatelessWidget {
       if (earlier.isNotEmpty) 'Earlier': earlier,
     };
   }
+
+  static double? _trackProgress(PlayerState playerState, PlayerTrack track) {
+    if (playerState.currentTrack?.id != track.id) return null;
+    final duration = playerState.duration > Duration.zero
+        ? playerState.duration
+        : (track.duration ?? Duration.zero);
+    if (duration <= Duration.zero) return null;
+    return (playerState.position.inMilliseconds / duration.inMilliseconds)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -267,17 +282,23 @@ class _SectionHeader extends StatelessWidget {
 
 class _HistoryTile extends StatelessWidget {
   final HistoryEntry entry;
+  final double? progress;
+  final bool isPlaying;
   final VoidCallback onTap;
 
-  const _HistoryTile({required this.entry, required this.onTap});
+  const _HistoryTile({
+    required this.entry,
+    required this.progress,
+    required this.isPlaying,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final track = entry.track;
     return ListTile(
       key: const ValueKey('listening_history_tile'),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(4),
         child: track.coverUrl != null
@@ -297,15 +318,25 @@ class _HistoryTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(color: Colors.white, fontSize: 14),
       ),
-      subtitle: Text(
-        track.artist,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: Colors.white54, fontSize: 12),
+      subtitle: _TrackSubtitle(
+        artist: track.artist,
+        progress: progress,
       ),
-      trailing: Text(
-        _formatTime(entry.playedAt),
-        style: const TextStyle(color: Colors.white24, fontSize: 11),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isPlaying ? Icons.pause_circle_outline : Icons.play_circle_outline,
+            color: Colors.white30,
+            size: 22,
+          ),
+          const SizedBox(height: 3),
+          Text(
+            _formatTime(entry.playedAt),
+            style: const TextStyle(color: Colors.white24, fontSize: 11),
+          ),
+        ],
       ),
       onTap: onTap,
     );
@@ -325,7 +356,52 @@ class _HistoryTile extends StatelessWidget {
           color: const Color(0xFF2A2A2A),
           borderRadius: BorderRadius.circular(4),
         ),
-        child:
-            const Icon(Icons.music_note, color: Colors.white24, size: 22),
+        child: const Icon(Icons.music_note, color: Colors.white24, size: 22),
       );
+}
+
+class _TrackSubtitle extends StatelessWidget {
+  final String artist;
+  final double? progress;
+
+  const _TrackSubtitle({required this.artist, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          artist,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+        if (progress != null) ...[
+          const SizedBox(height: 6),
+          _MiniProgressBar(progress: progress!),
+        ],
+      ],
+    );
+  }
+}
+
+class _MiniProgressBar extends StatelessWidget {
+  final double progress;
+
+  const _MiniProgressBar({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: LinearProgressIndicator(
+        minHeight: 3,
+        value: progress,
+        backgroundColor: Colors.white12,
+        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF5500)),
+      ),
+    );
+  }
 }

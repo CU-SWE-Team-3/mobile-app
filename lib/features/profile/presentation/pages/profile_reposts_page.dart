@@ -9,6 +9,7 @@ import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
+import '../../../player/presentation/widgets/mini_player_widget.dart';
 
 final _userRepostsProvider =
     FutureProvider.autoDispose<List<TrackSummary>>((ref) async {
@@ -28,83 +29,94 @@ class ProfileRepostsPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: _bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── top bar ──────────────────────────────────────────────
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    key: const ValueKey('profile_reposts_back_button'),
-                    onTap: () => context.pop(),
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Reposts',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                ],
-              ),
-            ),
-
-            // ── content ──────────────────────────────────────────────
-            Expanded(
-              child: async.when(
-                loading: () => const Center(
-                  child:
-                      CircularProgressIndicator(color: Color(0xFFFF5500)),
-                ),
-                error: (_, __) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                // ── top bar ──────────────────────────────────────────────
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
                     children: [
-                      const Text('Failed to load reposts',
-                          style: TextStyle(color: Colors.white54)),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        key: const ValueKey('profile_reposts_retry_button'),
-                        onPressed: () =>
-                            ref.invalidate(_userRepostsProvider),
-                        child: const Text('Retry',
-                            style: TextStyle(color: Color(0xFFFF5500))),
+                      GestureDetector(
+                        key: const ValueKey('profile_reposts_back_button'),
+                        onTap: () => context.pop(),
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white, size: 18),
+                        ),
                       ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Reposts',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
                     ],
                   ),
                 ),
-                data: (tracks) => tracks.isEmpty
-                    ? const Center(
-                        child: Text('No reposts yet',
-                            style: TextStyle(
-                                color: Colors.white54, fontSize: 16)),
-                      )
-                    : ListView.builder(
-                        physics: const BouncingScrollPhysics(),
-                        itemCount: tracks.length,
-                        itemBuilder: (_, i) =>
-                            _RepostTile(track: tracks[i]),
+
+                // ── content ──────────────────────────────────────────────
+                Expanded(
+                  child: async.when(
+                    loading: () => const Center(
+                      child:
+                          CircularProgressIndicator(color: Color(0xFFFF5500)),
+                    ),
+                    error: (_, __) => Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Failed to load reposts',
+                              style: TextStyle(color: Colors.white54)),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            key: const ValueKey('profile_reposts_retry_button'),
+                            onPressed: () =>
+                                ref.invalidate(_userRepostsProvider),
+                            child: const Text('Retry',
+                                style: TextStyle(color: Color(0xFFFF5500))),
+                          ),
+                        ],
                       ),
-              ),
+                    ),
+                    data: (tracks) => tracks.isEmpty
+                        ? const Center(
+                            child: Text('No reposts yet',
+                                style: TextStyle(
+                                    color: Colors.white54, fontSize: 16)),
+                          )
+                        : ListView.builder(
+                            physics: const BouncingScrollPhysics(),
+                            padding: const EdgeInsets.only(bottom: 132),
+                            itemCount: tracks.length,
+                            itemBuilder: (_, i) =>
+                                _RepostTile(track: tracks[i]),
+                          ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: MiniPlayerWidget(),
+          ),
+        ],
       ),
     );
   }
@@ -132,10 +144,10 @@ class _RepostTile extends ConsumerWidget {
     // has already toggled this track in the current session.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(engagementProvider(params).notifier).seed(
-        isReposted: true,
-        likeCount: track.likeCount,
-        repostCount: track.repostCount,
-      );
+            isReposted: true,
+            likeCount: track.likeCount,
+            repostCount: track.repostCount,
+          );
     });
 
     // Hide immediately when the user un-reposts this track

@@ -374,6 +374,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                   trackPermalink:
                                       playerState.currentTrack?.trackPermalink,
                                   initialIsLiked: engState.isLiked,
+                                      initialIsReposted: engState.isReposted,
                                   initialLikeCount: engState.likeCount,
                                   initialRepostCount: engState.repostCount,
                                 ),

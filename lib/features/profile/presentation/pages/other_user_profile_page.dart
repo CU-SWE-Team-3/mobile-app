@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../feed/presentation/providers/feed_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/widgets/mini_player_widget.dart';
 
@@ -225,8 +226,9 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       final res = await dioClient.dio.get('/network/$myId/following/$targetId');
       final d = res.data;
       if (d is Map) {
-        if (d.containsKey('isFollowing')) return d['isFollowing'] as bool? ?? false;
-        if (d.containsKey('following'))   return d['following']   as bool? ?? false;
+        if (d.containsKey('isFollowing'))
+          return d['isFollowing'] as bool? ?? false;
+        if (d.containsKey('following')) return d['following'] as bool? ?? false;
       }
     } catch (_) {}
 
@@ -255,7 +257,10 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   }
 
   Future<void> _fetchProfile() async {
-    setState(() { _isLoading = true; _hasError = false; });
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
     try {
       final profileRes = await dioClient.dio.get('/profile/$_permalink');
       final data = profileRes.data['data']['user'] as Map<String, dynamic>;
@@ -280,7 +285,9 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
 
       // ── Follow status ──────────────────────────────────────────────
       bool alreadyFollowing = false;
-      if (myId.isNotEmpty && _targetUserId.isNotEmpty && myId != _targetUserId) {
+      if (myId.isNotEmpty &&
+          _targetUserId.isNotEmpty &&
+          myId != _targetUserId) {
         // Best case: backend already returns isFollowing in profile data
         if (data.containsKey('isFollowing')) {
           alreadyFollowing = data['isFollowing'] as bool? ?? false;
@@ -293,16 +300,16 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
 
       if (mounted) {
         setState(() {
-          _username       = data['displayName'] as String? ?? '';
-          _bio            = data['bio']         as String? ?? '';
-          _city           = data['city']        as String? ?? '';
-          _country        = data['country']     as String? ?? '';
-          _avatarUrl      = data['avatarUrl']   as String? ?? '';
-          _coverUrl       = data['coverUrl']    as String? ?? '';
-          _followerCount  = _parseInt(data['followerCount']);
+          _username = data['displayName'] as String? ?? '';
+          _bio = data['bio'] as String? ?? '';
+          _city = data['city'] as String? ?? '';
+          _country = data['country'] as String? ?? '';
+          _avatarUrl = data['avatarUrl'] as String? ?? '';
+          _coverUrl = data['coverUrl'] as String? ?? '';
+          _followerCount = _parseInt(data['followerCount']);
           _followingCount = _parseInt(data['followingCount']);
-          _isPrivate      = data['isPrivate']   as bool? ?? false;
-          _isFollowing    = alreadyFollowing;
+          _isPrivate = data['isPrivate'] as bool? ?? false;
+          _isFollowing = alreadyFollowing;
           _tracks = _dedupeTracks(_extractTracksFromProfile(data));
           _isLoading = false;
         });
@@ -312,36 +319,45 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       }
     } catch (e) {
       debugPrint('=== PROFILE FETCH ERROR: $e');
-      if (mounted) setState(() { _isLoading = false; _hasError = true; });
+      if (mounted)
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
     }
   }
 
   // ── Playback ──────────────────────────────────────────────────────
   void _playFrom(List<Map<String, dynamic>> tracks, int index) {
-    final queue = tracks.map((t) {
-      final artist = _readArtist(t);
-      final artistId = artist['_id']?.toString() ??
-          artist['id']?.toString() ??
-          t['artistId']?.toString();
-      final artistPermalink =
-          artist['permalink']?.toString() ?? t['artistPermalink']?.toString();
-      final artistName = _readArtistName(t);
-      return PlayerTrack(
-        id: (t['_id'] ?? t['id'] ?? '').toString(),
-        title: (t['title'] ?? '').toString(),
-        artist: artistName,
-        artistId: artistId,
-        artistPermalink: artistPermalink,
-        audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
-        coverUrl: t['artworkUrl'] as String? ?? t['coverUrl'] as String?,
-        waveform: (t['waveform'] as List<dynamic>?)
-            ?.map((e) => (e as num).toInt())
-            .toList(),
-      );
-    }).where((t) => t.audioUrl.isNotEmpty).toList();
+    final queue = tracks
+        .map((t) {
+          final artist = _readArtist(t);
+          final artistId = artist['_id']?.toString() ??
+              artist['id']?.toString() ??
+              t['artistId']?.toString();
+          final artistPermalink = artist['permalink']?.toString() ??
+              t['artistPermalink']?.toString();
+          final artistName = _readArtistName(t);
+          return PlayerTrack(
+            id: (t['_id'] ?? t['id'] ?? '').toString(),
+            title: (t['title'] ?? '').toString(),
+            artist: artistName,
+            artistId: artistId,
+            artistPermalink: artistPermalink,
+            audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
+            coverUrl: t['artworkUrl'] as String? ?? t['coverUrl'] as String?,
+            waveform: (t['waveform'] as List<dynamic>?)
+                ?.map((e) => (e as num).toInt())
+                .toList(),
+          );
+        })
+        .where((t) => t.audioUrl.isNotEmpty)
+        .toList();
     if (queue.isEmpty) return;
     final clampedIndex = index.clamp(0, queue.length - 1);
-    ref.read(playerProvider.notifier).playQueue(queue, startIndex: clampedIndex);
+    ref
+        .read(playerProvider.notifier)
+        .playQueue(queue, startIndex: clampedIndex);
   }
 
   // ── Optimistic toggle with revert on failure ───────────────────────
@@ -361,6 +377,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       } else {
         await dioClient.dio.post('/network/$_targetUserId/follow');
       }
+      ref.invalidate(followingFeedProvider);
+      await ref.read(followingFeedProvider.notifier).load();
     } on DioException catch (e) {
       if (mounted) {
         setState(() {
@@ -407,8 +425,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
-          title: const Text('Block user?',
-              style: TextStyle(color: Colors.white)),
+          title:
+              const Text('Block user?', style: TextStyle(color: Colors.white)),
           content: const Text(
             'They won\'t be able to see your profile or tracks. You won\'t see their content either.',
             style: TextStyle(color: Colors.white70),
@@ -417,8 +435,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             TextButton(
               key: const ValueKey('other_profile_block_cancel_button'),
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel',
-                  style: TextStyle(color: Colors.white54)),
+              child:
+                  const Text('Cancel', style: TextStyle(color: Colors.white54)),
             ),
             TextButton(
               key: const ValueKey('other_profile_block_confirm_button'),
@@ -502,8 +520,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             margin: const EdgeInsets.all(8),
             decoration:
                 BoxDecoration(color: Colors.grey[900], shape: BoxShape.circle),
-            child:
-                const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+            child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
           ),
         ),
         actions: [
@@ -542,19 +559,17 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
               onPressed: _fetchProfile,
               style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFF5500)),
-              child: const Text('Retry',
-                  style: TextStyle(color: Colors.white)),
+              child: const Text('Retry', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
       );
 
-  Widget _buildBody() =>
-      _isBlocked
-          ? _buildBlockedProfile()
-          : _isPrivate && !_isFollowing
-              ? _buildPrivateProfile()
-              : _buildPublicProfile();
+  Widget _buildBody() => _isBlocked
+      ? _buildBlockedProfile()
+      : _isPrivate && !_isFollowing
+          ? _buildPrivateProfile()
+          : _buildPublicProfile();
 
   Widget _buildBlockedProfile() {
     final initial = _username.isNotEmpty ? _username[0].toUpperCase() : '?';
@@ -618,11 +633,14 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
     return SingleChildScrollView(
       child: Column(children: [
         const SizedBox(height: 24),
-        _buildAvatarRing(initial: initial, isDefaultAvatar: isDefault, radius: 50),
+        _buildAvatarRing(
+            initial: initial, isDefaultAvatar: isDefault, radius: 50),
         const SizedBox(height: 16),
         Text(_username,
             style: const TextStyle(
-                color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold)),
         Text(widget.permalink,
             style: TextStyle(color: Colors.grey[500], fontSize: 14)),
         const SizedBox(height: 20),
@@ -730,25 +748,29 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             const SizedBox(height: 24),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(_bio,
-                    maxLines: _bioExpanded ? null : 3,
-                    overflow: _bioExpanded
-                        ? TextOverflow.visible
-                        : TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                if (_bio.length > 120)
-                  GestureDetector(
-                    key: const ValueKey('other_profile_bio_toggle_button'),
-                    onTap: () => setState(() => _bioExpanded = !_bioExpanded),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(_bioExpanded ? 'Show less' : 'Show more',
-                          style: const TextStyle(
-                              color: Color(0xFFFF5500), fontSize: 13)),
-                    ),
-                  ),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_bio,
+                        maxLines: _bioExpanded ? null : 3,
+                        overflow: _bioExpanded
+                            ? TextOverflow.visible
+                            : TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 14)),
+                    if (_bio.length > 120)
+                      GestureDetector(
+                        key: const ValueKey('other_profile_bio_toggle_button'),
+                        onTap: () =>
+                            setState(() => _bioExpanded = !_bioExpanded),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(_bioExpanded ? 'Show less' : 'Show more',
+                              style: const TextStyle(
+                                  color: Color(0xFFFF5500), fontSize: 13)),
+                        ),
+                      ),
+                  ]),
             ),
           ],
 
@@ -758,7 +780,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(children: [
-                const Icon(Icons.location_on_outlined, color: Colors.grey, size: 16),
+                const Icon(Icons.location_on_outlined,
+                    color: Colors.grey, size: 16),
                 const SizedBox(width: 4),
                 Text([_city, _country].where((s) => s.isNotEmpty).join(', '),
                     style: const TextStyle(color: Colors.grey, fontSize: 13)),
@@ -877,11 +900,16 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
                 ),
               )
             else
-              ..._repostedTracks!.take(10).toList().asMap().entries.map((e) =>
-                  _TrackRow(
-                    track: e.value,
-                    onTap: () => _playFrom(_repostedTracks!.take(10).toList(), e.key),
-                  )),
+              ..._repostedTracks!
+                  .take(10)
+                  .toList()
+                  .asMap()
+                  .entries
+                  .map((e) => _TrackRow(
+                        track: e.value,
+                        onTap: () => _playFrom(
+                            _repostedTracks!.take(10).toList(), e.key),
+                      )),
           ],
           if (_selectedTabIndex == 2) ...[
             if (_isLoadingLikes)
@@ -919,11 +947,16 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
                 ),
               )
             else
-              ..._likedTracks!.take(10).toList().asMap().entries.map((e) =>
-                  _TrackRow(
-                    track: e.value,
-                    onTap: () => _playFrom(_likedTracks!.take(10).toList(), e.key),
-                  )),
+              ..._likedTracks!
+                  .take(10)
+                  .toList()
+                  .asMap()
+                  .entries
+                  .map((e) => _TrackRow(
+                        track: e.value,
+                        onTap: () =>
+                            _playFrom(_likedTracks!.take(10).toList(), e.key),
+                      )),
           ],
 
           const SizedBox(height: 32),
@@ -1046,7 +1079,8 @@ class _CircleIconBtn extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(color: Colors.grey[900], shape: BoxShape.circle),
+        decoration:
+            BoxDecoration(color: Colors.grey[900], shape: BoxShape.circle),
         child: Icon(icon, color: Colors.white70, size: size),
       );
 }
@@ -1204,8 +1238,8 @@ List<Map<String, dynamic>> _dedupeTracks(List<Map<String, dynamic>> tracks) {
   final seen = <String>{};
   final result = <Map<String, dynamic>>[];
   for (final track in tracks) {
-    final id = (track['_id'] ?? track['id'] ?? track['permalink'] ?? '')
-        .toString();
+    final id =
+        (track['_id'] ?? track['id'] ?? track['permalink'] ?? '').toString();
     if (id.isEmpty || seen.add(id)) {
       result.add(track);
     }
@@ -1213,7 +1247,8 @@ List<Map<String, dynamic>> _dedupeTracks(List<Map<String, dynamic>> tracks) {
   return result;
 }
 
-List<Map<String, dynamic>> _extractTracksFromProfile(Map<String, dynamic> user) {
+List<Map<String, dynamic>> _extractTracksFromProfile(
+    Map<String, dynamic> user) {
   final tracks = <Map<String, dynamic>>[];
   for (final key in const ['uploadedTracks', 'tracks', 'topTracks']) {
     final raw = user[key];

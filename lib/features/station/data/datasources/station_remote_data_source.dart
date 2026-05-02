@@ -9,6 +9,9 @@ class LikedStation {
   final String description;
   final String? artworkUrl;
   final String? seedTrackId;
+  final String? seedTrackTitle;
+  final String? seedTrackArtistName;
+  final String? seedTrackArtworkUrl;
 
   const LikedStation({
     required this.id,
@@ -16,6 +19,9 @@ class LikedStation {
     required this.description,
     this.artworkUrl,
     this.seedTrackId,
+    this.seedTrackTitle,
+    this.seedTrackArtistName,
+    this.seedTrackArtworkUrl,
   });
 
   factory LikedStation.fromJson(Map<String, dynamic> json) {
@@ -24,13 +30,19 @@ class LikedStation {
         json['id'] as String? ??
         '';
     final seedTrack = json['seedTrack'] as Map<String, dynamic>?;
+    final seedArtist = seedTrack?['artist'] as Map<String, dynamic>?;
     return LikedStation(
       id: id,
       title: json['title'] as String? ?? json['name'] as String? ?? '',
       description: json['description'] as String? ?? '',
       artworkUrl: json['artworkUrl'] as String? ?? json['coverUrl'] as String?,
-      seedTrackId:
-          seedTrack?['_id'] as String? ?? json['trackId'] as String?,
+      seedTrackId: seedTrack?['_id'] as String? ?? json['trackId'] as String?,
+      seedTrackTitle: seedTrack?['title'] as String?,
+      seedTrackArtistName: seedArtist?['displayName'] as String? ??
+          seedArtist?['username'] as String? ??
+          seedArtist?['name'] as String?,
+      seedTrackArtworkUrl: seedTrack?['artworkUrl'] as String? ??
+          seedTrack?['coverUrl'] as String?,
     );
   }
 }
@@ -83,7 +95,8 @@ class StationRemoteDataSource {
   Future<List<LikedStation>> getLikedStations() async {
     final response = await _dio.get('/stations/liked');
     final data = response.data;
-    final raw = _extractList(data, keys: ['stations', 'likedStations', 'items']);
+    final raw =
+        _extractList(data, keys: ['stations', 'likedStations', 'items']);
     debugPrint('[Station] getLikedStations raw count=${raw.length}');
     return raw
         .whereType<Map<String, dynamic>>()
