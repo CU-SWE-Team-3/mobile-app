@@ -24,10 +24,6 @@ class _Genre {
     this.color,
     this.imageWidth,
     this.imageHeight,
-<<<<<<< HEAD
-    [this.routeOverride]
-=======
->>>>>>> 2222de08f088244f39348eccdced579f14971f96
   );
 }
 
