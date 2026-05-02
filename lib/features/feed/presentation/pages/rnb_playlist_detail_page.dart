@@ -842,12 +842,6 @@ class _RnbPlaylistDetailPageState extends ConsumerState<RnbPlaylistDetailPage> {
           ),
           onPressed: context.pop,
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: Icon(Icons.cast_outlined, color: Colors.white70, size: 28),
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(

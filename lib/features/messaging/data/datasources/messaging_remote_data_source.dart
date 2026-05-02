@@ -82,7 +82,7 @@ class MessagingRemoteDataSource {
           attachmentId != null &&
           attachmentType.isNotEmpty &&
           attachmentId.isNotEmpty) ...{
-        'attachmentType': attachmentType.toLowerCase(),
+        'attachmentType': attachmentType[0].toUpperCase() + attachmentType.substring(1),
         'attachmentId': attachmentId,
       },
     };

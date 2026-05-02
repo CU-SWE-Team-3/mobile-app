@@ -591,8 +591,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             _iconBtn(Icons.arrow_back_ios_new_rounded,
                 () => context.canPop() ? context.pop() : null),
             const Spacer(),
-            _iconBtn(Icons.cast_rounded, () {}),
-            const SizedBox(width: 8),
             _iconBtn(Icons.more_vert_rounded, () {}),
           ],
         ),

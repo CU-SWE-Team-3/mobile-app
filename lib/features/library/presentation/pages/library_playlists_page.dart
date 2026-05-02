@@ -145,8 +145,6 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          _circleBtn(Icons.cast_rounded),
-          const SizedBox(width: 8),
           GestureDetector(
             key: const ValueKey('playlists_create_fab'),
             onTap: onAdd,
