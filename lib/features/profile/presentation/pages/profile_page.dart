@@ -14,6 +14,7 @@ import 'package:soundcloud_clone/features/library/presentation/providers/my_trac
 import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
+import 'package:soundcloud_clone/features/premium/presentation/providers/subscription_provider.dart';
 import 'package:soundcloud_clone/injection_container.dart';
 
 // ── API track model ───────────────────────────────────────────────────────────
@@ -104,6 +105,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _hasError = false;
 
   List<UploadTrack> _cachedTracks = [];
+  List<String> _pinnedTrackIds = [];
 
   List<_ProfilePlaylist> _playlists = [];
   bool _playlistsLoading = false;
@@ -133,12 +135,25 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   // Runs all profile fetches sequentially to avoid hammering the API
   Future<void> _loadAll() async {
     await _fetchProfile();
+    _loadPinnedTracks();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fetchReposts();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fetchLikes();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fetchPlaylists();
+  }
+
+  Future<void> _loadPinnedTracks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList('spotlight_pinned_ids') ?? [];
+    if (mounted) setState(() => _pinnedTrackIds = ids);
+  }
+
+  Future<void> _savePinnedTracks(List<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('spotlight_pinned_ids', ids);
+    if (mounted) setState(() => _pinnedTrackIds = ids);
   }
 
   void _playFrom(int index) {
@@ -274,11 +289,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           })
           .map(_ProfilePlaylist.fromJson)
           .toList();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _playlists = playlists;
           _playlistsLoading = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _playlistsLoading = false);
     }
@@ -305,11 +321,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       final String userId = prefs.getString('userId') ?? '';
 
       if (userId.isEmpty) {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _username = prefs.getString('displayName') ?? '';
             _isLoading = false;
           });
+        }
         return;
       }
 
@@ -382,11 +399,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           return;
         }
         // No cached data at all — surface the error so the retry button appears.
-        if (mounted)
+        if (mounted) {
           setState(() {
             _isLoading = false;
             _hasError = true;
           });
+        }
         return;
       }
 
@@ -440,11 +458,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } catch (e, st) {
       // ignore: avoid_print
       print('=== PROFILE FETCH ERROR: $e\n$st');
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoading = false;
           _hasError = true;
         });
+      }
     }
   }
 
@@ -591,8 +610,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             _iconBtn(Icons.arrow_back_ios_new_rounded,
                 () => context.canPop() ? context.pop() : null),
             const Spacer(),
-            _iconBtn(Icons.cast_rounded, () {}),
-            const SizedBox(width: 8),
             _iconBtn(Icons.more_vert_rounded, () {}),
           ],
         ),
@@ -640,6 +657,37 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 letterSpacing: 0.5,
               ),
             ),
+            // Plan badge
+            Builder(builder: (_) {
+              final sub = ref.watch(subscriptionProvider);
+              if (!sub.isPremium) return const SizedBox.shrink();
+              final isArtistPro = sub.planType == 'Pro';
+              return Padding(
+                key: const ValueKey('profile_plan_badge'),
+                padding: const EdgeInsets.only(top: 6),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isArtistPro
+                          ? const [Color(0xFF6B1DC8), Color(0xFFE0188A)]
+                          : const [Color(0xFF1A6FFF), Color(0xFF0A4DBF)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    sub.displayPlanName.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              );
+            }),
             const SizedBox(height: 4),
             // City / Country subtitle
             if (_city.isNotEmpty || _country.isNotEmpty)
@@ -781,7 +829,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       );
 
   // ── spotlight ────────────────────────────────────────────────────────
-  Widget _spotlight() => Padding(
+  Widget _spotlight() {
+    final pinnedTracks = _cachedTracks
+        .where((t) => t.id != null && _pinnedTrackIds.contains(t.id))
+        .toList();
+
+    return KeyedSubtree(
+      key: const ValueKey('spotlight_section'),
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -795,8 +850,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         fontWeight: FontWeight.w700)),
                 const Spacer(),
                 GestureDetector(
-                  key: const ValueKey('profile_spotlight_edit_button'),
-                  onTap: () {},
+                  key: const ValueKey('spotlight_edit_button'),
+                  onTap: _onSpotlightEdit,
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -810,11 +865,209 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ],
             ),
             const SizedBox(height: 6),
-            Text('Pin items to your Spotlight',
-                style: TextStyle(color: _sub, fontSize: 13)),
+            if (pinnedTracks.isEmpty)
+              Text('Pin items to your Spotlight',
+                  style: TextStyle(color: _sub, fontSize: 13))
+            else
+              Column(
+                children: pinnedTracks.map((t) {
+                  return Container(
+                    key: ValueKey('spotlight_track_tile_${t.id}'),
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: t.artworkUrl != null
+                              ? CachedNetworkImage(
+                                  imageUrl: t.artworkUrl!,
+                                  width: 44,
+                                  height: 44,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) => Container(
+                                    width: 44,
+                                    height: 44,
+                                    color: const Color(0xFF2C2C2E),
+                                    child: const Icon(Icons.music_note,
+                                        color: Colors.white54, size: 20),
+                                  ),
+                                )
+                              : Container(
+                                  width: 44,
+                                  height: 44,
+                                  color: const Color(0xFF2C2C2E),
+                                  child: const Icon(Icons.music_note,
+                                      color: Colors.white54, size: 20),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                t.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                t.artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: _sub, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.push_pin, color: _orange, size: 16),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _onSpotlightEdit() {
+    final sub = ref.read(subscriptionProvider);
+    if (!sub.isPremium) {
+      context.push('/upgrade');
+      return;
+    }
+    _showSpotlightPinDialog();
+  }
+
+  void _showSpotlightPinDialog() {
+    final tracks = _cachedTracks;
+    if (tracks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Upload some tracks first to pin them to Spotlight.'),
+          backgroundColor: Color(0xFF333333),
+        ),
       );
+      return;
+    }
+
+    final selected = Set<String>.from(_pinnedTrackIds);
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1C1C1E),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text(
+                'Pin to Spotlight',
+                style: TextStyle(color: Colors.white, fontSize: 17),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: tracks.length,
+                  itemBuilder: (_, i) {
+                    final t = tracks[i];
+                    final isPinned = t.id != null && selected.contains(t.id);
+                    return ListTile(
+                      key: ValueKey('spotlight_pin_option_${t.id}'),
+                      dense: true,
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: t.artworkUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: t.artworkUrl!,
+                                width: 36,
+                                height: 36,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => Container(
+                                  width: 36,
+                                  height: 36,
+                                  color: const Color(0xFF2C2C2E),
+                                  child: const Icon(Icons.music_note,
+                                      color: Colors.white54, size: 16),
+                                ),
+                              )
+                            : Container(
+                                width: 36,
+                                height: 36,
+                                color: const Color(0xFF2C2C2E),
+                                child: const Icon(Icons.music_note,
+                                    color: Colors.white54, size: 16),
+                              ),
+                      ),
+                      title: Text(
+                        t.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                      trailing: isPinned
+                          ? const Icon(Icons.push_pin,
+                              color: Color(0xFFFF5500), size: 20)
+                          : Icon(Icons.push_pin_outlined,
+                              color: Colors.white38, size: 20),
+                      onTap: () {
+                        if (t.id == null) return;
+                        setDialogState(() {
+                          if (isPinned) {
+                            selected.remove(t.id);
+                          } else if (selected.length < 3) {
+                            selected.add(t.id!);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Max 3 tracks in Spotlight.'),
+                                backgroundColor: Color(0xFF333333),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel',
+                      style: TextStyle(color: Colors.white54)),
+                ),
+                TextButton(
+                  key: const ValueKey('spotlight_save_button'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _savePinnedTracks(selected.toList());
+                  },
+                  child: const Text('Save',
+                      style: TextStyle(color: Color(0xFFFF5500))),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   // ── tracks section (inline preview, up to 3) ─────────────────────────
   Widget _tracksSection(AsyncValue<List<UploadTrack>> myTracksAsync) {
@@ -1054,7 +1307,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   // ── playlist row ─────────────────────────────────────────────────────
   Widget _playlistRow(BuildContext context) {
-    if (_playlistsLoading) {
+    final visiblePlaylists = _playlists;
+
+    if (_playlistsLoading && visiblePlaylists.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
         child: Center(
@@ -1067,7 +1322,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       );
     }
-    if (_playlists.isEmpty) {
+    if (visiblePlaylists.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Text('No playlists yet',
@@ -1079,9 +1334,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _playlists.length,
+        itemCount: visiblePlaylists.length,
         itemBuilder: (_, i) {
-          final p = _playlists[i];
+          final p = visiblePlaylists[i];
           // Artwork chain: own HTTPS artwork → first track HTTPS artwork → placeholder
           final cardArtwork = () {
             final own = p.artworkUrl;
@@ -1299,70 +1554,82 @@ class _TrackTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sub = Colors.white.withOpacity(0.55);
-    return GestureDetector(
-      key: const ValueKey('profile_track_tile'),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: (artworkUrl != null && artworkUrl!.isNotEmpty)
-                  ? CachedNetworkImage(
-                      imageUrl: artworkUrl!,
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
-                        width: 56,
-                        height: 56,
-                        color: const Color(0xFF2A2A2A),
-                        child: const Icon(Icons.music_note,
-                            color: Colors.white38, size: 24),
-                      ),
-                    )
-                  : Container(
-                      width: 56,
-                      height: 56,
-                      color: const Color(0xFF2A2A2A),
-                      child: const Icon(Icons.music_note,
-                          color: Colors.white38, size: 24),
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              key: const ValueKey('profile_track_tile'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: Row(
                 children: [
-                  Text(track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(track.artist,
-                      style: TextStyle(color: sub, fontSize: 12)),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(Icons.play_arrow_rounded, size: 13, color: sub),
-                      Text('  ${track.duration}',
-                          style: TextStyle(color: sub, fontSize: 11)),
-                    ],
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: (artworkUrl != null && artworkUrl!.isNotEmpty)
+                        ? CachedNetworkImage(
+                            imageUrl: artworkUrl!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(
+                              width: 56,
+                              height: 56,
+                              color: const Color(0xFF2A2A2A),
+                              child: const Icon(Icons.music_note,
+                                  color: Colors.white38, size: 24),
+                            ),
+                          )
+                        : Container(
+                            width: 56,
+                            height: 56,
+                            color: const Color(0xFF2A2A2A),
+                            child: const Icon(Icons.music_note,
+                                color: Colors.white38, size: 24),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(track.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 2),
+                        Text(track.artist,
+                            style: TextStyle(color: sub, fontSize: 12)),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.play_arrow_rounded,
+                                size: 13, color: sub),
+                            Text('  ${track.duration}',
+                                style: TextStyle(color: sub, fontSize: 11)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            GestureDetector(
-              key: const ValueKey('profile_track_more_button'),
-              onTap: onMore,
+          ),
+          GestureDetector(
+            key: const ValueKey('profile_track_more_button'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onMore,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

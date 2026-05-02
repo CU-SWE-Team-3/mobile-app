@@ -45,6 +45,7 @@ dependencies:
   image_picker: ^1.0.7
 
   # Utilities
+  path: ^1.9.0
   get_it: ^7.6.7
   equatable: ^2.0.5
   dartz: ^0.10.1

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -30,36 +31,67 @@ class TrackDownloadError extends TrackDownloadResult {
   const TrackDownloadError(this.message);
 }
 
-const _kArtistDisabledMsg =
-    'The artist has not enabled direct downloads for this track.';
+const _kArtistDisabledPhrase = 'has not enabled direct downloads';
 
-/// Downloads [trackId] from the backend, saves to local storage, and persists
-/// metadata. Returns a typed result — callers handle UI (snackbars, loading
-/// state) based on the outcome.
+/// Shared download handler — called by all download entry points.
 ///
-/// [onProgress] is called with values in [0, 1] as bytes arrive. Only used by
-/// the full player, which shows a progress indicator.
+/// Per API v1.10: only Go+ subscribers may call GET /tracks/{id}/download.
+/// All other plans (Free, Pro/Artist Pro) are gated before any backend call.
+///
+/// [onProgress] is called with values in [0, 1] as bytes arrive.
 Future<TrackDownloadResult> downloadTrack({
   required WidgetRef ref,
   required String trackId,
   required String title,
   required String artistName,
   String? artworkUrl,
+  String? audioUrl,
+  String? genre,
+  int? duration,
+  String? permalink,
+  String source = 'unknown',
   void Function(double)? onProgress,
 }) async {
   var sub = ref.read(subscriptionProvider);
-  if (!sub.isPremium || sub.planType != 'Go+') {
+
+  debugPrint(
+    '[Download] tapped source=$source, trackId=$trackId, '
+    'isPremium=${sub.isPremium}, planType=${sub.planType ?? "null"}, '
+    'canUploadUnlimited=${sub.canUploadUnlimited}, '
+    'canDownload=${sub.canDownload}',
+  );
+
+  if (!sub.canDownload || (sub.planType != 'Go+' && sub.offlineListening)) {
     await ref.read(subscriptionProvider.notifier).refreshFromProfile();
     sub = ref.read(subscriptionProvider);
+    debugPrint(
+      '[Download] after refresh — isPremium=${sub.isPremium}, '
+      'planType=${sub.planType ?? "null"}, '
+      'canUploadUnlimited=${sub.canUploadUnlimited}, '
+      'canDownload=${sub.canDownload}',
+    );
   }
-  if (!sub.isPremium || sub.planType != 'Go+') {
+
+  if (!sub.canDownload) {
+    debugPrint(
+      '[Download] plan-gated — isPremium=${sub.isPremium}, '
+      'planType=${sub.planType ?? "null"}, '
+      'canUploadUnlimited=${sub.canUploadUnlimited}, '
+      'canDownload=${sub.canDownload} (Go+ required)',
+    );
     return const TrackDownloadPlanGated();
   }
+
+  debugPrint(
+    '[Download] entitlement OK — planType=${sub.planType}, canDownload=true',
+  );
 
   try {
     final dir = await getApplicationDocumentsDirectory();
     final localPath = '${dir.path}/offline_$trackId.mp3';
     final dioClient = ref.read(dioClientProvider);
+    debugPrint('[Download] calling GET /tracks/$trackId/download');
+
     await dioClient.dio.download(
       '/tracks/$trackId/download',
       localPath,
@@ -70,15 +102,20 @@ Future<TrackDownloadResult> downloadTrack({
           : null,
     );
 
+    debugPrint('[Download] status=200 — saving metadata, mode=file');
+
     final repo = ref.read(offlineDownloadsRepositoryProvider);
     await repo.save(OfflineDownloadedTrack(
       trackId: trackId,
       title: title,
       artistName: artistName,
       artworkUrl: artworkUrl,
+      audioUrl: audioUrl,
       downloadedAt: DateTime.now(),
       localPath: localPath,
       planType: sub.planType,
+      genre: genre,
+      duration: duration,
       downloadMode: 'file',
       fileAvailable: true,
       backendDownloadAllowed: true,
@@ -86,38 +123,52 @@ Future<TrackDownloadResult> downloadTrack({
     ref.invalidate(offlineDownloadsProvider);
     return const TrackDownloadSuccess();
   } on DioException catch (e) {
-    if (e.response?.statusCode == 401) {
+    final status = e.response?.statusCode;
+    final data = e.response?.data;
+    final backendMsg =
+        (data is Map ? data['message'] as String? : null) ?? '';
+    debugPrint(
+      '[Download] failed — status=$status, message="$backendMsg"',
+    );
+
+    if (status == 401) {
       return const TrackDownloadError('Please log in again.');
     }
-    if (e.response?.statusCode == 403) {
-      final data = e.response?.data;
-      final backendMsg =
-          (data is Map ? data['message'] as String? : null) ?? '';
-      if (backendMsg == _kArtistDisabledMsg) {
-        // Save metadata-only entry so the track appears in Offline Downloads
-        // with a note that the file isn't available.
+
+    if (status == 403) {
+      // Artist disabled direct downloads: save metadata-only preview so the
+      // track appears in Offline Downloads with a "Preview saved" badge.
+      if (backendMsg.contains(_kArtistDisabledPhrase)) {
         final repo = ref.read(offlineDownloadsRepositoryProvider);
         await repo.save(OfflineDownloadedTrack(
           trackId: trackId,
           title: title,
           artistName: artistName,
           artworkUrl: artworkUrl,
+          audioUrl: audioUrl,
           downloadedAt: DateTime.now(),
           localPath: null,
           planType: sub.planType,
+          genre: genre,
+          duration: duration,
           downloadMode: 'metadataOnly',
           fileAvailable: false,
           backendDownloadAllowed: false,
           blockedReason: backendMsg,
         ));
         ref.invalidate(offlineDownloadsProvider);
+        debugPrint(
+          '[Download] status=403 artist-disabled — saved metadataOnly',
+        );
         return TrackDownloadMetadataOnly(backendMsg);
       }
-      final msg = backendMsg.isNotEmpty
-          ? backendMsg
-          : 'Offline downloads require Go+.';
-      return TrackDownloadError(msg);
+
+      // Any other 403 means plan-gated (shouldn't happen if client gate is
+      // correct, but guard it anyway).
+      debugPrint('[Download] status=403 plan-gated from backend');
+      return const TrackDownloadPlanGated();
     }
+
     return const TrackDownloadError('Download failed. Please try again.');
   } catch (_) {
     return const TrackDownloadError('Download failed. Please try again.');

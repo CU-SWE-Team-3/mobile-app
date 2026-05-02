@@ -10,6 +10,7 @@ import 'features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'features/messaging/data/datasources/messaging_remote_data_source.dart';
 import 'features/messaging/data/repositories/messaging_repository_impl.dart';
 import 'features/messaging/domain/repositories/messaging_repository.dart';
+import 'features/station/data/datasources/station_remote_data_source.dart';
 
 /// Global service locator instance.
 /// Access anywhere via: sl<MyService>()
@@ -19,6 +20,7 @@ Future<void> initDependencies() async {
   _initAuth();
   _initEngagement();
   _initMessaging();
+  _initStation();
   // TODO: Each team member registers their module dependencies here.
   // Follow the same pattern used in _initAuth() below.
   // Example:
@@ -53,5 +55,11 @@ void _initMessaging() {
 
   sl.registerLazySingleton<MessagingRepository>(
     () => MessagingRepositoryImpl(sl()),
+  );
+}
+
+void _initStation() {
+  sl.registerLazySingleton<StationRemoteDataSource>(
+    () => StationRemoteDataSource(dioClient.dio),
   );
 }

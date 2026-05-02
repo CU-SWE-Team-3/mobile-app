@@ -1,3 +1,4 @@
+import 'package:soundcloud_clone/core/utils/waveform_parser.dart';
 import 'package:soundcloud_clone/features/player/domain/entities/player_track.dart';
 
 class FeedTrack {
@@ -9,6 +10,7 @@ class FeedTrack {
   final String artistName;
   final String? artistAvatarUrl;
   final String? artistPermalink;
+  final String? trackPermalink;
   final int likeCount;
   final int repostCount;
   final int commentCount;
@@ -30,6 +32,7 @@ class FeedTrack {
     required this.artistName,
     this.artistAvatarUrl,
     this.artistPermalink,
+    this.trackPermalink,
     this.likeCount = 0,
     this.repostCount = 0,
     this.commentCount = 0,
@@ -60,22 +63,25 @@ class FeedTrack {
     final String? tsRaw = json['_activityTimestamp'] as String?;
 
     return FeedTrack(
-      id: json['_id'] as String? ?? '',
-      title: json['title'] as String? ?? '',
-      artworkUrl: json['artworkUrl'] as String?,
-      audioUrl: json['hlsUrl'] as String?,
-      artistId: artistMap['_id'] as String? ?? '',
-      artistName: artistMap['displayName'] as String? ?? '',
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      artworkUrl: (json['artworkUrl'] ?? json['coverUrl']) as String?,
+      audioUrl: (json['hlsUrl'] ?? json['audioUrl'] ?? '').toString(),
+      artistId: (artistMap['_id'] ?? artistMap['id'] ?? '').toString(),
+      artistName: (artistMap['displayName'] ??
+              artistMap['username'] ??
+              artistMap['name'] ??
+              '')
+          .toString(),
       artistAvatarUrl: artistMap['avatarUrl'] as String?,
       artistPermalink: artistMap['permalink'] as String?,
+      trackPermalink: json['permalink']?.toString(),
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       repostCount: (json['repostCount'] as num?)?.toInt() ?? 0,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
       isLiked: json['isLiked'] as bool? ?? false,
       isReposted: json['isReposted'] as bool? ?? false,
-      waveform: (json['waveform'] as List<dynamic>?)
-          ?.map((e) => (e as num).toInt())
-          .toList(),
+      waveform: parseWaveformFromMap(json),
       activityType: json['_activityType'] as String?,
       actorName: actorMap?['displayName'] as String?,
       actorAvatarUrl: actorMap?['avatarUrl'] as String?,
@@ -92,5 +98,6 @@ class FeedTrack {
         waveform: waveform,
         artistId: artistId.isNotEmpty ? artistId : null,
         artistPermalink: artistPermalink,
+        trackPermalink: trackPermalink,
       );
 }

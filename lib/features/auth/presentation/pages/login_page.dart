@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/providers/session_provider.dart';
 import '../../../../core/services/fcm_service.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart'
+    show normalizeSubscriptionPlan;
 
 class LoginPage extends ConsumerStatefulWidget {
   final String email;
@@ -60,6 +62,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           '') as String;
       await prefs.setString('avatarUrl', avatarUrl);
       debugPrint('[Login] avatarUrl saved: $avatarUrl');
+
+      // Persist subscription data from login response so plan is never lost.
+      final isPremium = user['isPremium'] as bool? ?? false;
+      await prefs.setBool('isPremium', isPremium);
+      await prefs.setBool(
+          'cancelAtPeriodEnd', user['cancelAtPeriodEnd'] as bool? ?? false);
+      final expiresAt = user['subscriptionExpiresAt'] as String?;
+      if (expiresAt != null) {
+        await prefs.setString('subscriptionExpiresAt', expiresAt);
+      }
+      final normalizedPlan =
+          normalizeSubscriptionPlan(user['subscriptionPlan']);
+      if (normalizedPlan != null) {
+        await prefs.setString('subscriptionPlanType', normalizedPlan);
+        await prefs.remove('pendingSelectedPlan');
+      } else {
+        await prefs.remove('subscriptionPlanType');
+        await prefs.remove('pendingSelectedPlan');
+      }
+      debugPrint(
+          '[Login] subscription saved: isPremium=$isPremium, plan=${normalizedPlan ?? "Free"}');
+
       dioClient.setAuthToken(token);
       if (!mounted) return;
       ref.read(sessionUserIdProvider.notifier).state =

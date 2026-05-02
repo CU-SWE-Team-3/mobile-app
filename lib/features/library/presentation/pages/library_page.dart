@@ -47,12 +47,6 @@ class LibraryPage extends ConsumerWidget {
 
                   const SizedBox(width: 12),
                   IconButton(
-                    key: const ValueKey('library_cast_button'),
-                    icon: const Icon(Icons.cast_rounded,
-                        color: Colors.white, size: 22),
-                    onPressed: () {},
-                  ),
-                  IconButton(
                     key: const ValueKey('library_upload_button'),
                     icon: const Icon(Icons.arrow_circle_up_outlined,
                         color: Colors.white, size: 22),

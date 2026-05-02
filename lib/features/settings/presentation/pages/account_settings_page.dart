@@ -50,19 +50,6 @@ class AccountSettingsPage extends ConsumerWidget {
                     ),
                   ),
                   const Spacer(),
-                  GestureDetector(
-                    onTap: () {},
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.cast_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -246,19 +233,6 @@ class DeleteAccountPage extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  GestureDetector(
-                    onTap: () {},
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.cast_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                  ),
                 ],
               ),
             ),
