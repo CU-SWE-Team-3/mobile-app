@@ -23,8 +23,13 @@ class HistoryState {
 
   /// Last 20 tracks for the Recently Played screen.
   List<PlayerTrack> get recentlyPlayed {
-    final tracks = entries.map((e) => e.track).toList();
-    return tracks.length > 20 ? tracks.sublist(0, 20) : tracks;
+    final seen = <String>{};
+    final tracks = <PlayerTrack>[];
+    for (final entry in entries) {
+      if (seen.add(entry.track.id)) tracks.add(entry.track);
+      if (tracks.length == 20) break;
+    }
+    return tracks;
   }
 
   /// Full entry list for the Listening History screen (date grouping lives in
@@ -47,7 +52,8 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
   final HistoryRepository _repo;
 
   /// The last track we recorded — used to deduplicate rapid state emissions.
-  PlayerTrack? _lastRecorded;
+  String? _lastRecordedTrackId;
+  DateTime? _lastRecordedAt;
 
   HistoryNotifier(this._ref, this._repo)
       : super(const HistoryState(isLoading: true)) {
@@ -55,7 +61,7 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
     // even during the async initial load below.
     _ref.listen<PlayerState>(
       playerProvider,
-      (_, next) => _onCurrentTrackChanged(next.currentTrack),
+      (_, next) => _onPlayerStateChanged(next),
     );
     _loadPersistedHistory();
   }
@@ -67,20 +73,32 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
     }
   }
 
-  void _onCurrentTrackChanged(PlayerTrack? current) {
+  void _onPlayerStateChanged(PlayerState next) {
+    final current = next.currentTrack;
     if (current == null) return;
-    // Guard: same track emitted multiple times (loading / buffering state
-    // updates) should not create duplicate entries.
-    if (current == _lastRecorded) return;
-    _lastRecorded = current;
-    _record(current);
+    if (!next.isPlaying || next.isLoading) return;
+
+    final now = DateTime.now();
+    final lastAt = _lastRecordedAt;
+    if (_lastRecordedTrackId == current.id &&
+        lastAt != null &&
+        now.difference(lastAt) < const Duration(seconds: 2)) {
+      return;
+    }
+
+    _lastRecordedTrackId = current.id;
+    _lastRecordedAt = now;
+    _record(current, playedAt: now, progress: next.position);
   }
 
-  void _record(PlayerTrack track) {
-    // Move to front if already present (deduplication).
+  void _record(
+    PlayerTrack track, {
+    required DateTime playedAt,
+    Duration? progress,
+  }) {
     final updated = [
-      HistoryEntry(track: track, playedAt: DateTime.now()),
-      ...state.entries.where((e) => e.track.id != track.id),
+      HistoryEntry(track: track, playedAt: playedAt, progress: progress),
+      ...state.entries,
     ];
     final capped =
         updated.length > 50 ? updated.sublist(0, 50) : updated;
@@ -90,7 +108,8 @@ class HistoryNotifier extends StateNotifier<HistoryState> {
 
   Future<void> clearHistory() async {
     await _repo.clear();
-    _lastRecorded = null;
+    _lastRecordedTrackId = null;
+    _lastRecordedAt = null;
     if (mounted) state = state.copyWith(entries: []);
   }
 

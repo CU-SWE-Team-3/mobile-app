@@ -1,11 +1,12 @@
 import 'dart:math';
-
+import 'dart:ui';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/providers/session_provider.dart';
+import 'package:soundcloud_clone/core/utils/track_url_builder.dart';
 import 'package:soundcloud_clone/core/utils/profile_navigation.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
@@ -15,6 +16,7 @@ import 'package:soundcloud_clone/features/messaging/presentation/widgets/send_to
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/station/presentation/providers/station_providers.dart';
 import 'package:soundcloud_clone/features/premium/presentation/providers/subscription_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../pages/likers_list_page.dart';
 import '../pages/reposters_list_page.dart';
@@ -36,8 +38,13 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
   final bool showShare;
   final bool showReport;
   final bool initialIsLiked;
+  final bool initialIsReposted;
   final int initialLikeCount;
   final int initialRepostCount;
+  final VoidCallback? onUnlike;
+  final VoidCallback? onEditTrack;
+  final VoidCallback? onChangeVisibility;
+  final VoidCallback? onDeleteTrack;
 
   const TrackOptionsSheet({
     super.key,
@@ -55,8 +62,13 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
     this.showShare = true,
     this.showReport = true,
     this.initialIsLiked = false,
+    this.initialIsReposted = false,
     this.initialLikeCount = 0,
     this.initialRepostCount = 0,
+    this.onUnlike,
+    this.onEditTrack,
+    this.onChangeVisibility,
+    this.onDeleteTrack,
   });
 
   @override
@@ -220,6 +232,9 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
         await ref.read(engagementProvider(params).notifier).toggleLike();
     if (!mounted) return;
     Navigator.pop(context);
+    if (success && wasLiked) {
+      widget.onUnlike?.call();
+    }
     if (!success) {
       writeOverride(liked: wasLiked, likeCount: wasCount);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -237,159 +252,243 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
     final engagementParams = EngagementParams(
       trackId: widget.trackId,
       isLiked: widget.initialIsLiked,
+      isReposted: widget.initialIsReposted,
       likeCount: widget.initialLikeCount,
       repostCount: widget.initialRepostCount,
     );
     final engagementState = ref.watch(engagementProvider(engagementParams));
 
-    return Container(
-      color: const Color(0xFF111111),
-      child: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (hasDetails)
-                _TrackSheetHeader(
-                    title: widget.title!,
-                    artist: widget.artistName!,
-                    artworkUrl: widget.artworkUrl),
-              if (widget.showSendTo) _InlineSendTo(trackId: widget.trackId),
-              if (widget.showShare) _ShareRow(trackId: widget.trackId),
-              const SizedBox(height: 12),
-              _OptionTile(
-                icon: engagementState.isLiked
-                    ? Icons.favorite
-                    : Icons.favorite_border,
-                label: engagementState.isLiked ? 'Unlike' : 'Like',
-                onTap: () => _toggleLike(engagementParams, engagementState),
-              ),
-              _OptionTile(
-                  icon: Icons.format_list_bulleted,
-                  label: 'Play Next',
-                  onTap: _playNext),
-              _OptionTile(
-                  icon: Icons.format_list_numbered,
-                  label: 'Play Last',
-                  onTap: _playLast),
-              _OptionTile(
-                icon: Icons.playlist_add_outlined,
-                label: 'Add to playlist',
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          AddToPlaylistPage(trackId: widget.trackId),
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.92,
+      minChildSize: 0.54,
+      maxChildSize: 0.96,
+      snap: true,
+      snapSizes: const [0.54, 0.92],
+      shouldCloseOnMinExtent: true,
+      builder: (context, scrollController) {
+        return Container(
+          color: const Color(0xFF111111),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SheetDragHandle(),
+                  if (hasDetails)
+                    _TrackSheetHeader(
+                        title: widget.title!,
+                        artist: widget.artistName!,
+                        artworkUrl: widget.artworkUrl),
+                  if (widget.showSendTo) _InlineSendTo(trackId: widget.trackId),
+                  if (widget.showShare)
+                    _ShareRow(
+                      trackId: widget.trackId,
+                      title: widget.title,
+                      artistName: widget.artistName,
+                      artistPermalink: widget.artistPermalink,
+                      trackPermalink: widget.trackPermalink,
                     ),
-                  );
-                },
-              ),
-              _StationOptionTile(
-                  trackId: widget.trackId,
-                  title: widget.title,
-                artistName: widget.artistName,
-                  artworkUrl: widget.artworkUrl),
-              _isDownloading
-                  ? const ListTile(
-                      leading: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.orange),
-                      ),
-                      title: Text('Downloading...',
-                          style: TextStyle(color: Colors.white70)),
-                    )
-                  : _OptionTile(
-                      key: const ValueKey('premium_download_button'),
-                      icon: Icons.download_outlined,
-                      label: 'Download',
-                      onTap: _handleDownload,
-                    ),
-              const Divider(color: Color(0xFF2A2A2A), height: 1),
-              _OptionTile(
-                icon: Icons.person_outline,
-                label: 'Go to artist profile',
-                onTap: () {
-                  if (widget.artistId != null &&
-                      widget.artistPermalink != null &&
-                      widget.artistName != null) {
-                    Navigator.pop(context);
-                    navigateToUserProfile(
-                      context,
-                      userId: widget.artistId!,
-                      permalink: widget.artistPermalink!,
-                      displayName: widget.artistName!,
-                    );
-                  } else {
-                    _showSoon('Artist profile unavailable');
-                  }
-                },
-              ),
-              _OptionTile(
-                icon: Icons.chat_bubble_outline,
-                label: 'View comments',
-                onTap: () {
-                  Navigator.pop(context);
-                  context.push(
-                    '/comments',
-                    extra: {
-                      'trackId': widget.trackId,
-                      'trackTitle': widget.title,
-                      'trackArtist': widget.artistName,
-                      'trackArtworkUrl': widget.artworkUrl,
-                      'currentPositionSeconds': 0,
+                  const SizedBox(height: 12),
+                  _OptionTile(
+                    icon: engagementState.isLiked
+                        ? Icons.favorite
+                        : Icons.favorite_border,
+                    label: engagementState.isLiked ? 'Unlike' : 'Like',
+                    onTap: () => _toggleLike(engagementParams, engagementState),
+                  ),
+                  _OptionTile(
+                      icon: Icons.format_list_bulleted,
+                      label: 'Play Next',
+                      onTap: _playNext),
+                  _OptionTile(
+                      icon: Icons.format_list_numbered,
+                      label: 'Play Last',
+                      onTap: _playLast),
+                  _OptionTile(
+                    icon: Icons.playlist_add_outlined,
+                    label: 'Add to playlist',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              AddToPlaylistPage(trackId: widget.trackId),
+                        ),
+                      );
                     },
-                  );
-                },
+                  ),
+                  _StationOptionTile(
+                      trackId: widget.trackId,
+                      title: widget.title,
+                      artistName: widget.artistName,
+                      artworkUrl: widget.artworkUrl),
+                  _isDownloading
+                      ? const ListTile(
+                          leading: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.orange),
+                          ),
+                          title: Text('Downloading...',
+                              style: TextStyle(color: Colors.white70)),
+                        )
+                      : _OptionTile(
+                          key: const ValueKey('premium_download_button'),
+                          icon: Icons.download_outlined,
+                          label: 'Download',
+                          onTap: _handleDownload,
+                        ),
+                  if (widget.onEditTrack != null ||
+                      widget.onChangeVisibility != null ||
+                      widget.onDeleteTrack != null) ...[
+                    const Divider(color: Color(0xFF2A2A2A), height: 1),
+                    if (widget.onEditTrack != null)
+                      _OptionTile(
+                        icon: Icons.edit_outlined,
+                        label: 'Edit track',
+                        onTap: () {
+                          Navigator.pop(context);
+                          widget.onEditTrack?.call();
+                        },
+                      ),
+                    if (widget.onChangeVisibility != null)
+                      _OptionTile(
+                        icon: Icons.lock_outline,
+                        label: 'Change visibility',
+                        onTap: () {
+                          Navigator.pop(context);
+                          widget.onChangeVisibility?.call();
+                        },
+                      ),
+                    if (widget.onDeleteTrack != null)
+                      _OptionTile(
+                        icon: Icons.delete_outline,
+                        label: 'Delete track',
+                        color: Colors.red,
+                        onTap: () {
+                          Navigator.pop(context);
+                          widget.onDeleteTrack?.call();
+                        },
+                      ),
+                  ],
+                  const Divider(color: Color(0xFF2A2A2A), height: 1),
+                  _OptionTile(
+                    icon: Icons.person_outline,
+                    label: 'Go to artist profile',
+                    onTap: () {
+                      if (widget.artistId != null &&
+                          widget.artistPermalink != null &&
+                          widget.artistName != null) {
+                        Navigator.pop(context);
+                        navigateToUserProfile(
+                          context,
+                          userId: widget.artistId!,
+                          permalink: widget.artistPermalink!,
+                          displayName: widget.artistName!,
+                        );
+                      } else {
+                        _showSoon('Artist profile unavailable');
+                      }
+                    },
+                  ),
+                  _OptionTile(
+                    icon: Icons.chat_bubble_outline,
+                    label: 'View comments',
+                    onTap: () {
+                      Navigator.pop(context);
+                      context.push(
+                        '/comments',
+                        extra: {
+                          'trackId': widget.trackId,
+                          'trackTitle': widget.title,
+                          'trackArtist': widget.artistName,
+                          'trackArtworkUrl': widget.artworkUrl,
+                          'currentPositionSeconds': 0,
+                        },
+                      );
+                    },
+                  ),
+                  _OptionTile(
+                    icon: Icons.repeat,
+                    label: engagementState.isReposted
+                        ? 'Undo Repost'
+                        : 'Repost on SoundCloud',
+                    onTap: engagementState.isLoadingRepost
+                        ? () {}
+                        : () {
+                            Navigator.pop(context);
+                            ref
+                                .read(engagementProvider(engagementParams)
+                                    .notifier)
+                                .toggleRepost();
+                          },
+                  ),
+                  const Divider(color: Color(0xFF2A2A2A), height: 1),
+                  _OptionTile(
+                    icon: Icons.people_outline,
+                    label: 'People who liked this track',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              LikersListPage(trackId: widget.trackId),
+                        ),
+                      );
+                    },
+                  ),
+                  _OptionTile(
+                    icon: Icons.people_alt_outlined,
+                    label: 'People who reposted this track',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              RepostersListPage(trackId: widget.trackId),
+                        ),
+                      );
+                    },
+                  ),
+                  _OptionTile(
+                      icon: Icons.graphic_eq,
+                      label: 'Behind this track',
+                      onTap: () => _showSoon('Behind this track coming soon')),
+                  _OptionTile(
+                      icon: Icons.outlined_flag,
+                      label: 'Report',
+                      onTap: () => _showSoon('Report coming soon')),
+                  const SizedBox(height: 10),
+                ],
               ),
-              _OptionTile(
-                icon: Icons.repeat,
-                label: 'Repost on SoundCloud',
-                onTap: () => _showSoon('Repost coming soon'),
-              ),
-              const Divider(color: Color(0xFF2A2A2A), height: 1),
-              _OptionTile(
-                icon: Icons.people_outline,
-                label: 'People who liked this track',
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LikersListPage(trackId: widget.trackId),
-                    ),
-                  );
-                },
-              ),
-              _OptionTile(
-                icon: Icons.people_alt_outlined,
-                label: 'People who reposted this track',
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          RepostersListPage(trackId: widget.trackId),
-                    ),
-                  );
-                },
-              ),
-              _OptionTile(
-                  icon: Icons.graphic_eq,
-                  label: 'Behind this track',
-                  onTap: () => _showSoon('Behind this track coming soon')),
-              _OptionTile(
-                  icon: Icons.outlined_flag,
-                  label: 'Report',
-                  onTap: () => _showSoon('Report coming soon')),
-              const SizedBox(height: 10),
-            ],
+            ),
           ),
+        );
+      },
+    );
+  }
+}
+
+class _SheetDragHandle extends StatelessWidget {
+  const _SheetDragHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 42,
+        height: 5,
+        margin: const EdgeInsets.only(top: 8, bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.white54,
+          borderRadius: BorderRadius.circular(999),
         ),
       ),
     );
@@ -504,8 +603,81 @@ class _InlineSendTo extends ConsumerWidget {
 
 class _ShareRow extends StatelessWidget {
   final String trackId;
+  final String? title;
+  final String? artistName;
+  final String? artistPermalink;
+  final String? trackPermalink;
 
-  const _ShareRow({required this.trackId});
+  const _ShareRow({
+    required this.trackId,
+    this.title,
+    this.artistName,
+    this.artistPermalink,
+    this.trackPermalink,
+  });
+
+  String get _url => buildTrackUrl(
+        trackId: trackId,
+        artistPermalink: artistPermalink,
+        trackPermalink: trackPermalink,
+      );
+
+  String get _shareText {
+    final trackTitle = title?.trim();
+    final artist = artistName?.trim();
+    final hasTitle = trackTitle != null && trackTitle.isNotEmpty;
+    final hasArtist = artist != null && artist.isNotEmpty;
+    final label = hasTitle
+        ? 'Listen to $trackTitle${hasArtist ? ' by $artist' : ''}'
+        : 'Listen to this track';
+    return '$label on #BioBeats\n$_url';
+  }
+
+  Future<void> _copyLink(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: _url));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Link copied to clipboard'),
+        backgroundColor: Color(0xFF333333),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _openSms(BuildContext context) async {
+    final encoded = Uri.encodeComponent(_shareText);
+    final opened = await launchUrl(
+      Uri.parse('sms:?body=$encoded'),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open SMS.'),
+          backgroundColor: Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _openWhatsApp(BuildContext context) async {
+    final encoded = Uri.encodeComponent(_shareText);
+    final opened = await launchUrl(
+      Uri.parse('whatsapp://send?text=$encoded'),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open WhatsApp.'),
+          backgroundColor: Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -537,24 +709,31 @@ class _ShareRow extends StatelessWidget {
                 },
               ),
               const SizedBox(width: 10),
-              const _ShareButton(
+              _ShareButton(
                 icon: Icons.content_copy_outlined,
                 label: 'Copy Link',
+                onTap: () => _copyLink(context),
               ),
               const SizedBox(width: 10),
-              const _ShareButton(
+              _ShareButton(
                 icon: Icons.chat,
                 label: 'WhatsApp',
                 green: true,
+                onTap: () => _openWhatsApp(context),
               ),
               const SizedBox(width: 10),
-              const _ShareButton(
+              _ShareButton(
                 icon: Icons.check_circle_outline,
                 label: 'Status',
                 green: true,
+                onTap: () => _openWhatsApp(context),
               ),
               const SizedBox(width: 10),
-              const _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
+              _ShareButton(
+                icon: Icons.sms_outlined,
+                label: 'SMS',
+                onTap: () => _openSms(context),
+              ),
             ],
           ),
         ),
@@ -728,22 +907,24 @@ class _OptionTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final Color color;
 
   const _OptionTile({
     super.key,
     required this.icon,
     required this.label,
     required this.onTap,
+    this.color = Colors.white,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      leading: Icon(icon, color: Colors.white, size: 24),
+      leading: Icon(icon, color: color, size: 24),
       title: Text(
         label,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
+        style: TextStyle(color: color, fontSize: 15),
       ),
       onTap: onTap,
     );

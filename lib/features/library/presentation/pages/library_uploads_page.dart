@@ -8,9 +8,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/dio_client.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../domain/entities/upload_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
-import '../../../premium/data/services/track_download_service.dart';
 import '../../../premium/presentation/providers/subscription_provider.dart';
 import '../providers/upload_provider.dart';
 import '../providers/my_tracks_provider.dart';
@@ -220,132 +220,37 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   }
 
   void _showTrackOptionsSheet(UploadTrack track) {
-    final outerContext = context;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      builder: (innerContext) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                key: const ValueKey('uploads_options_play_tile'),
-                leading: const Icon(Icons.play_arrow, color: Colors.white),
-                title:
-                    const Text('Play', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(innerContext);
-                  _playTrack(track);
-                },
-              ),
-              ListTile(
-                key: const ValueKey('uploads_options_edit_tile'),
-                leading: const Icon(Icons.edit, color: Colors.white),
-                title:
-                    const Text('Edit', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(innerContext);
-                  ref.read(trackEditProvider.notifier).state = track;
-                  outerContext.push('/library/uploads/edit');
-                },
-              ),
-              ListTile(
-                key: const ValueKey('track_options_visibility_button'),
-                leading: const Icon(Icons.lock_outline, color: Colors.white),
-                title: const Text('Change visibility',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(innerContext);
-                },
-              ),
-              ListTile(
-                key: const ValueKey('track_options_download_button'),
-                leading: const KeyedSubtree(
-                  key: ValueKey('premium_download_button'),
-                  child: Icon(Icons.download_outlined, color: Colors.white),
-                ),
-                title: const Text('Download',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(innerContext);
-                  _downloadTrack(track);
-                },
-              ),
-              ListTile(
-                key: const ValueKey('uploads_options_delete_tile'),
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title:
-                    const Text('Delete', style: TextStyle(color: Colors.red)),
-                onTap: () async {
-                  Navigator.pop(innerContext);
-                  await _deleteTrackPermanently(track);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _downloadTrack(UploadTrack track) async {
     final trackId = track.id;
     if (trackId == null || trackId.isEmpty) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Track cannot be downloaded because its ID is missing.'),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text('Track options are not available yet.')),
       );
       return;
     }
-
-    final result = await downloadTrack(
-      ref: ref,
-      trackId: trackId,
-      title: track.title,
-      artistName: track.artist.isNotEmpty ? track.artist : _currentDisplayName,
-      artworkUrl: track.artworkUrl,
-      audioUrl: track.hlsUrl,
-      genre: track.genre,
-      duration: track.duration,
-      source: 'uploads_page',
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: trackId,
+        title: track.title,
+        artistName: track.artist,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.hlsUrl,
+        waveform: track.waveform,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
+        onEditTrack: () {
+          ref.read(trackEditProvider.notifier).state = track;
+          context.push('/library/uploads/edit');
+        },
+        onChangeVisibility: () {},
+        onDeleteTrack: () => _deleteTrackPermanently(track),
+      ),
     );
-
-    if (!mounted) return;
-    switch (result) {
-      case TrackDownloadSuccess():
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Track saved to Offline Downloads.'),
-          backgroundColor: Color(0xFF333333),
-        ));
-      case TrackDownloadMetadataOnly():
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-            'Direct download is disabled for this track. '
-            'Saved to Offline Downloads preview.',
-          ),
-          backgroundColor: Color(0xFF333333),
-          duration: Duration(seconds: 4),
-        ));
-      case TrackDownloadPlanGated():
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Requires a Go+ Subscription for offline listening.'),
-          backgroundColor: Color(0xFF333333),
-        ));
-      case TrackDownloadError(:final message):
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.red,
-        ));
-    }
   }
 
   Future<void> _deleteTrackPermanently(UploadTrack track) async {
@@ -537,8 +442,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
             if (!sub.canUploadUnlimited) return const SizedBox.shrink();
             return Container(
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [Color(0xFF9B3FFF), Color(0xFFFF5500)],
@@ -569,13 +473,12 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
             child: Builder(builder: (context) {
               // Backend returns duration in seconds per API spec.
               // Tracks without duration are skipped (ignored), not counted as 0.
-              int tracksWithDuration = 0;
               final totalSeconds = _allTracks.fold<int>(0, (sum, t) {
                 if (t.duration == null || t.duration! <= 0) {
-                  debugPrint('[Library] track "${t.title}" has no duration — skipped from total');
+                  debugPrint(
+                      '[Library] track "${t.title}" has no duration — skipped from total');
                   return sum;
                 }
-                tracksWithDuration++;
                 return sum + t.duration!;
               });
               final totalMins = (totalSeconds / 60).floor();
@@ -584,8 +487,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                   // Upload arrow button with 3D press animation
                   GestureDetector(
                     key: const ValueKey('upload_pick_file_button'),
-                    onTapDown: (_) =>
-                        setState(() => _uploadBtnPressed = true),
+                    onTapDown: (_) => setState(() => _uploadBtnPressed = true),
                     onTapUp: (_) async {
                       setState(() => _uploadBtnPressed = false);
                       await _pickAndUpload(context);

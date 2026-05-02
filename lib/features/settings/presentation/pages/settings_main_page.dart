@@ -182,8 +182,8 @@ class SettingsMainPage extends ConsumerWidget {
           TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
-              ref.read(sessionUserIdProvider.notifier).state = '';
               await ref.read(authProvider.notifier).logout();
+              ref.read(sessionUserIdProvider.notifier).state = '';
               if (!context.mounted) return;
               context.go('/start');
             },

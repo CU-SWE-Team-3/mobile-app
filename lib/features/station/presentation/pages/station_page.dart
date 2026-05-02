@@ -61,9 +61,18 @@ class _StationPageState extends ConsumerState<StationPage> {
 
   /// Builds the full display list: source track first, then related (deduped).
   List<TrackSummary> _buildDisplayList(List<TrackSummary> related) {
+    final sourceTitle = widget.title?.trim() ?? '';
+    final hasSourceMetadata = sourceTitle.isNotEmpty &&
+        sourceTitle.toLowerCase() != 'station' &&
+        ((widget.artistName?.trim().isNotEmpty ?? false) ||
+            (widget.artworkUrl?.trim().isNotEmpty ?? false));
+    if (!hasSourceMetadata) {
+      return related.where((t) => t.id != widget.trackId).toList();
+    }
+
     final sourceTrack = TrackSummary(
       id: widget.trackId,
-      title: widget.title ?? '',
+      title: sourceTitle,
       artistName: widget.artistName ?? '',
       artworkUrl: widget.artworkUrl,
       audioUrl: _hlsFallback(widget.trackId),
@@ -76,7 +85,7 @@ class _StationPageState extends ConsumerState<StationPage> {
 
   void _playQueue(List<TrackSummary> tracks, {bool shuffle = false}) {
     final playable = tracks
-        .where((t) => t.audioUrl != null)
+        .where((t) => t.audioUrl != null && t.audioUrl!.isNotEmpty)
         .map((t) => PlayerTrack(
               id: t.id,
               title: t.title,
@@ -93,16 +102,44 @@ class _StationPageState extends ConsumerState<StationPage> {
     ref.read(playerProvider.notifier).playQueue(playable);
   }
 
+  bool _isStationQueueActive(
+      PlayerState playerState, List<TrackSummary> tracks) {
+    final stationTrackIds = tracks.map((track) => track.id).toSet();
+    final currentId = playerState.currentTrack?.id;
+    return currentId != null && stationTrackIds.contains(currentId);
+  }
+
+  void _toggleStationPlayback(List<TrackSummary> tracks) {
+    final playerState = ref.read(playerProvider);
+    if (_isStationQueueActive(playerState, tracks)) {
+      ref.read(playerProvider.notifier).togglePlayPause();
+      return;
+    }
+    _playQueue(tracks);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tracksAsync = ref.watch(stationTracksProvider(widget.trackId));
     final likeState = ref.watch(stationLikeProvider(_stationId));
+    final playerState = ref.watch(playerProvider);
 
     // Build display list eagerly when data is available so both the header
     // track-count and the list body use the same derived value.
     final displayTracks = tracksAsync.hasValue
         ? _buildDisplayList(tracksAsync.value!)
         : <TrackSummary>[];
+    final firstTrack = displayTracks.isNotEmpty ? displayTracks.first : null;
+    final headerArtworkUrl =
+        _firstNonEmpty(widget.artworkUrl, firstTrack?.artworkUrl);
+    final headerTitle = _stationTitle(
+      widget.title,
+      fallback: firstTrack?.title,
+    );
+    final headerArtistName =
+        _firstNonEmpty(widget.artistName, firstTrack?.artistName);
+    final isStationActive = _isStationQueueActive(playerState, displayTracks);
+    final isStationPlaying = isStationActive && playerState.isPlaying;
 
     return Scaffold(
       backgroundColor: const Color(0xFF111111),
@@ -111,17 +148,16 @@ class _StationPageState extends ConsumerState<StationPage> {
         slivers: [
           SliverToBoxAdapter(
             child: _StationHeader(
-              artworkUrl: widget.artworkUrl,
-              title: widget.title,
-              artistName: widget.artistName,
-              trackCount:
-                  tracksAsync.hasValue ? displayTracks.length : null,
+              artworkUrl: headerArtworkUrl,
+              title: headerTitle,
+              artistName: headerArtistName,
+              trackCount: tracksAsync.hasValue ? displayTracks.length : null,
               likeState: likeState,
               onLikeTap: () =>
                   ref.read(stationLikeProvider(_stationId).notifier).toggle(),
-              onShuffleTap: () =>
-                  _playQueue(displayTracks, shuffle: true),
-              onPlayTap: () => _playQueue(displayTracks),
+              onShuffleTap: () => _playQueue(displayTracks, shuffle: true),
+              onPlayTap: () => _toggleStationPlayback(displayTracks),
+              isPlaying: isStationPlaying,
             ),
           ),
           tracksAsync.when(
@@ -130,8 +166,7 @@ class _StationPageState extends ConsumerState<StationPage> {
               child: Center(
                 child: Padding(
                   padding: EdgeInsets.only(top: 40),
-                  child:
-                      CircularProgressIndicator(color: Color(0xFFFF5500)),
+                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
                 ),
               ),
             ),
@@ -145,8 +180,7 @@ class _StationPageState extends ConsumerState<StationPage> {
                     children: [
                       const Text(
                         'Could not load station tracks',
-                        style:
-                            TextStyle(color: Colors.white54, fontSize: 14),
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
                       ),
                       const SizedBox(height: 12),
                       TextButton(
@@ -171,8 +205,7 @@ class _StationPageState extends ConsumerState<StationPage> {
                       padding: EdgeInsets.only(top: 40),
                       child: Text(
                         'No related tracks found',
-                        style: TextStyle(
-                            color: Colors.white54, fontSize: 14),
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
                       ),
                     ),
                   ),
@@ -195,6 +228,28 @@ class _StationPageState extends ConsumerState<StationPage> {
       ),
     );
   }
+
+  String? _firstNonEmpty(String? primary, String? fallback) {
+    final trimmedPrimary = primary?.trim();
+    if (trimmedPrimary != null && trimmedPrimary.isNotEmpty) {
+      return trimmedPrimary;
+    }
+    final trimmedFallback = fallback?.trim();
+    if (trimmedFallback != null && trimmedFallback.isNotEmpty) {
+      return trimmedFallback;
+    }
+    return null;
+  }
+
+  String? _stationTitle(String? primary, {String? fallback}) {
+    final trimmedPrimary = primary?.trim();
+    if (trimmedPrimary != null &&
+        trimmedPrimary.isNotEmpty &&
+        trimmedPrimary.toLowerCase() != 'station') {
+      return trimmedPrimary;
+    }
+    return _firstNonEmpty(fallback, trimmedPrimary);
+  }
 }
 
 // ── Header ─────────────────────────────────────────────────────────────────────
@@ -208,6 +263,7 @@ class _StationHeader extends StatelessWidget {
   final VoidCallback onLikeTap;
   final VoidCallback onShuffleTap;
   final VoidCallback onPlayTap;
+  final bool isPlaying;
 
   const _StationHeader({
     required this.artworkUrl,
@@ -218,12 +274,12 @@ class _StationHeader extends StatelessWidget {
     required this.onLikeTap,
     required this.onShuffleTap,
     required this.onPlayTap,
+    required this.isPlaying,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasArtwork =
-        artworkUrl != null && artworkUrl!.startsWith('http');
+    final hasArtwork = artworkUrl != null && artworkUrl!.startsWith('http');
     final statusBarH = MediaQuery.of(context).padding.top;
 
     return SizedBox(
@@ -409,8 +465,10 @@ class _StationHeader extends StatelessWidget {
                             color: Colors.white,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(
-                            Icons.play_arrow_rounded,
+                          child: Icon(
+                            isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
                             color: Colors.black,
                             size: 30,
                           ),
@@ -452,9 +510,9 @@ class _StationTrackTile extends ConsumerWidget {
 
     return GestureDetector(
       onTap: () {
-        if (track.audioUrl == null) return;
+        if (track.audioUrl == null || track.audioUrl!.isEmpty) return;
         final playable = allTracks
-            .where((t) => t.audioUrl != null)
+            .where((t) => t.audioUrl != null && t.audioUrl!.isNotEmpty)
             .map((t) => PlayerTrack(
                   id: t.id,
                   title: t.title,
@@ -500,9 +558,7 @@ class _StationTrackTile extends ConsumerWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: isCurrent
-                          ? const Color(0xFFFF5500)
-                          : Colors.white,
+                      color: isCurrent ? const Color(0xFFFF5500) : Colors.white,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),

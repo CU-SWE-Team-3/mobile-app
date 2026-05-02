@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../premium/presentation/providers/subscription_provider.dart';
 import '../../domain/entities/upload_track.dart';
 import '../providers/my_tracks_provider.dart';
@@ -108,7 +107,7 @@ class _YourInsightsPageState extends ConsumerState<YourInsightsPage>
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              context.push('/upgrade/pricing');
+              context.push('/premium');
             },
             child: const Text('Upgrade',
                 style: TextStyle(color: Color(0xFFFF5500))),
@@ -122,7 +121,6 @@ class _YourInsightsPageState extends ConsumerState<YourInsightsPage>
   Widget build(BuildContext context) {
     final tracksAsync = ref.watch(myTracksProvider);
     final sub = ref.watch(subscriptionProvider);
-    final followerCount = ref.watch(authProvider).user?.followerCount ?? 0;
 
     return Scaffold(
       backgroundColor: _bg,
@@ -152,8 +150,6 @@ class _YourInsightsPageState extends ConsumerState<YourInsightsPage>
                             key: ValueKey('dashboard_$_selectedTab'),
                             tracks: tracks,
                             isArtistPro: sub.canUploadUnlimited,
-                            isGoPlus: sub.planType == 'Go+',
-                            followerCount: followerCount,
                             selectedTab: _selectedTab,
                             timeframe: _timeframe,
                             pulseAnimation: _pulseController,
@@ -398,8 +394,6 @@ class _MarketingEmptyState extends StatelessWidget {
 class _InsightsDashboard extends StatelessWidget {
   final List<UploadTrack> tracks;
   final bool isArtistPro;
-  final bool isGoPlus;
-  final int followerCount;
   final int selectedTab;
   final String timeframe;
   final Animation<double> pulseAnimation;
@@ -409,8 +403,6 @@ class _InsightsDashboard extends StatelessWidget {
     super.key,
     required this.tracks,
     required this.isArtistPro,
-    required this.isGoPlus,
-    required this.followerCount,
     required this.selectedTab,
     required this.timeframe,
     required this.pulseAnimation,
@@ -421,37 +413,6 @@ class _InsightsDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final metrics = _InsightMetrics.fromTracks(tracks);
     final allZero = metrics.total == 0;
-    if (selectedTab == 2) {
-      return TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 360),
-        curve: Curves.easeOutCubic,
-        builder: (context, value, child) {
-          return Opacity(
-            opacity: value,
-            child: Transform.translate(
-              offset: Offset(0, 18 * (1 - value)),
-              child: child,
-            ),
-          );
-        },
-        child: ListView(
-          key: const ValueKey('fan_insights_dashboard'),
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
-          children: [
-            _FansSection(
-              isArtistPro: isArtistPro,
-              isGoPlus: isGoPlus,
-              pulseAnimation: pulseAnimation,
-              tracks: tracks,
-              metrics: metrics,
-              followerCount: followerCount,
-            ),
-          ],
-        ),
-      );
-    }
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -508,6 +469,11 @@ class _InsightsDashboard extends StatelessWidget {
           const SizedBox(height: 26),
           _TopTracksSection(tracks: tracks),
           const SizedBox(height: 26),
+          if (selectedTab == 2 || !isArtistPro)
+            _FansSection(
+              isArtistPro: isArtistPro,
+              pulseAnimation: pulseAnimation,
+            ),
           if (selectedTab == 1) ...[
             const SizedBox(height: 16),
             _UnavailableSection(
@@ -789,7 +755,7 @@ class _TopTrackTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${track.playCount} plays · ${track.likeCount} likes · ${track.commentCount} comments',
+                  '${track.playCount} plays ?? ${track.likeCount} likes ?? ${track.commentCount} comments',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
@@ -816,28 +782,20 @@ class _TopTrackTile extends StatelessWidget {
 
 class _FansSection extends StatelessWidget {
   final bool isArtistPro;
-  final bool isGoPlus;
   final Animation<double> pulseAnimation;
-  final List<UploadTrack> tracks;
-  final _InsightMetrics metrics;
-  final int followerCount;
 
   const _FansSection({
     required this.isArtistPro,
-    required this.isGoPlus,
     required this.pulseAnimation,
-    required this.tracks,
-    required this.metrics,
-    required this.followerCount,
   });
 
   @override
   Widget build(BuildContext context) {
     if (isArtistPro) {
-      return _UnlockedFanInsights(
-        tracks: tracks,
-        metrics: metrics,
-        followerCount: followerCount,
+      return const _UnavailableSection(
+        title: 'Fans',
+        subtitle:
+            'Top listeners, countries, and platforms are not exposed by the current creator endpoints yet.',
       );
     }
 
@@ -875,155 +833,17 @@ class _FansSection extends StatelessWidget {
             _SkeletonLine(widthFactor: 0.88),
             const SizedBox(height: 8),
             _SkeletonLine(widthFactor: 0.64),
-            const SizedBox(height: 12),
-            Text(
-              isGoPlus
-                  ? 'Fan Insights are included with Artist Pro.\nYou are currently on Go+. Manage your subscription to switch plans.'
-                  : 'Upgrade to Artist Pro to unlock fan insights from your uploaded tracks.',
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 13,
-                height: 1.45,
-              ),
-            ),
             const SizedBox(height: 16),
             ElevatedButton(
-              key: const ValueKey('fan_insights_upgrade_to_artist_pro_button'),
-              onPressed: () => context
-                  .push(isGoPlus ? '/upgrade/status' : '/upgrade/pricing'),
+              onPressed: () => context.push('/premium'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF5500),
                 foregroundColor: Colors.white,
               ),
-              child: Text(
-                  isGoPlus ? 'Manage subscription' : 'Upgrade to Artist Pro'),
+              child: const Text('Upgrade to Artist Pro'),
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _UnlockedFanInsights extends StatelessWidget {
-  final List<UploadTrack> tracks;
-  final _InsightMetrics metrics;
-  final int followerCount;
-
-  const _UnlockedFanInsights({
-    required this.tracks,
-    required this.metrics,
-    required this.followerCount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final sorted = [...tracks]..sort((a, b) {
-        final aScore = a.playCount + a.likeCount + a.commentCount;
-        final bScore = b.playCount + b.likeCount + b.commentCount;
-        return bScore.compareTo(aScore);
-      });
-    final noActivity = metrics.plays == 0 &&
-        metrics.likes == 0 &&
-        metrics.comments == 0 &&
-        followerCount == 0;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Fan Insights',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 24,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'Artist Pro insights from your BioBeats uploads.',
-          style: TextStyle(color: Colors.white54, fontSize: 13),
-        ),
-        const SizedBox(height: 18),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.55,
-          children: [
-            _FanMetricCard(label: 'Total plays', value: metrics.plays),
-            _FanMetricCard(label: 'Total likes', value: metrics.likes),
-            _FanMetricCard(label: 'Total comments', value: metrics.comments),
-            _FanMetricCard(label: 'Followers', value: followerCount),
-          ],
-        ),
-        if (noActivity) ...[
-          const SizedBox(height: 18),
-          const _UnavailableSection(
-            title: 'No fan activity yet.',
-            subtitle:
-                'Share your tracks to start collecting plays, likes, comments, and followers.',
-          ),
-        ],
-        const SizedBox(height: 26),
-        const Text(
-          'Top tracks',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 12),
-        for (final track in sorted.take(5)) _TopTrackTile(track: track),
-      ],
-    );
-  }
-}
-
-class _FanMetricCard extends StatelessWidget {
-  final String label;
-  final int value;
-
-  const _FanMetricCard({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFFFF5500).withValues(alpha: 0.14),
-            const Color(0xFF8A3FFC).withValues(alpha: 0.08),
-          ],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _AnimatedNumber(
-            value: value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white60, fontSize: 12),
-          ),
-        ],
       ),
     );
   }

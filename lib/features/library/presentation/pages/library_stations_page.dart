@@ -3,16 +3,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../station/data/datasources/station_remote_data_source.dart';
 import '../../../station/presentation/providers/station_providers.dart';
 
-class LibraryStationsPage extends ConsumerWidget {
+class LibraryStationsPage extends ConsumerStatefulWidget {
   const LibraryStationsPage({super.key});
 
+  @override
+  ConsumerState<LibraryStationsPage> createState() =>
+      _LibraryStationsPageState();
+}
+
+class _LibraryStationsPageState extends ConsumerState<LibraryStationsPage> {
   static const _bg = Color(0xFF111111);
+  late final TextEditingController _searchController;
+  String _query = '';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final stationsAsync = ref.watch(likedStationsProvider);
 
     return Scaffold(
@@ -20,16 +39,16 @@ class LibraryStationsPage extends ConsumerWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // ── top bar ────────────────────────────────────────────────
+            // ?????? top bar ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.fromLTRB(16, 14, 20, 18),
               child: Row(
                 children: [
                   GestureDetector(
                     onTap: () => context.pop(),
                     child: Container(
-                      width: 38,
-                      height: 38,
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
@@ -37,17 +56,17 @@ class LibraryStationsPage extends ConsumerWidget {
                       child: const Icon(
                         Icons.arrow_back_ios_new_rounded,
                         color: Colors.white,
-                        size: 18,
+                        size: 24,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 18),
                   const Text(
                     'Stations',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                   const Spacer(),
@@ -69,6 +88,21 @@ class LibraryStationsPage extends ConsumerWidget {
             ),
 
             // ── content ────────────────────────────────────────────────
+            stationsAsync.maybeWhen(
+              data: (stations) => _SearchRow(
+                controller: _searchController,
+                count: stations.length,
+                onChanged: (value) => setState(() => _query = value),
+                onFilterTap: () {},
+              ),
+              orElse: () => _SearchRow(
+                controller: _searchController,
+                count: 0,
+                onChanged: (value) => setState(() => _query = value),
+                onFilterTap: () {},
+              ),
+            ),
+            const SizedBox(height: 18),
             Expanded(
               child: stationsAsync.when(
                 loading: () => const Center(
@@ -94,14 +128,23 @@ class LibraryStationsPage extends ConsumerWidget {
                   ),
                 ),
                 data: (stations) {
+                  final filtered = _filterStations(stations);
                   if (stations.isEmpty) {
                     return _EmptyState();
+                  }
+                  if (filtered.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No stations found',
+                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                      ),
+                    );
                   }
                   return ListView.builder(
                     padding: const EdgeInsets.only(bottom: 132),
                     physics: const BouncingScrollPhysics(),
-                    itemCount: stations.length,
-                    itemBuilder: (_, i) => _StationTile(station: stations[i]),
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) => _StationTile(station: filtered[i]),
                   );
                 },
               ),
@@ -111,9 +154,112 @@ class LibraryStationsPage extends ConsumerWidget {
       ),
     );
   }
+
+  List<LikedStation> _filterStations(List<LikedStation> stations) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return stations;
+    return stations
+        .where((station) => _stationSearchText(station).contains(q))
+        .toList();
+  }
+
+  String _stationSearchText(LikedStation station) {
+    final trackId = _seedTrackId(station);
+    final cached = ref.watch(stationMetaCacheProvider)[station.id];
+    final firstRelatedTrack = trackId != null && trackId.isNotEmpty
+        ? ref.watch(stationTracksProvider(trackId)).maybeWhen(
+              data: (tracks) => tracks.isNotEmpty ? tracks.first : null,
+              orElse: () => null,
+            )
+        : null;
+
+    return [
+      cached?.title,
+      station.seedTrackTitle,
+      firstRelatedTrack?.title,
+      station.title,
+      cached?.artistName,
+      station.seedTrackArtistName,
+      firstRelatedTrack?.artistName,
+      station.description,
+    ].whereType<String>().join(' ').toLowerCase();
+  }
+
+  String? _seedTrackId(LikedStation station) {
+    if (station.id.startsWith('track_')) return station.id.substring(6);
+    return station.seedTrackId;
+  }
 }
 
-// ── Empty state ────────────────────────────────────────────────────────────────
+class _SearchRow extends StatelessWidget {
+  final TextEditingController controller;
+  final int count;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onFilterTap;
+
+  const _SearchRow({
+    required this.controller,
+    required this.count,
+    required this.onChanged,
+    required this.onFilterTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: TextField(
+                controller: controller,
+                onChanged: onChanged,
+                style: const TextStyle(color: Colors.white, fontSize: 18),
+                cursorColor: Colors.white54,
+                decoration: InputDecoration(
+                  hintText: 'Search $count stations',
+                  hintStyle: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 18),
+          GestureDetector(
+            onTap: onFilterTap,
+            child: const SizedBox(
+              width: 42,
+              height: 48,
+              child: Icon(
+                Icons.tune_rounded,
+                color: Colors.white,
+                size: 31,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ?????? Empty state ????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 class _EmptyState extends StatelessWidget {
   @override
@@ -169,7 +315,7 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// ── Station tile ───────────────────────────────────────────────────────────────
+// ?????? Station tile ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
 
 class _StationTile extends ConsumerWidget {
   final LikedStation station;
@@ -183,21 +329,40 @@ class _StationTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final trackId = _seedTrackId ?? '';
+    final relatedAsync =
+        trackId.isNotEmpty ? ref.watch(stationTracksProvider(trackId)) : null;
+    final firstRelatedTrack = relatedAsync?.maybeWhen(
+      data: (tracks) => tracks.isNotEmpty ? tracks.first : null,
+      orElse: () => null,
+    );
+
     // Recover artworkUrl / artistName from the session cache if the API didn't
     // return them (GET /stations/liked omits these fields).
     final cached = ref.watch(stationMetaCacheProvider)[station.id];
-    final effectiveArtwork = station.artworkUrl ?? cached?.artworkUrl;
-    final effectiveArtistName = cached?.artistName;
+    final effectiveArtwork = station.artworkUrl ??
+        cached?.artworkUrl ??
+        station.seedTrackArtworkUrl ??
+        firstRelatedTrack?.artworkUrl;
+    final effectiveArtistName = cached?.artistName ??
+        station.seedTrackArtistName ??
+        firstRelatedTrack?.artistName;
     // Prefer the cached title (original track title) over the API station title
     // when available, since it's what the StationPage header shows.
-    final effectiveTitle =
-        cached?.title ?? (station.title.isNotEmpty ? station.title : 'Station');
+    final stationTitleIsGeneric =
+        station.title.isEmpty || station.title.toLowerCase() == 'station';
+    final effectiveTitle = cached?.title ??
+        station.seedTrackTitle ??
+        firstRelatedTrack?.title ??
+        (!stationTitleIsGeneric ? station.title : 'Station');
+    final trackCount = relatedAsync?.maybeWhen(
+      data: (tracks) => tracks.length,
+      orElse: () => null,
+    );
 
     final hasArtwork = effectiveArtwork != null &&
         effectiveArtwork.isNotEmpty &&
         effectiveArtwork.startsWith('http');
-    final trackId = _seedTrackId ?? '';
-
     return GestureDetector(
       onTap: () {
         context.push('/station', extra: {
@@ -208,22 +373,20 @@ class _StationTile extends ConsumerWidget {
         });
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 60,
-                height: 60,
-                child: hasArtwork
-                    ? CachedNetworkImage(
-                        imageUrl: effectiveArtwork!,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _placeholder(),
-                      )
-                    : _placeholder(),
-              ),
+            SizedBox(
+              width: 78,
+              height: 78,
+              child: hasArtwork
+                  ? CachedNetworkImage(
+                      imageUrl: effectiveArtwork,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _placeholder(),
+                    )
+                  : _placeholder(),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -236,41 +399,53 @@ class _StationTile extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
                     ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.favorite,
+                        color: Colors.white70,
+                        size: 15,
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        [
+                          'Track station',
+                          if (trackCount != null) '$trackCount Tracks',
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                   if (effectiveArtistName != null &&
                       effectiveArtistName.isNotEmpty) ...[
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
                       effectiveArtistName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ] else if (station.description.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      station.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 12,
-                      ),
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ],
               ),
             ),
+            const SizedBox(width: 10),
             const Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.white38,
-              size: 22,
+              Icons.more_vert_rounded,
+              color: Colors.white70,
+              size: 25,
             ),
           ],
         ),

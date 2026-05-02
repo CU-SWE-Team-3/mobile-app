@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/subscription_provider.dart'
     show SubscriptionEntitlements, subscriptionProvider;
@@ -98,6 +100,25 @@ class _PaymentSuccessPageState extends ConsumerState<PaymentSuccessPage> {
                         ),
                       ),
                     ),
+                    if (kIsWeb) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: OutlinedButton.icon(
+                          onPressed: _openApp,
+                          icon: const Icon(Icons.open_in_new_rounded),
+                          label: const Text('Return to BioBeats app'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: const BorderSide(color: Color(0xFFFF5500)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(32),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
 
                     SizedBox(
@@ -131,6 +152,13 @@ class _PaymentSuccessPageState extends ConsumerState<PaymentSuccessPage> {
                 ),
               ),
       ),
+    );
+  }
+
+  Future<void> _openApp() async {
+    await launchUrl(
+      Uri.parse('biobeats://payment-success'),
+      mode: LaunchMode.externalApplication,
     );
   }
 }

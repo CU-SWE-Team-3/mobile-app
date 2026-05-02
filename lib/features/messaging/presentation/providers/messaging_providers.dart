@@ -40,7 +40,7 @@ final socketLifecycleProvider = Provider<void>((ref) {
 /// badge updates without a full re-fetch. If the user IS inside that chat,
 /// [SocketService.isViewingConversation] returns true and the count is not
 /// incremented (the chat's own receipt call will reset it instead).
-final socketMessageLifecycleProvider = Provider.autoDispose<void>((ref) {
+final socketMessageLifecycleProvider = Provider<void>((ref) {
   final userId = ref.watch(sessionUserIdProvider);
   final service = ref.watch(socketServiceProvider);
   StreamSubscription<Map<String, dynamic>>? sub;
@@ -50,13 +50,18 @@ final socketMessageLifecycleProvider = Provider.autoDispose<void>((ref) {
       final conversationId = data['conversationId']?.toString() ?? '';
       if (conversationId.isEmpty) return;
 
-      // Always refresh the message thread so the chat room stays current.
       ref.invalidate(messagesProvider(conversationId));
 
-      // Only bump the unread badge if the user is NOT inside that conversation.
       if (!service.isViewingConversation(conversationId)) {
         ref.read(conversationsProvider.notifier).incrementUnread(conversationId);
       }
+
+      // Delay server re-fetch so the backend has time to persist updatedAt
+      // before we pull the conversation list. The optimistic incrementUnread
+      // above already updates the badge and sort order immediately.
+      Future<void>.delayed(const Duration(milliseconds: 500), () {
+        ref.invalidate(conversationsProvider);
+      });
     });
   }
 
@@ -75,30 +80,32 @@ final messagingRepositoryProvider = Provider<MessagingRepository>(
 /// count changes so the UI can update without a round-trip to the server.
 class ConversationsNotifier extends AsyncNotifier<List<Conversation>> {
   @override
-  Future<List<Conversation>> build() async {
-    final userId = ref.watch(sessionUserIdProvider);
-    if (userId.isEmpty) return [];
-    return ref.read(messagingRepositoryProvider).getConversations();
-  }
+Future<List<Conversation>> build() async {
+  final userId = ref.watch(sessionUserIdProvider);
+  if (userId.isEmpty) return [];
+  final convos = await ref.read(messagingRepositoryProvider).getConversations();
+  // ✅ Sort descending by updatedAt on load
+  convos.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return convos;
+}
 
-  /// Increments [conversationId]'s unread count by 1 in local state.
-  /// No-op when the data is not yet loaded or the conversation is not found.
-  void incrementUnread(String conversationId) {
-    final current = state.valueOrNull;
-    if (current == null) return;
-    state = AsyncData(
-      current.map((c) {
-        if (c.id != conversationId) return c;
-        return Conversation(
-          id: c.id,
-          participants: c.participants,
-          lastMessage: c.lastMessage,
-          unreadCount: c.unreadCount + 1,
-          updatedAt: c.updatedAt,
-        );
-      }).toList(),
+void incrementUnread(String conversationId) {
+  final current = state.valueOrNull;
+  if (current == null) return;
+  final updated = current.map((c) {
+    if (c.id != conversationId) return c;
+    return Conversation(
+      id: c.id,
+      participants: c.participants,
+      lastMessage: c.lastMessage,
+      unreadCount: c.unreadCount + 1,
+      updatedAt: DateTime.now(), // ✅ Bump updatedAt so sort works
     );
-  }
+  }).toList();
+  // ✅ Re-sort after every unread bump
+  updated.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  state = AsyncData(updated);
+}
 
   /// Resets [conversationId]'s unread count to 0 in local state.
   /// No-op when already zero or when data is not yet loaded.

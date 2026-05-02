@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -114,7 +112,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Requires a Go+ Subscription for offline listening.'),
+              
+              content:
+                  Text('Requires a Go+ Subscription for offline listening.'),
               backgroundColor: Color(0xFF333333),
             ),
           );
@@ -183,6 +183,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
         ? (playerState.position.inMilliseconds /
                 playerState.duration.inMilliseconds)
             .clamp(0.0, 1.0)
+            .toDouble()
         : 0.0;
 
     final currentSec = playerState.position.inSeconds;
@@ -202,13 +203,21 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
         children: [
           // ── Layer 1: Full-bleed artwork background ──────────────────
           artworkUrl != null
-              ? CachedNetworkImage(
-                  imageUrl: artworkUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) =>
-                      const ColoredBox(color: Color(0xFF1A1A1A)),
-                  errorWidget: (_, __, ___) =>
-                      const ColoredBox(color: Color(0xFF1A1A1A)),
+              ? TweenAnimationBuilder<double>(
+                  tween: Tween<double>(end: progress),
+                  duration: const Duration(milliseconds: 450),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, _) {
+                    return CachedNetworkImage(
+                      imageUrl: artworkUrl,
+                      fit: BoxFit.cover,
+                      alignment: Alignment(_artworkPanX(value), 0),
+                      placeholder: (_, __) =>
+                          const ColoredBox(color: Color(0xFF1A1A1A)),
+                      errorWidget: (_, __, ___) =>
+                          const ColoredBox(color: Color(0xFF1A1A1A)),
+                    );
+                  },
                 )
               : const ColoredBox(color: Color(0xFF1A1A1A)),
 
@@ -357,21 +366,24 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                   borderRadius: BorderRadius.vertical(
                                       top: Radius.circular(16)),
                                 ),
-                                builder: (_) =>
-                                    TrackOptionsSheet(
-                                      trackId: trackId,
-                                      title: playerState.currentTrack?.title,
-                                      artistName: playerState.currentTrack?.artist,
-                                      artworkUrl: playerState.currentTrackArtworkUrl,
-                                      audioUrl: playerState.currentTrack?.audioUrl,
-                                      waveform: playerState.currentTrack?.waveform,
-                                      artistId: playerState.currentTrack?.artistId,
-                                      artistPermalink: playerState.currentTrack?.artistPermalink,
-                                      trackPermalink: playerState.currentTrack?.trackPermalink,
-                                      initialIsLiked: engState.isLiked,
-                                      initialLikeCount: engState.likeCount,
-                                      initialRepostCount: engState.repostCount,
-                                    ),
+                                builder: (_) => TrackOptionsSheet(
+                                  trackId: trackId,
+                                  title: playerState.currentTrack?.title,
+                                  artistName: playerState.currentTrack?.artist,
+                                  artworkUrl:
+                                      playerState.currentTrackArtworkUrl,
+                                  audioUrl: playerState.currentTrack?.audioUrl,
+                                  waveform: playerState.currentTrack?.waveform,
+                                  artistId: playerState.currentTrack?.artistId,
+                                  artistPermalink:
+                                      playerState.currentTrack?.artistPermalink,
+                                  trackPermalink:
+                                      playerState.currentTrack?.trackPermalink,
+                                  initialIsLiked: engState.isLiked,
+                                  initialIsReposted: engState.isReposted,
+                                  initialLikeCount: engState.likeCount,
+                                  initialRepostCount: engState.repostCount,
+                                ),
                               );
                             },
                           ),
@@ -515,9 +527,6 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                       progress: progress,
                                       waveform:
                                           playerState.currentTrack?.waveform,
-                                      fallbackSeed:
-                                          playerState.currentTrack?.id ??
-                                              playerState.currentTrack?.title,
                                       isPlaying: playerState.isPlaying),
                                 ),
                               ),
@@ -757,50 +766,49 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                       playerState.currentTrack?.artist ?? '',
                                   artworkUrl:
                                       playerState.currentTrackArtworkUrl,
-                                  audioUrl:
-                                      playerState.currentTrack?.audioUrl,
+                                  audioUrl: playerState.currentTrack?.audioUrl,
                                 ),
                         child: KeyedSubtree(
                           key: const ValueKey('premium_download_button'),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                            SizedBox(
-                              width: 26,
-                              height: 26,
-                              child: _downloadSuccess
-                                  ? const Icon(
-                                      Icons.check_circle,
-                                      color: Color(0xFF00C853),
-                                      size: 26,
-                                    )
-                                  : _isDownloading
-                                      ? CircularProgressIndicator(
-                                          value: _downloadProgress > 0
-                                              ? _downloadProgress
-                                              : null,
-                                          strokeWidth: 2,
-                                          color: Colors.orange,
-                                        )
-                                      : const Icon(
-                                          Icons.download_outlined,
-                                          key: ValueKey(
-                                            'premium_download_button',
+                              SizedBox(
+                                width: 26,
+                                height: 26,
+                                child: _downloadSuccess
+                                    ? const Icon(
+                                        Icons.check_circle,
+                                        color: Color(0xFF00C853),
+                                        size: 26,
+                                      )
+                                    : _isDownloading
+                                        ? CircularProgressIndicator(
+                                            value: _downloadProgress > 0
+                                                ? _downloadProgress
+                                                : null,
+                                            strokeWidth: 2,
+                                            color: Colors.orange,
+                                          )
+                                        : const Icon(
+                                            Icons.download_outlined,
+                                            key: ValueKey(
+                                              'premium_download_button',
+                                            ),
+                                            color: Colors.white,
+                                            size: 26,
                                           ),
-                                          color: Colors.white,
-                                          size: 26,
-                                        ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _isDownloading
-                                  ? '${(_downloadProgress * 100).toInt()}%'
-                                  : '',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
                               ),
-                            ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _isDownloading
+                                    ? '${(_downloadProgress * 100).toInt()}%'
+                                    : '',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -945,6 +953,11 @@ String _formatSec(int seconds) {
 // Small widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
+double _artworkPanX(double progress) {
+  final eased = Curves.easeInOut.transform(progress.clamp(0.0, 1.0));
+  return -1.0 + (eased * 2.0);
+}
+
 class _CircleButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
@@ -1044,21 +1057,17 @@ class _EmojiButton extends StatelessWidget {
 class _WaveformPainter extends CustomPainter {
   final double progress;
   final List<int>? waveform;
-  final String? fallbackSeed;
   final bool isPlaying;
 
   _WaveformPainter(
-      {required this.progress,
-      this.waveform,
-      this.fallbackSeed,
-      required this.isPlaying});
+      {required this.progress, this.waveform, required this.isPlaying});
 
   @override
   void paint(Canvas canvas, Size size) {
     final y = size.height / 2;
     final splitX = (size.width * progress).clamp(0.0, size.width);
 
-    if (!isPlaying) {
+    if (!isPlaying || waveform == null || waveform!.isEmpty) {
       const strokeWidth = 4.0;
       final playedPaint = Paint()
         ..color = AppTheme.primary
@@ -1085,9 +1094,7 @@ class _WaveformPainter extends CustomPainter {
       return;
     }
 
-    final heights = (waveform != null && waveform!.isNotEmpty)
-        ? waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList()
-        : _buildFallbackHeights(size.width, fallbackSeed);
+    final heights = waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList();
 
     final barCount = heights.length;
     if (barCount == 0) return;
@@ -1125,31 +1132,9 @@ class _WaveformPainter extends CustomPainter {
     }
   }
 
-  List<double> _buildFallbackHeights(double width, String? seed) {
-    final count = (width / 6).floor().clamp(18, 72);
-    final seedValue = seed?.codeUnits.fold<int>(
-          0,
-          (sum, unit) => (sum + unit) & 0x7fffffff,
-        ) ??
-        0;
-    return List<double>.generate(count, (index) {
-      final phaseA = (seedValue % 31) / 10.0;
-      final phaseB = (seedValue % 47) / 13.0;
-      final rateA = 0.34 + (seedValue % 9) * 0.035;
-      final rateB = 0.16 + (seedValue % 7) * 0.028;
-      final mix = 0.45 + (seedValue % 30) / 100.0;
-      final waveA = (sin(index * rateA + phaseA) + 1) / 2;
-      final waveB = (cos(index * rateB + phaseB) + 1) / 2;
-      final waveC = (sin((index + seedValue % 13) * 0.91) + 1) / 2;
-      final value = (waveA * mix) + (waveB * (0.8 - mix / 2)) + (waveC * 0.2);
-      return value.clamp(0.18, 0.92);
-    });
-  }
-
   @override
   bool shouldRepaint(_WaveformPainter old) =>
       old.progress != progress ||
       old.isPlaying != isPlaying ||
-      old.fallbackSeed != fallbackSeed ||
       old.waveform != waveform;
 }

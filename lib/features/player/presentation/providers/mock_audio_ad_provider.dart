@@ -5,6 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../premium/presentation/providers/subscription_provider.dart';
 
+bool shouldShowAdsForSubscription(SubscriptionState subscription) {
+  if (!subscription.hasResolved || subscription.isLoading) return false;
+  if (subscription.isPremium) return false;
+  final plan = subscription.planType?.trim().toLowerCase();
+  return plan == null || plan == 'free';
+}
+
 class MockAudioAdState {
   final bool isShowing;
   final int secondsRemaining;
@@ -39,28 +46,26 @@ class MockAudioAdNotifier extends StateNotifier<MockAudioAdState> {
 
   Future<void> maybeShowPreRollAd(String trackId) async {
     final subscription = _ref.read(subscriptionProvider);
-    final planType = subscription.planType;
 
-    if (_isAdFreePlan(planType)) {
-      debugPrint(
-        planType == 'Go+'
-            ? '[Ads] Go+ — ad-free playback'
-            : '[Ads] Artist Pro — ad-free playback',
-      );
+    if (!subscription.hasResolved || subscription.isLoading) {
+      debugPrint('[Ads] subscription loading/unknown - skipping mock ads');
       return;
     }
 
-    if (subscription.isPremium) {
-      debugPrint('[Ads] premium unknown plan — skipping mock ads');
+    if (!shouldShowAdsForSubscription(subscription)) {
+      debugPrint(
+        '[Ads] ad-free playback - isPremium=${subscription.isPremium}, '
+        'plan=${subscription.planType ?? "free"}',
+      );
       return;
     }
 
     if (_preRollShownTrackIds.contains(trackId)) return;
 
-    debugPrint('[Ads] Free user — showing pre-roll ad');
+    debugPrint('[Ads] Free user - showing pre-roll ad');
     await _showAd();
     _preRollShownTrackIds.add(trackId);
-    debugPrint('[Ads] Ad completed — starting playback');
+    debugPrint('[Ads] Ad completed - starting playback');
   }
 
   void completeAd() {
@@ -98,10 +103,6 @@ class MockAudioAdNotifier extends StateNotifier<MockAudioAdState> {
     });
 
     return completer.future;
-  }
-
-  bool _isAdFreePlan(String? planType) {
-    return planType == 'Pro' || planType == 'Artist Pro' || planType == 'Go+';
   }
 
   @override

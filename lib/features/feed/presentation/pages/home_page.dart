@@ -841,6 +841,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         artistPermalink: track.artistPermalink,
         trackPermalink: track.trackPermalink,
         initialIsLiked: track.isLiked,
+        initialIsReposted: track.isReposted,
         initialLikeCount: track.likeCount,
         initialRepostCount: track.repostCount,
       ),
@@ -1407,7 +1408,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: SuggestedRow(title: null, compact: true),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 12),
             _buildSectionHeader('Artists to watch out for'),
             _buildBuzzingShelf(listKey: const ValueKey('home_buzzing_list')),
             if (_isLoading && _tracks.isEmpty)
@@ -1973,7 +1974,7 @@ class _MadeForYouCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 246,
+        height: 264,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
@@ -2029,6 +2030,8 @@ class _MadeForYouCard extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               description,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 12,
@@ -2070,6 +2073,16 @@ class _StationCard extends StatelessWidget {
                     child: CustomPaint(painter: _StationPainter()),
                   ),
                   Positioned(
+                    top: 12,
+                    right: 12,
+                    child: ClipOval(
+                      child: SizedBox.square(
+                        dimension: 72,
+                        child: _NetworkArtwork(url: track.artworkUrl),
+                      ),
+                    ),
+                  ),
+                  Positioned(
                     left: 10,
                     right: 10,
                     bottom: 10,
@@ -2095,17 +2108,6 @@ class _StationCard extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  Positioned(
-                    left: 12,
-                    top: 18,
-                    child: ClipOval(
-                      child: SizedBox(
-                        width: 72,
-                        height: 72,
-                        child: _NetworkArtwork(url: track.artworkUrl),
-                      ),
                     ),
                   ),
                 ],
@@ -2579,7 +2581,7 @@ class _StationPainter extends CustomPainter {
     for (int i = 0; i < 5; i++) {
       canvas.drawArc(
         Rect.fromCircle(
-          center: Offset(size.width * 0.4, size.height * 0.42),
+          center: Offset(size.width - 48, 48),
           radius: 38 + (i * 8),
         ),
         1.1,

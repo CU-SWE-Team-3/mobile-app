@@ -379,6 +379,14 @@ final appRouter = GoRouter(
       path: '/payment-success',
       builder: (_, __) => const PaymentSuccessPage(),
     ),
+    GoRoute(
+      path: '/payment-cancel',
+      builder: (_, __) => const PremiumPaywallPage(),
+    ),
+    GoRoute(
+      path: '/payment-cancelled',
+      builder: (_, __) => const PremiumPaywallPage(),
+    ),
 
     // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─
     GoRoute(
@@ -402,7 +410,9 @@ final appRouter = GoRouter(
         GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
         GoRoute(
             path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
-        GoRoute(path: 'likes', builder: (_, __) => const LibraryLikesPage()),
+        GoRoute(
+            path: 'likes',
+            builder: (_, __) => const LibraryLikesPage(showMiniPlayer: true)),
         GoRoute(
             path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
         GoRoute(path: 'avatar', builder: (_, __) => const AvatarUploadPage()),

@@ -693,8 +693,12 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   @override
   Widget build(BuildContext context) {
     final currentUserId = ref.watch(sessionUserIdProvider);
-    final messagesAsync = ref.watch(messagesProvider(widget.conversationId));
     final conversationsAsync = ref.watch(conversationsProvider);
+    final conversations = conversationsAsync.valueOrNull ?? const [];
+    final conversationLookupComplete = conversationsAsync.hasValue;
+    final conversationExists =
+        conversations.any((c) => c.id == widget.conversationId);
+    final messagesAsync = ref.watch(messagesProvider(widget.conversationId));
     final otherParticipant = _resolveOtherParticipant(currentUserId) ??
         _fallbackParticipantFromMessages(
           currentUserId,

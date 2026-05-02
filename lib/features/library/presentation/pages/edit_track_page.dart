@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../providers/upload_provider.dart';
+import '../../domain/entities/upload_track.dart';
 
 class EditTrackPage extends ConsumerStatefulWidget {
   const EditTrackPage({super.key});
@@ -296,7 +298,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
             const SizedBox(height: 20),
 
             // Form Card
-            _buildFormCard(),
+            _buildFormCard(uploadState),
 
             const SizedBox(height: 20),
 
@@ -560,7 +562,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
     );
   }
 
-  Widget _buildFormCard() {
+  Widget _buildFormCard(UploadState uploadState) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF111111),
@@ -576,11 +578,7 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
             maxLines: 3,
           ),
           Container(height: 0.5, color: Colors.white.withOpacity(0.1)),
-          _buildFormField(
-            label: 'Track link',
-            isReadOnly: true,
-            initialValue: 'https://soundcloud.com/[artist-slug]',
-          ),
+          _buildTrackLinkField(uploadState.track),
           Container(height: 0.5, color: Colors.white.withOpacity(0.1)),
           _buildFormField(
             label: 'Artist',
@@ -588,6 +586,87 @@ class _EditTrackPageState extends ConsumerState<EditTrackPage> {
             controller: _artistController,
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTrackLinkField(UploadTrack track) {
+    final link = _resolveTrackLink(track);
+    final hasLink = link != null;
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Track link',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.5),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  link ?? 'Track link will be available after upload.',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color:
+                        hasLink ? Colors.white : Colors.white.withOpacity(0.35),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          IconButton(
+            key: const ValueKey('track_link_copy_button'),
+            onPressed: link == null ? null : () => _copyTrackLink(link),
+            icon: const Icon(Icons.copy_rounded),
+            color: Colors.white,
+            disabledColor: Colors.white24,
+            tooltip: 'Copy track link',
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _resolveTrackLink(UploadTrack track) {
+    final id = track.id?.trim();
+    if (id == null || id.isEmpty) return null;
+
+    for (final candidate in [track.shareUrl, track.publicUrl]) {
+      final value = candidate?.trim();
+      if (value != null &&
+          (value.startsWith('https://') || value.startsWith('http://'))) {
+        return value;
+      }
+    }
+
+    final permalink = track.permalink?.trim();
+    if (permalink != null && permalink.isNotEmpty) {
+      if (permalink.startsWith('https://') || permalink.startsWith('http://')) {
+        return permalink;
+      }
+      return 'https://biobeats.app/tracks/${Uri.encodeComponent(permalink)}';
+    }
+
+    return 'https://biobeats.app/tracks/${Uri.encodeComponent(id)}';
+  }
+
+  Future<void> _copyTrackLink(String link) async {
+    await Clipboard.setData(ClipboardData(text: link));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Track link copied'),
+        backgroundColor: Color(0xFF333333),
       ),
     );
   }

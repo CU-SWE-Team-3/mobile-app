@@ -747,6 +747,7 @@ class _FollowingTrackItem extends ConsumerWidget {
           artistId: track.artistId,
           artistPermalink: track.artistPermalink,
           initialIsLiked: engState.isLiked,
+          initialIsReposted: engState.isReposted,
           initialLikeCount: engState.likeCount,
           initialRepostCount: engState.repostCount,
         ),

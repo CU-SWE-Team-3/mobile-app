@@ -223,7 +223,9 @@ class PlayerApiService {
         audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
         coverUrl: (t['artworkUrl'] ?? t['coverUrl']) as String?,
         duration: duration,
+        waveform: parseWaveformFromMap(t),
         artistPermalink: artistPermalink,
+        trackPermalink: t['permalink'] as String?,
       ),
       playedAt: playedAt,
     );
