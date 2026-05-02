@@ -69,6 +69,8 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: _surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -94,9 +96,11 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
     String playlistId;
     try {
       playlistId = await repository.create(title, isPublic);
-    } catch (_) {
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Could not create playlist. Please try again.'),
+    } catch (e, st) {
+      debugPrint('[_addPlaylist] ERROR: $e');
+      debugPrint('[_addPlaylist] STACK: $st');
+      messenger.showSnackBar(SnackBar(
+        content: Text('Could not create playlist: $e'),
         backgroundColor: _surface,
         behavior: SnackBarBehavior.floating,
       ));
@@ -127,6 +131,7 @@ class _TopBar extends StatelessWidget {
       child: Row(
         children: [
           GestureDetector(
+            key: const ValueKey('playlist_back_button'),
             onTap: () => Navigator.maybePop(context),
             child: _circleBtn(Icons.arrow_back_ios_new_rounded),
           ),
@@ -140,9 +145,8 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          _circleBtn(Icons.cast_rounded),
-          const SizedBox(width: 8),
           GestureDetector(
+            key: const ValueKey('playlists_create_fab'),
             onTap: onAdd,
             child: _circleBtn(Icons.add),
           ),
@@ -355,7 +359,10 @@ class _PlaylistListState extends State<_PlaylistList> {
           child: ListView.builder(
             physics: const BouncingScrollPhysics(),
             itemCount: _filtered.length,
-            itemBuilder: (_, i) => _PlaylistTile(playlist: _filtered[i]),
+            itemBuilder: (_, i) => _PlaylistTile(
+              key: ValueKey('playlist_tile_${_filtered[i].id}'),
+              playlist: _filtered[i],
+            ),
           ),
         ),
       ],
@@ -369,6 +376,7 @@ class _ActionButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _ActionButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.onTap,
@@ -406,7 +414,7 @@ class _ActionButton extends StatelessWidget {
 
 class _PlaylistTile extends StatefulWidget {
   final Playlist playlist;
-  const _PlaylistTile({required this.playlist});
+  const _PlaylistTile({super.key, required this.playlist});
 
   @override
   State<_PlaylistTile> createState() => _PlaylistTileState();
@@ -494,10 +502,12 @@ class _PlaylistTileState extends State<_PlaylistTile> {
           builder: (_) => PlaylistDetailsPage(playlist: playlist),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        child: Row(
-          children: [
+      child: KeyedSubtree(
+        key: const ValueKey('playlist_tile'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
             // Thumbnail
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
@@ -567,7 +577,8 @@ class _PlaylistTileState extends State<_PlaylistTile> {
                 child: Icon(Icons.more_vert_rounded, color: _secondary, size: 20),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -643,6 +654,7 @@ class _CreateSheetState extends State<_CreateSheet> {
                       ),
                     ),
                     GestureDetector(
+                      key: const ValueKey('playlist_save_button'),
                       onTap: _saving ? null : _save,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -675,6 +687,7 @@ class _CreateSheetState extends State<_CreateSheet> {
                 const SizedBox(height: 20),
                 // Title field
                 TextField(
+                  key: const ValueKey('playlist_name_field'),
                   controller: _ctrl,
                   autofocus: true,
                   enabled: !_saving,
@@ -706,6 +719,7 @@ class _CreateSheetState extends State<_CreateSheet> {
                     ),
                     const Spacer(),
                     Switch(
+                      key: const ValueKey('playlist_privacy_toggle'),
                       value: _isPublic,
                       onChanged: _saving ? null : (v) => setState(() => _isPublic = v),
                       activeThumbColor: Colors.white,

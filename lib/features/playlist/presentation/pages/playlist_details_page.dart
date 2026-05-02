@@ -183,6 +183,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                 ),
               ),
               ListTile(
+                key: const ValueKey('playlist_remove_track_button'),
                 leading: const Icon(Icons.remove_circle_outline,
                     color: Colors.white),
                 title: const Text('Remove from playlist',
@@ -263,11 +264,17 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
       return Scaffold(
         backgroundColor: _bg,
         appBar: AppBar(
-          backgroundColor: _bg,
-          elevation: 0,
-          title: const Text('Playlist', style: TextStyle(color: Colors.white)),
-          iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: _bg,
+        elevation: 0,
+        title: const Text('Playlist', style: TextStyle(color: Colors.white)),
+        iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          key: const ValueKey('playlist_back_button'),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 20),
+          onPressed: () => Navigator.maybePop(context),
         ),
+      ),
         body: const Center(
           child: Text('No playlist selected',
               style: TextStyle(color: _secondary, fontSize: 16)),
@@ -335,16 +342,12 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          key: const ValueKey('playlist_back_button'),
           icon: const Icon(Icons.arrow_back_ios_new_rounded,
               color: Colors.white, size: 20),
           onPressed: () => Navigator.maybePop(context),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.cast_rounded, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
+        actions: [],
       ),
       // CustomScrollView lets the header (SliverToBoxAdapter) and the
       // reorderable track list (SliverReorderableList) share one scroll axis.
@@ -539,6 +542,9 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                   key: ValueKey(t.id.isNotEmpty ? t.id : 'track_$index'),
                   color: Colors.transparent,
                   child: _TrackTile(
+                    key: ValueKey(
+                      'playlist_track_tile_${t.id.isNotEmpty ? t.id : index}',
+                    ),
                     title: t.title,
                     artist: t.artistName,
                     playCount: _formatPlayCount(t.playCount),
@@ -553,17 +559,21 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                     // Show drag handle only when list has >1 item.
                     dragHandle: _tracks.length > 1
                         ? ReorderableDragStartListener(
+                            key: ValueKey('playlist_drag_handle_$index'),
                             index: index,
                             enabled: !_isOperationInFlight,
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 18),
-                              child: Icon(
-                                Icons.drag_handle,
-                                color: _isOperationInFlight
-                                    ? _secondary.withValues(alpha: 0.3)
-                                    : _secondary,
-                                size: 20,
+                            child: KeyedSubtree(
+                              key: const ValueKey('playlist_drag_handle'),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 18),
+                                child: Icon(
+                                  Icons.drag_handle,
+                                  color: _isOperationInFlight
+                                      ? _secondary.withValues(alpha: 0.3)
+                                      : _secondary,
+                                  size: 20,
+                                ),
                               ),
                             ),
                           )
@@ -606,6 +616,8 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
               duration: t.durationSeconds != null
                   ? Duration(seconds: t.durationSeconds!)
                   : null,
+              waveform: t.waveform,
+              trackPermalink: t.permalink,
             ))
         .toList();
     if (queue.isEmpty) return;
@@ -662,6 +674,7 @@ class _TrackTile extends StatelessWidget {
   final Widget? dragHandle;
 
   const _TrackTile({
+    super.key,
     required this.title,
     required this.artist,
     this.playCount,
@@ -678,10 +691,12 @@ class _TrackTile extends StatelessWidget {
       onTap: onTap,
       splashColor: Colors.white10,
       highlightColor: Colors.white10,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
+      child: KeyedSubtree(
+        key: const ValueKey('playlist_track_tile'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: SizedBox(
@@ -763,7 +778,8 @@ class _TrackTile extends StatelessWidget {
             ),
             // Drag handle — null when list has ≤1 item
             if (dragHandle != null) dragHandle!,
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -798,6 +814,8 @@ class _PlaylistTrack {
   final String? hlsUrl;
   final int playCount;
   final int? durationSeconds;
+  final List<int>? waveform;
+  final String? permalink;
 
   const _PlaylistTrack({
     required this.id,
@@ -807,6 +825,8 @@ class _PlaylistTrack {
     this.hlsUrl,
     required this.playCount,
     this.durationSeconds,
+    this.waveform,
+    this.permalink,
   });
 
   factory _PlaylistTrack.fromJson(Map<String, dynamic> json) {
@@ -824,6 +844,10 @@ class _PlaylistTrack {
           json['streamUrl'] as String?,
       playCount: (json['playCount'] as num?)?.toInt() ?? 0,
       durationSeconds: (json['duration'] as num?)?.toInt(),
+      waveform: (json['waveform'] as List<dynamic>?)
+          ?.map((e) => (e as num).toInt())
+          .toList(),
+      permalink: json['permalink'] as String?,
     );
   }
 }

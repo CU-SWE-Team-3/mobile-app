@@ -28,6 +28,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   List<UploadTrack> _filteredTracks = [];
   final Set<String> _deletingTrackIds = <String>{};
   String _currentDisplayName = '';
+  bool _uploadBtnPressed = false;
 
   @override
   void initState() {
@@ -117,6 +118,37 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
     }
   }
 
+  void _showAmplifyInfoDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Row(
+          children: [
+            Icon(Icons.flash_on, color: Color(0xFF9B3FFF), size: 22),
+            SizedBox(width: 10),
+            Text('Amplify Credits',
+                style: TextStyle(color: Colors.white, fontSize: 17)),
+          ],
+        ),
+        content: const Text(
+          'Amplify uses AI to recommend your tracks to the right audience. '
+          'Amplify credits are available exclusively with Artist Pro campaigns.\n\n'
+          'Upgrade to Artist Pro to unlock Amplify and grow your audience.',
+          style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Got it',
+                style: TextStyle(color: Color(0xFFFF5500))),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showUploadLimitDialog(BuildContext context) {
     final sub = ref.read(subscriptionProvider);
     final isGoPlus = sub.planType == 'Go+';
@@ -188,13 +220,14 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
   }
 
   void _showTrackOptionsSheet(UploadTrack track) {
+    final outerContext = context;
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
-      builder: (context) {
+      builder: (innerContext) {
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Column(
@@ -206,7 +239,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                 title:
                     const Text('Play', style: TextStyle(color: Colors.white)),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(innerContext);
                   _playTrack(track);
                 },
               ),
@@ -216,8 +249,9 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                 title:
                     const Text('Edit', style: TextStyle(color: Colors.white)),
                 onTap: () {
-                  Navigator.pop(context);
-                  context.push('/library/uploads/edit');
+                  Navigator.pop(innerContext);
+                  ref.read(trackEditProvider.notifier).state = track;
+                  outerContext.push('/library/uploads/edit');
                 },
               ),
               ListTile(
@@ -226,17 +260,19 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                 title: const Text('Change visibility',
                     style: TextStyle(color: Colors.white)),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(innerContext);
                 },
               ),
               ListTile(
                 key: const ValueKey('track_options_download_button'),
-                leading:
-                    const Icon(Icons.download_outlined, color: Colors.white),
+                leading: const KeyedSubtree(
+                  key: ValueKey('premium_download_button'),
+                  child: Icon(Icons.download_outlined, color: Colors.white),
+                ),
                 title: const Text('Download',
                     style: TextStyle(color: Colors.white)),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(innerContext);
                   _downloadTrack(track);
                 },
               ),
@@ -246,7 +282,7 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
                 title:
                     const Text('Delete', style: TextStyle(color: Colors.red)),
                 onTap: () async {
-                  Navigator.pop(context);
+                  Navigator.pop(innerContext);
                   await _deleteTrackPermanently(track);
                 },
               ),
@@ -495,59 +531,129 @@ class _LibraryUploadsPageState extends ConsumerState<LibraryUploadsPage> {
               },
             ),
           ),
+          // Artist Pro banner
+          Builder(builder: (context) {
+            final sub = ref.watch(subscriptionProvider);
+            if (!sub.canUploadUnlimited) return const SizedBox.shrink();
+            return Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF9B3FFF), Color(0xFFFF5500)],
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.verified, color: Colors.white, size: 16),
+                  SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Artist tools unlocked',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
           // Info pills section
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Builder(builder: (context) {
-              final totalMs =
-                  _allTracks.fold<int>(0, (sum, t) => sum + (t.duration ?? 0));
-              final totalMins = (totalMs / 60000).floor();
+              // Backend returns duration in seconds per API spec.
+              // Tracks without duration are skipped (ignored), not counted as 0.
+              int tracksWithDuration = 0;
+              final totalSeconds = _allTracks.fold<int>(0, (sum, t) {
+                if (t.duration == null || t.duration! <= 0) {
+                  debugPrint('[Library] track "${t.title}" has no duration — skipped from total');
+                  return sum;
+                }
+                tracksWithDuration++;
+                return sum + t.duration!;
+              });
+              final totalMins = (totalSeconds / 60).floor();
               return Row(
                 children: [
-                  // Upload arrow button
+                  // Upload arrow button with 3D press animation
                   GestureDetector(
-                    key: const ValueKey('uploads_new_upload_button'),
-                    onTap: () => _pickAndUpload(context),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        Icons.upload_rounded,
-                        color: Colors.black,
-                        size: 18,
+                    key: const ValueKey('upload_pick_file_button'),
+                    onTapDown: (_) =>
+                        setState(() => _uploadBtnPressed = true),
+                    onTapUp: (_) async {
+                      setState(() => _uploadBtnPressed = false);
+                      await _pickAndUpload(context);
+                    },
+                    onTapCancel: () =>
+                        setState(() => _uploadBtnPressed = false),
+                    child: AnimatedScale(
+                      scale: _uploadBtnPressed ? 0.88 : 1.0,
+                      duration: const Duration(milliseconds: 100),
+                      curve: Curves.easeInOut,
+                      child: Container(
+                        key: const ValueKey('upload_track_button'),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: _uploadBtnPressed
+                              ? []
+                              : [
+                                  BoxShadow(
+                                    color: Colors.white.withOpacity(0.25),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                        ),
+                        child: const Icon(
+                          Icons.upload_rounded,
+                          color: Colors.black,
+                          size: 18,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // Amplify credits pill — tappable info dialog
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.flash_on,
-                              color: Color(0xFF9B3FFF), size: 16),
-                          SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'No Amplify credits',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
+                    child: GestureDetector(
+                      onTap: () => _showAmplifyInfoDialog(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1C1C1E),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.flash_on,
+                                color: Color(0xFF9B3FFF), size: 16),
+                            SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'No Amplify credits',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                            SizedBox(width: 4),
+                            Icon(Icons.info_outline,
+                                color: Colors.white38, size: 14),
+                          ],
+                        ),
                       ),
                     ),
                   ),

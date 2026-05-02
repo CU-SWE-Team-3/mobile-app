@@ -12,6 +12,7 @@ import 'package:soundcloud_clone/features/messaging/domain/entities/participant.
 import 'package:soundcloud_clone/features/messaging/presentation/providers/messaging_providers.dart';
 import 'package:soundcloud_clone/features/messaging/presentation/widgets/send_to_sheet.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/premium/presentation/providers/subscription_provider.dart';
 
 import '../pages/likers_list_page.dart';
 import '../pages/reposters_list_page.dart';
@@ -62,6 +63,33 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
   bool _isDownloading = false;
 
   Future<void> _handleDownload() async {
+    debugPrint(
+        '[Download] tapped from options sheet, trackId=${widget.trackId}');
+
+    var sub = ref.read(subscriptionProvider);
+    debugPrint(
+      '[Download] isPremium=${sub.isPremium}, currentPlan=${sub.planType}',
+    );
+
+    if (!sub.isPremium || sub.planType != 'Go+') {
+      await ref.read(subscriptionProvider.notifier).refreshFromProfile();
+      sub = ref.read(subscriptionProvider);
+      debugPrint('[Download] after refresh - isPremium=${sub.isPremium}');
+    }
+
+    if (!sub.isPremium || sub.planType != 'Go+') {
+      if (!mounted) return;
+      final scaffold = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      scaffold.showSnackBar(
+        const SnackBar(
+          content: Text('Offline downloads require Go+.'),
+          backgroundColor: Color(0xFF333333),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isDownloading = true);
 
     final result = await downloadTrack(
@@ -223,68 +251,16 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                     title: widget.title!,
                     artist: widget.artistName!,
                     artworkUrl: widget.artworkUrl),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 18, 16, 8),
-                child: Text(
-                  'SEND TO',
-                  style: TextStyle(
-                    color: Color(0xFFB6B6B6),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    _SendToAvatar(name: 'Mohamed Hany'),
-                    SizedBox(width: 10),
-                    _SendToAvatar(name: 'Marwan Pablo'),
-                    SizedBox(width: 10),
-                    _SendToAvatar(name: 'Two Feet'),
-                  ],
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 22, 16, 8),
-                child: Text(
-                  'SHARE',
-                  style: TextStyle(
-                    color: Color(0xFFB6B6B6),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    _ShareButton(icon: Icons.send_outlined, label: 'Message'),
-                    SizedBox(width: 10),
-                    _ShareButton(
-                        icon: Icons.content_copy_outlined, label: 'Copy Link'),
-                    SizedBox(width: 10),
-                    _ShareButton(
-                        icon: Icons.chat, label: 'WhatsApp', green: true),
-                    SizedBox(width: 10),
-                    _ShareButton(
-                        icon: Icons.check_circle_outline,
-                        label: 'Status',
-                        green: true),
-                    SizedBox(width: 10),
-                    _ShareButton(icon: Icons.sms_outlined, label: 'SMS'),
-                  ],
-                ),
-              ),
+              if (widget.showSendTo) _InlineSendTo(trackId: widget.trackId),
+              if (widget.showShare) _ShareRow(trackId: widget.trackId),
               const SizedBox(height: 12),
               _OptionTile(
-                  icon: Icons.favorite_border,
-                  label: 'Like',
-                  onTap: () => _showSoon('Like coming soon')),
+                icon: engagementState.isLiked
+                    ? Icons.favorite
+                    : Icons.favorite_border,
+                label: engagementState.isLiked ? 'Unlike' : 'Like',
+                onTap: () => _toggleLike(engagementParams, engagementState),
+              ),
               _OptionTile(
                   icon: Icons.format_list_bulleted,
                   label: 'Play Next',

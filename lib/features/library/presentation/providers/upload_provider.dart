@@ -101,6 +101,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
     List<String>? tags,
     DateTime? releaseDate,
     bool? isPublic,
+    bool? enableDirectDownloads,
     String? description,
     int? duration,
   }) {
@@ -115,6 +116,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
         tags: tags,
         releaseDate: releaseDate,
         isPublic: isPublic,
+        enableDirectDownloads: enableDirectDownloads,
         description: description,
         duration: duration,
       ),
@@ -253,7 +255,10 @@ class UploadNotifier extends StateNotifier<UploadState> {
         'size': audioBytes.length,
         'duration': durationSeconds,
         'isPublic': state.track.isPublic,
+        'enableDirectDownloads': state.track.enableDirectDownloads,
       };
+      debugPrint(
+          '[Upload] enableDirectDownloads=${state.track.enableDirectDownloads}');
       if ((state.track.description ?? '').trim().isNotEmpty) {
         uploadInitBody['description'] = state.track.description!.trim();
       }
@@ -340,6 +345,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
         metadataBody['tags'] = state.track.tags;
       }
       metadataBody['isPublic'] = state.track.isPublic;
+      metadataBody['enableDirectDownloads'] = state.track.enableDirectDownloads;
       if (state.track.releaseDate != null) {
         metadataBody['releaseDate'] =
             state.track.releaseDate!.toIso8601String();

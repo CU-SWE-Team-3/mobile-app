@@ -114,13 +114,12 @@ void main() {
       );
       await repo.save([entry]);
       final loaded = await repo.load();
-      expect(loaded.first.track.duration,
-          const Duration(minutes: 3, seconds: 22));
+      expect(
+          loaded.first.track.duration, const Duration(minutes: 3, seconds: 22));
     });
 
     test('preserves artistId through roundtrip', () async {
-      final entry =
-          makeEntry(track: makeTrack(artistId: 'artist-uuid-99'));
+      final entry = makeEntry(track: makeTrack(artistId: 'artist-uuid-99'));
       await repo.save([entry]);
       final loaded = await repo.load();
       expect(loaded.first.track.artistId, 'artist-uuid-99');

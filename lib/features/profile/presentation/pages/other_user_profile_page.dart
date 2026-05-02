@@ -21,7 +21,8 @@ class OtherUserProfilePage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<OtherUserProfilePage> createState() => _OtherUserProfilePageState();
+  ConsumerState<OtherUserProfilePage> createState() =>
+      _OtherUserProfilePageState();
 }
 
 class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
@@ -36,7 +37,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   bool _isPrivate = false;
   bool _isFollowing = false;
   String _targetUserId = '';
-  List<Map<String, dynamic>> _topTracks = [];
   bool _isLoading = true;
   bool _hasError = false;
   bool _bioExpanded = false;
@@ -44,6 +44,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   bool _isBlocked = false;
   int _selectedTabIndex = 0;
   List<Map<String, dynamic>> _tracks = [];
+  bool _isLoadingTracks = false;
+  bool _hasTracksError = false;
   List<Map<String, dynamic>>? _repostedTracks;
   bool _isLoadingReposts = false;
   bool _hasRepostsError = false;
@@ -62,38 +64,110 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   }
 
   Future<void> _fetchLikes() async {
-    if (_isLoadingLikes) return;
-    setState(() { _isLoadingLikes = true; _hasLikesError = false; });
+    if (!mounted || _isLoadingLikes || _targetUserId.isEmpty) return;
+    setState(() {
+      _isLoadingLikes = true;
+      _hasLikesError = false;
+    });
     try {
-      final response =
-          await dioClient.dio.get('/profile/$_targetUserId/likes');
-      final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final raw = (data['likedTracks'] as List<dynamic>?) ?? [];
-      final tracks = raw.map((item) {
-        final map = item as Map<String, dynamic>;
-        return (map['track'] as Map<String, dynamic>? ?? map);
-      }).toList();
-      if (mounted) setState(() { _likedTracks = tracks; _isLoadingLikes = false; });
+      final response = await dioClient.dio.get('/profile/$_targetUserId/likes');
+      final tracks = _extractTracksFromResponse(
+        response.data,
+        listKeys: const ['likedTracks', 'tracks'],
+      );
+      if (mounted) {
+        setState(() {
+          _likedTracks = tracks;
+          _isLoadingLikes = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() { _isLoadingLikes = false; _hasLikesError = true; });
+      if (mounted) {
+        setState(() {
+          _isLoadingLikes = false;
+          _hasLikesError = true;
+        });
+      }
     }
   }
 
   Future<void> _fetchReposts() async {
-    if (_isLoadingReposts) return;
-    setState(() { _isLoadingReposts = true; _hasRepostsError = false; });
+    if (!mounted || _isLoadingReposts || _targetUserId.isEmpty) return;
+    setState(() {
+      _isLoadingReposts = true;
+      _hasRepostsError = false;
+    });
     try {
       final response =
           await dioClient.dio.get('/profile/$_targetUserId/reposts');
-      final data = response.data['data'] as Map<String, dynamic>? ?? {};
-      final raw = (data['repostedTracks'] as List<dynamic>?) ?? [];
-      final tracks = raw.map((item) {
-        final map = item as Map<String, dynamic>;
-        return (map['track'] as Map<String, dynamic>? ?? map);
-      }).toList();
-      if (mounted) setState(() { _repostedTracks = tracks; _isLoadingReposts = false; });
+      final tracks = _extractTracksFromResponse(
+        response.data,
+        listKeys: const ['repostedTracks', 'tracks'],
+      );
+      if (mounted) {
+        setState(() {
+          _repostedTracks = tracks;
+          _isLoadingReposts = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() { _isLoadingReposts = false; _hasRepostsError = true; });
+      if (mounted) {
+        setState(() {
+          _isLoadingReposts = false;
+          _hasRepostsError = true;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchUploadedTracks() async {
+    if (!mounted || _isLoadingTracks || _targetUserId.isEmpty) return;
+    setState(() {
+      _isLoadingTracks = _tracks.isEmpty;
+      _hasTracksError = false;
+    });
+
+    final endpoints = <String>[
+      '/profile/$_targetUserId/tracks',
+      '/users/$_targetUserId/tracks',
+    ];
+
+    try {
+      for (final endpoint in endpoints) {
+        try {
+          final response = await dioClient.dio.get(
+            endpoint,
+            queryParameters: const {'page': 1, 'limit': 50},
+          );
+          final tracks = _extractTracksFromResponse(
+            response.data,
+            listKeys: const ['uploadedTracks', 'tracks', 'topTracks'],
+          );
+          if (tracks.isNotEmpty) {
+            if (mounted) {
+              setState(() {
+                _tracks = _dedupeTracks(tracks);
+                _isLoadingTracks = false;
+              });
+            }
+            return;
+          }
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 404 || e.response?.statusCode == 405) {
+            continue;
+          }
+          rethrow;
+        }
+      }
+
+      if (mounted) setState(() => _isLoadingTracks = false);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoadingTracks = false;
+          _hasTracksError = _tracks.isEmpty;
+        });
+      }
     }
   }
 
@@ -102,6 +176,46 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
     if (val is int) return val;
     if (val is double) return val.toInt();
     return int.tryParse(val.toString()) ?? 0;
+  }
+
+  List<dynamic> _extractBlockedList(dynamic raw) {
+    if (raw is List) return raw;
+    if (raw is! Map) return const [];
+    final data = raw['data'];
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in const ['blockedUsers', 'users', 'blocked']) {
+        final value = data[key];
+        if (value is List) return value;
+      }
+    }
+    for (final key in const ['blockedUsers', 'users', 'blocked']) {
+      final value = raw[key];
+      if (value is List) return value;
+    }
+    return const [];
+  }
+
+  String _blockedUserId(dynamic raw) {
+    if (raw == null) return '';
+    if (raw is String) return raw;
+    if (raw is! Map) return raw.toString();
+    final map = Map<String, dynamic>.from(raw);
+    for (final key in const ['_id', 'id', 'userId', 'blockedUserId']) {
+      final value = map[key]?.toString() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    for (final key in const ['blockedUser', 'user', 'target']) {
+      final value = map[key];
+      if (value is Map) {
+        final id = _blockedUserId(value);
+        if (id.isNotEmpty) return id;
+      } else {
+        final id = value?.toString() ?? '';
+        if (id.isNotEmpty) return id;
+      }
+    }
+    return '';
   }
 
   /// Tries multiple strategies to determine follow status.
@@ -149,6 +263,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       // ── Assign _targetUserId from API FIRST (before any checks) ───
       final fetchedId = data['_id'] as String? ?? '';
       if (fetchedId.isNotEmpty) _targetUserId = fetchedId;
+      final hasEmbeddedUploads = _hasProfileUploadedTracks(data);
 
       final prefs = await SharedPreferences.getInstance();
       final myId = prefs.getString('userId') ?? '';
@@ -156,8 +271,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       // ── Blocked status ─────────────────────────────────────────────
       try {
         final blockedRes = await dioClient.dio.get('/network/blocked-users');
-        final blockedList = blockedRes.data['data'] as List? ?? [];
-        _isBlocked = blockedList.any((u) => u['_id'] == _targetUserId);
+        final blockedList = _extractBlockedList(blockedRes.data);
+        _isBlocked = blockedList.any((u) => _blockedUserId(u) == _targetUserId);
       } catch (_) {
         final cached = prefs.getStringList('blockedUserIds') ?? [];
         _isBlocked = cached.contains(_targetUserId);
@@ -188,13 +303,12 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
           _followingCount = _parseInt(data['followingCount']);
           _isPrivate      = data['isPrivate']   as bool? ?? false;
           _isFollowing    = alreadyFollowing;
-          _topTracks      = (data['topTracks'] as List?)
-                  ?.whereType<Map<String, dynamic>>()
-                  .toList() ??
-              [];
-          _tracks = List.of(_topTracks);
+          _tracks = _dedupeTracks(_extractTracksFromProfile(data));
           _isLoading = false;
         });
+      }
+      if (mounted && !hasEmbeddedUploads) {
+        _fetchUploadedTracks();
       }
     } catch (e) {
       debugPrint('=== PROFILE FETCH ERROR: $e');
@@ -205,16 +319,13 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   // ── Playback ──────────────────────────────────────────────────────
   void _playFrom(List<Map<String, dynamic>> tracks, int index) {
     final queue = tracks.map((t) {
-      final artistRaw = t['artist'];
-      final artistId = artistRaw is Map<String, dynamic>
-          ? artistRaw['_id'] as String?
-          : t['artistId'] as String?;
-      final artistPermalink = artistRaw is Map<String, dynamic>
-          ? artistRaw['permalink'] as String?
-          : null;
-      final artistName = artistRaw is Map<String, dynamic>
-          ? (artistRaw['displayName'] as String? ?? '')
-          : (t['artistName'] as String? ?? '');
+      final artist = _readArtist(t);
+      final artistId = artist['_id']?.toString() ??
+          artist['id']?.toString() ??
+          t['artistId']?.toString();
+      final artistPermalink =
+          artist['permalink']?.toString() ?? t['artistPermalink']?.toString();
+      final artistName = _readArtistName(t);
       return PlayerTrack(
         id: (t['_id'] ?? t['id'] ?? '').toString(),
         title: (t['title'] ?? '').toString(),
@@ -273,8 +384,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   }
 
   Future<void> _toggleBlock(String userId) async {
-    Navigator.of(context).pop();
-
     if (_isBlocked) {
       try {
         await dioClient.dio.delete('/network/$userId/block');
@@ -335,7 +444,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
         setState(() => _isBlocked = true);
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('User blocked')));
-        context.pop();
       } catch (e) {
         if (!mounted) return;
         final statusCode = (e is DioException) ? e.response?.statusCode : null;
@@ -343,7 +451,6 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
           setState(() => _isBlocked = true);
           ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('User is already blocked')));
-          context.pop();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Failed to block user. Try again.'),
@@ -369,7 +476,10 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             title: Text(_isBlocked ? 'Unblock user' : 'Block user',
                 style: const TextStyle(color: Colors.white)),
             onTap: _targetUserId.isNotEmpty
-                ? () => _toggleBlock(_targetUserId)
+                ? () {
+                    Navigator.of(context).pop();
+                    _toggleBlock(_targetUserId);
+                  }
                 : null,
           ),
           const SizedBox(height: 8),
@@ -440,7 +550,66 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       );
 
   Widget _buildBody() =>
-      _isPrivate ? _buildPrivateProfile() : _buildPublicProfile();
+      _isBlocked
+          ? _buildBlockedProfile()
+          : _isPrivate && !_isFollowing
+              ? _buildPrivateProfile()
+              : _buildPublicProfile();
+
+  Widget _buildBlockedProfile() {
+    final initial = _username.isNotEmpty ? _username[0].toUpperCase() : '?';
+    final isDefault =
+        _avatarUrl.isEmpty || _avatarUrl.contains('default-avatar');
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildAvatarRing(
+              initial: initial,
+              isDefaultAvatar: isDefault,
+              radius: 44,
+            ),
+            const SizedBox(height: 18),
+            Text(
+              _username.isEmpty ? 'Blocked user' : _username,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'You blocked this user. Their profile and tracks are hidden.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 14,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 22),
+            ElevatedButton(
+              key: const ValueKey('other_profile_unblock_button'),
+              onPressed: _targetUserId.isEmpty
+                  ? null
+                  : () => _toggleBlock(_targetUserId),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF5500),
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+              ),
+              child: const Text('Unblock user'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildPrivateProfile() {
     final initial = _username.isNotEmpty ? _username[0].toUpperCase() : '?';
@@ -632,7 +801,33 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
           const SizedBox(height: 12),
 
           if (_selectedTabIndex == 0) ...[
-            if (_tracks.isEmpty)
+            if (_isLoadingTracks)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
+                ),
+              )
+            else if (_hasTracksError)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('Failed to load tracks',
+                          style: TextStyle(color: Colors.white54)),
+                      const SizedBox(height: 10),
+                      TextButton(
+                        onPressed: _fetchUploadedTracks,
+                        child: const Text('Retry',
+                            style: TextStyle(color: Color(0xFFFF5500))),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (_tracks.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(
@@ -864,13 +1059,7 @@ class _TrackRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = track['title'] as String? ?? '';
-    final artistRaw = track['artist'];
-    final artistName = (artistRaw is Map<String, dynamic>
-            ? artistRaw['displayName'] as String?
-            : null) ??
-        track['artistName'] as String? ??
-        track['displayName'] as String? ??
-        '';
+    final artistName = _readArtistName(track);
     final coverUrl = track['artworkUrl'] as String? ??
         track['coverUrl'] as String? ??
         track['thumbnailUrl'] as String?;
@@ -884,51 +1073,66 @@ class _TrackRow extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Row(children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: coverUrl != null && coverUrl.isNotEmpty
-              ? CachedNetworkImage(
-                  imageUrl: coverUrl,
-                  width: 48,
-                  height: 48,
-                  fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) =>
-                      Container(width: 48, height: 48, color: Colors.grey[800]),
-                )
-              : Container(width: 48, height: 48, color: Colors.grey[800]),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title,
-                style: const TextStyle(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Row(children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: coverUrl != null && coverUrl.isNotEmpty
+                ? CachedNetworkImage(
+                    imageUrl: coverUrl,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Container(
+                      width: 48,
+                      height: 48,
+                      color: Colors.grey[800],
+                    ),
+                  )
+                : Container(width: 48, height: 48, color: Colors.grey[800]),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 14,
-                    fontWeight: FontWeight.w500),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            if (artistName.isNotEmpty)
-              Text(artistName,
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    fontWeight: FontWeight.w500,
+                  ),
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            Row(children: [
-              const Icon(Icons.play_arrow, color: Colors.grey, size: 14),
-              const SizedBox(width: 2),
-              Text('$playCount',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-            ]),
-          ]),
-        ),
-        if (durationStr.isNotEmpty) ...[
-          Text(durationStr,
-              style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-          const SizedBox(width: 8),
-        ],
-        const Icon(Icons.more_vert, color: Colors.grey, size: 20),
-      ]),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (artistName.isNotEmpty)
+                  Text(
+                    artistName,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                Row(children: [
+                  const Icon(Icons.play_arrow, color: Colors.grey, size: 14),
+                  const SizedBox(width: 2),
+                  Text(
+                    '$playCount',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+          if (durationStr.isNotEmpty) ...[
+            Text(
+              durationStr,
+              style: TextStyle(color: Colors.grey[500], fontSize: 12),
+            ),
+            const SizedBox(width: 8),
+          ],
+          const Icon(Icons.more_vert, color: Colors.grey, size: 20),
+        ]),
       ),
     );
   }
@@ -949,4 +1153,105 @@ int _safeInt(dynamic val) {
   if (val is int) return val;
   if (val is double) return val.toInt();
   return int.tryParse(val.toString()) ?? 0;
+}
+
+Map<String, dynamic>? _asTrackMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return null;
+}
+
+Map<String, dynamic> _readArtist(Map<String, dynamic> track) {
+  return _asTrackMap(track['artist'] ?? track['creator'] ?? track['user']) ??
+      const {};
+}
+
+String _readArtistName(Map<String, dynamic> track) {
+  final artist = _readArtist(track);
+  return (artist['displayName'] ??
+          artist['username'] ??
+          artist['name'] ??
+          track['artistName'] ??
+          track['creatorName'] ??
+          track['displayName'] ??
+          '')
+      .toString();
+}
+
+Map<String, dynamic>? _extractTrackFromItem(dynamic item) {
+  final map = _asTrackMap(item);
+  if (map == null) return null;
+
+  for (final key in const ['target', 'track', 'item']) {
+    final nested = _asTrackMap(map[key]);
+    if (nested != null) return nested;
+  }
+
+  for (final key in const ['target', 'track', 'item']) {
+    final id = map[key];
+    if (id is String && id.isNotEmpty) {
+      return Map<String, dynamic>.from(map)..['_id'] = id;
+    }
+  }
+
+  final targetModel = map['targetModel']?.toString().toLowerCase();
+  if (targetModel != null && targetModel != 'track') return null;
+
+  return map;
+}
+
+List<Map<String, dynamic>> _dedupeTracks(List<Map<String, dynamic>> tracks) {
+  final seen = <String>{};
+  final result = <Map<String, dynamic>>[];
+  for (final track in tracks) {
+    final id = (track['_id'] ?? track['id'] ?? track['permalink'] ?? '')
+        .toString();
+    if (id.isEmpty || seen.add(id)) {
+      result.add(track);
+    }
+  }
+  return result;
+}
+
+List<Map<String, dynamic>> _extractTracksFromProfile(Map<String, dynamic> user) {
+  final tracks = <Map<String, dynamic>>[];
+  for (final key in const ['uploadedTracks', 'tracks', 'topTracks']) {
+    final raw = user[key];
+    if (raw is List) {
+      for (final item in raw) {
+        final track = _extractTrackFromItem(item);
+        if (track != null) tracks.add(track);
+      }
+    }
+  }
+  return tracks;
+}
+
+bool _hasProfileUploadedTracks(Map<String, dynamic> user) {
+  return user['uploadedTracks'] is List || user['tracks'] is List;
+}
+
+List<Map<String, dynamic>> _extractTracksFromResponse(
+  dynamic responseData, {
+  required List<String> listKeys,
+}) {
+  final root = _asTrackMap(responseData);
+  final data = _asTrackMap(root?['data']);
+  final candidates = <dynamic>[
+    if (data != null) ...listKeys.map((key) => data[key]),
+    if (root != null) ...listKeys.map((key) => root[key]),
+    data,
+    root?['data'],
+  ];
+
+  final tracks = <Map<String, dynamic>>[];
+  for (final candidate in candidates) {
+    if (candidate is! List) continue;
+    for (final item in candidate) {
+      final track = _extractTrackFromItem(item);
+      if (track != null) tracks.add(track);
+    }
+    if (tracks.isNotEmpty) break;
+  }
+  return _dedupeTracks(tracks);
 }

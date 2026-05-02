@@ -37,6 +37,7 @@ class SubscriptionState {
     bool? isLoading,
     String? error, // null clears
     String? expiresAt,
+    bool clearExpiresAt = false,
     bool? cancelAtPeriodEnd,
     String? planType,
     bool? offlineListening,
@@ -47,7 +48,7 @@ class SubscriptionState {
       isPremium: isPremium ?? this.isPremium,
       isLoading: isLoading ?? this.isLoading,
       error: error,
-      expiresAt: expiresAt ?? this.expiresAt,
+      expiresAt: clearExpiresAt ? null : (expiresAt ?? this.expiresAt),
       cancelAtPeriodEnd: cancelAtPeriodEnd ?? this.cancelAtPeriodEnd,
       planType: planType ?? this.planType,
       offlineListening: offlineListening ?? this.offlineListening,
@@ -247,10 +248,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
 
   Future<void> checkout(String planType) async {
     if (state.isPremium && !state.cancelAtPeriodEnd) return;
-    final hasAuth =
-        (_dioClient.dio.options.headers['Authorization'] as String?)
-                ?.isNotEmpty ??
-            false;
+    final hasAuth = (_dioClient.dio.options.headers['Authorization'] as String?)
+            ?.isNotEmpty ??
+        false;
     debugPrint('[Subscription] checkout — token exists: $hasAuth');
     if (!hasAuth) {
       state = state.copyWith(error: 'Please log in again.');
@@ -311,10 +311,9 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
       state = state.copyWith(error: 'No active subscription to cancel.');
       return;
     }
-    final hasAuth =
-        (_dioClient.dio.options.headers['Authorization'] as String?)
-                ?.isNotEmpty ??
-            false;
+    final hasAuth = (_dioClient.dio.options.headers['Authorization'] as String?)
+            ?.isNotEmpty ??
+        false;
     debugPrint(
       '[Subscription] cancel — token exists: $hasAuth, '
       'endpoint: DELETE /subscriptions/cancel',
@@ -384,7 +383,8 @@ class SubscriptionNotifier extends StateNotifier<SubscriptionState> {
         return msg.isNotEmpty ? msg : 'Checkout failed. Please try again.';
       }
       if (status == 403) return 'This feature requires a premium plan.';
-      if (status == 404) return 'Cancellation is not available from backend yet.';
+      if (status == 404)
+        return 'Cancellation is not available from backend yet.';
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.sendTimeout ||

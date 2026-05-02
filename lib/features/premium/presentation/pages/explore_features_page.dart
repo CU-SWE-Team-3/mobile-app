@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../providers/subscription_provider.dart'
-    show SubscriptionEntitlements, subscriptionProvider;
+import '../providers/subscription_provider.dart' show subscriptionProvider;
 
 class ExploreFeaturesPage extends ConsumerWidget {
   const ExploreFeaturesPage({super.key});
@@ -107,8 +106,8 @@ class _UnknownPlanBody extends StatelessWidget {
             isLocalFallback
                 ? 'Your payment was received. Plan details are still syncing from the server — try refreshing in a moment.'
                 : 'Your subscription is active, but plan details could not be loaded. Sign out and back in to restore your plan, or tap Refresh.',
-            style:
-                const TextStyle(color: Colors.white60, fontSize: 14, height: 1.6),
+            style: const TextStyle(
+                color: Colors.white60, fontSize: 14, height: 1.6),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 36),
@@ -119,8 +118,7 @@ class _UnknownPlanBody extends StatelessWidget {
               onPressed: onRefresh,
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Refresh',
-                  style:
-                      TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF5500),
                 foregroundColor: Colors.white,
@@ -325,6 +323,12 @@ class _FeatureList extends ConsumerWidget {
         title: 'Ad-free Listening',
         subtitle: 'Enjoy uninterrupted music with no ads between tracks.',
         route: null,
+      ),
+      const _Feature(
+        icon: Icons.schedule,
+        title: 'Scheduled Releases',
+        subtitle: 'Schedule tracks for future release dates.',
+        route: '/library/uploads',
       ),
     ];
   }

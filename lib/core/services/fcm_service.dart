@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../network/dio_client.dart';
 import '../router/app_router.dart';
+import 'local_notification_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -29,6 +30,11 @@ class FcmService {
   static String? _lastRegisteredAuth;
   static StreamSubscription<String>? _tokenRefreshSub;
   static StreamSubscription<RemoteMessage>? _openedAppSub;
+  static StreamSubscription<RemoteMessage>? _foregroundMessageSub;
+
+  /// Assigned by the notification lifecycle provider so foreground FCM messages
+  /// update the in-app notification feed. Cleared on logout.
+  static void Function(Map<String, dynamic>)? onForegroundMessage;
 
   static void registerBackgroundHandler() {
     if (kIsWeb || _backgroundHandlerRegistered) return;
@@ -63,6 +69,10 @@ class FcmService {
       _openedAppSub = FirebaseMessaging.onMessageOpenedApp.listen(
         _handleNotificationTap,
       );
+
+      await _foregroundMessageSub?.cancel();
+      _foregroundMessageSub =
+          FirebaseMessaging.onMessage.listen(_onForegroundMessage);
 
       await _tokenRefreshSub?.cancel();
       _tokenRefreshSub = _messaging.onTokenRefresh.listen((token) {
@@ -186,6 +196,38 @@ class FcmService {
     // default channel for background/killed notification payloads.
   }
 
+  static void _onForegroundMessage(RemoteMessage message) {
+    final data = message.data;
+
+    // Forward to the in-app notification provider if a listener is registered.
+    onForegroundMessage?.call(data);
+
+    // Show a system-tray notification for foreground messages that carry a
+    // visible notification payload (data-only messages have no notification).
+    final notif = message.notification;
+    if (notif == null) return;
+    final type = (data['type'] ?? data['notificationType'] ?? '').toString();
+    final isMessage = type.toUpperCase() == 'MESSAGE';
+    final conversationId = _messageConversationId(data);
+    final actionLink = data['actionLink']?.toString() ?? '';
+    final payload = isMessage && conversationId.isNotEmpty
+        ? '/messages/chat/$conversationId'
+        : actionLink.isNotEmpty
+            ? actionLink
+            : '/notifications';
+    final title = isMessage
+        ? 'Message from ${_messageSenderName(data)}'
+        : notif.title ?? 'BioBeats';
+    final body = isMessage
+        ? _messageBody(data, notif.body)
+        : _safeBody(notif.body, fallback: 'Tap to open BioBeats');
+    unawaited(LocalNotificationService.showNotification(
+      title: title,
+      body: body,
+      payload: payload,
+    ));
+  }
+
   static void _handleNotificationTap(RemoteMessage message) {
     final data = message.data;
     final type = (data['type'] ?? data['notificationType'] ?? '').toString();
@@ -300,6 +342,65 @@ class FcmService {
       if (id.isNotEmpty) return id;
     }
     return '';
+  }
+
+  static String _messageSenderName(Map<String, dynamic> data) {
+    for (final key in const ['senderName', 'senderDisplayName', 'displayName']) {
+      final value = data[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+    for (final key in const ['sender', 'senderId', 'from', 'user', 'actor']) {
+      final value = data[key];
+      if (value is Map) {
+        final map = Map<String, dynamic>.from(value);
+        for (final nameKey in const ['displayName', 'username', 'name']) {
+          final name = map[nameKey]?.toString().trim();
+          if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+            return name;
+          }
+        }
+      } else {
+        final jsonValue = value?.toString();
+        if (jsonValue == null || jsonValue.isEmpty) continue;
+        try {
+          final parsed = jsonDecode(jsonValue);
+          if (parsed is Map) {
+            final map = Map<String, dynamic>.from(parsed);
+            for (final nameKey in const ['displayName', 'username', 'name']) {
+              final name = map[nameKey]?.toString().trim();
+              if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+                return name;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return 'Someone';
+  }
+
+  static String _messageBody(Map<String, dynamic> data, String? notificationBody) {
+    for (final key in const ['contentSnippet', 'content', 'messageText', 'text']) {
+      final value = data[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+    return _safeBody(notificationBody, fallback: 'Tap to open chat');
+  }
+
+  static String _safeBody(String? value, {required String fallback}) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty || _looksLikeObjectId(trimmed)) {
+      return fallback;
+    }
+    return trimmed;
+  }
+
+  static bool _looksLikeObjectId(String value) {
+    return RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(value);
   }
 
   static String _fingerprint(String token) {

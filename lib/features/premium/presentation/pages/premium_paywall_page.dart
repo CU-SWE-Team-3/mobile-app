@@ -43,14 +43,14 @@ class PremiumPaywallPage extends ConsumerWidget {
                     left: 60,
                     child: _GlowCircle(
                         size: 220,
-                        color: const Color(0xFFFF5500).withOpacity(0.18)),
+                        color: const Color(0xFFFF5500).withValues(alpha: 0.18)),
                   ),
                   Positioned(
                     top: 20,
                     right: 30,
                     child: _GlowCircle(
                         size: 160,
-                        color: const Color(0xFF9B3FFF).withOpacity(0.22)),
+                        color: const Color(0xFF9B3FFF).withValues(alpha: 0.22)),
                   ),
                   Positioned(
                     top: 12,
@@ -67,44 +67,58 @@ class PremiumPaywallPage extends ConsumerWidget {
                       icon: const Icon(Icons.close, color: Colors.white),
                     ),
                   ),
-                  // Simulated stacked-card look
+                  // Artist Pro hero asset card
                   Positioned(
                     top: 40,
                     left: 0,
                     right: 0,
                     child: Center(
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Transform.rotate(
-                            angle: 0.12,
-                            child: Container(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.96, end: 1),
+                        duration: const Duration(milliseconds: 520),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, scale, child) {
+                          return Transform.scale(scale: scale, child: child);
+                        },
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Transform.rotate(
+                              angle: 0.12,
+                              child: Container(
+                                width: 220,
+                                height: 260,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2C1A00),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                            Container(
                               width: 220,
                               height: 260,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF2C1A00),
-                                borderRadius: BorderRadius.circular(12),
+                                color: const Color(0xFF120D09),
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 14),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.asset(
+                                  'assets/images/Screenshot 2026-05-01 204241.png',
+                                  fit: BoxFit.cover,
+                                  alignment: Alignment.center,
+                                ),
                               ),
                             ),
-                          ),
-                          Container(
-                            width: 220,
-                            height: 260,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Color(0xFF3A2200), Color(0xFF1A1000)],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.music_note,
-                              color: Color(0xFFFF5500),
-                              size: 80,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -126,7 +140,7 @@ class PremiumPaywallPage extends ConsumerWidget {
                   const Row(
                     children: [
                       _Pill(
-                        label: '✦ ARTIST PRO',
+                        label: 'ARTIST PRO',
                         color: Colors.white,
                         textColor: Colors.black,
                       ),
@@ -244,7 +258,7 @@ class PremiumPaywallPage extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.15),
+                        color: Colors.red.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -294,9 +308,8 @@ class _SubscribedView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sub = ref.watch(subscriptionProvider);
-    final planLabel = sub.isPlanKnown
-        ? sub.displayPlanName
-        : null; // null → unknown plan
+    final planLabel =
+        sub.isPlanKnown ? sub.displayPlanName : null; // null → unknown plan
 
     return Scaffold(
       backgroundColor: Colors.black,

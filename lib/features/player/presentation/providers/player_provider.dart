@@ -204,6 +204,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         currentTrack: track,
         isCurrentTrackLiked: false,
         isTogglingLike: false,
+        position: Duration.zero,
+        duration: track.duration ?? Duration.zero,
       );
       _audioHandler.setLiked(false);
       unawaited(
@@ -485,6 +487,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         artistPermalink: current.artistPermalink ?? details.artistPermalink,
         trackPermalink: current.trackPermalink ?? details.trackPermalink,
       ),
+      duration: state.duration == Duration.zero
+          ? (current.duration ?? details.duration ?? Duration.zero)
+          : state.duration,
     );
   }
 

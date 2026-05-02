@@ -96,6 +96,12 @@ class _PlaylistPrivacyPageState extends ConsumerState<PlaylistPrivacyPage> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          key: const ValueKey('playlist_back_button'),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 20),
+          onPressed: _loading ? null : () => Navigator.maybePop(context),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -159,6 +165,7 @@ class _PlaylistPrivacyPageState extends ConsumerState<PlaylistPrivacyPage> {
                   )
                 else
                   Switch(
+                    key: const ValueKey('playlist_privacy_toggle'),
                     value: _isPublic,
                     onChanged: _toggle,
                     activeThumbColor: _primary,

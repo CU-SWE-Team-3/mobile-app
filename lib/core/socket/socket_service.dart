@@ -23,6 +23,7 @@ class SocketService {
   String? _blockedTokenFingerprint;
   final Set<String> _recentLocalNotificationMessageIds = {};
   final Set<String> _activeConversationIds = {};
+  final Map<String, DateTime> _recentNotificationPopups = {};
 
   final _newMessageController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -431,14 +432,12 @@ class SocketService {
       }
     }
 
-    final content = message['content']?.toString().trim();
-    final body =
-        (content == null || content.isEmpty || _looksLikeObjectId(content))
-            ? 'Tap to open chat'
-            : content;
+    final title = _messageNotificationTitle(message);
+    final body = _messageNotificationBody(message);
+    final senderName = _senderNameFrom(message);
     unawaited(
       LocalNotificationService.showNotification(
-        title: 'New message',
+        title: 'Message from $senderName',
         body: body,
         payload: '/messages/chat/$conversationId',
       ),
@@ -468,6 +467,9 @@ class SocketService {
       if ((notification['type']?.toString().toUpperCase() ?? '') == 'MESSAGE') {
         return;
       }
+      if (_shouldSuppressNotificationPopup(notification)) {
+        return;
+      }
       unawaited(
         LocalNotificationService.showNotification(
           title: _notificationTitle(notification),
@@ -478,6 +480,33 @@ class SocketService {
     } catch (e) {
       debugPrint('[SocketService] new_notification parse error: $e');
     }
+  }
+
+  bool _shouldSuppressNotificationPopup(Map<String, dynamic> json) {
+    final key = _notificationDedupeKey(json);
+    if (key.isEmpty) return false;
+    final now = DateTime.now();
+    _recentNotificationPopups.removeWhere(
+      (_, shownAt) => now.difference(shownAt) > const Duration(minutes: 10),
+    );
+    final lastShown = _recentNotificationPopups[key];
+    if (lastShown != null &&
+        now.difference(lastShown) < const Duration(minutes: 10)) {
+      return true;
+    }
+    _recentNotificationPopups[key] = now;
+    return false;
+  }
+
+  String _notificationDedupeKey(Map<String, dynamic> json) {
+    final id =
+        (json['_id'] ?? json['id'] ?? json['notificationId'])?.toString() ?? '';
+    if (id.isNotEmpty) return 'id:$id';
+    final type = (json['type'] ?? '').toString().toUpperCase();
+    final body = _notificationBody(json).trim().toLowerCase();
+    final actor = _notificationActor(json).trim().toLowerCase();
+    if (type.isEmpty && body.isEmpty) return '';
+    return '$type|$actor|$body';
   }
 
   String _notificationPayload(Map<String, dynamic> json) {
@@ -494,6 +523,11 @@ class SocketService {
         final permalink = actor['permalink']?.toString();
         if (permalink != null && permalink.trim().isNotEmpty) {
           return '/user/${permalink.replaceFirst('@', '')}';
+        }
+        return '/notifications';
+      case 'SYSTEM':
+        if (_isRecommendationNotification(json)) {
+          return '/home/recommended';
         }
         return '/notifications';
       default:
@@ -535,6 +569,13 @@ class SocketService {
     if (snippet != null && snippet.trim().isNotEmpty) return snippet;
     if (trackTitle != null && trackTitle.trim().isNotEmpty) return trackTitle;
     return 'Tap to open BioBeats';
+  }
+
+  bool _isRecommendationNotification(Map<String, dynamic> json) {
+    final body = _notificationBody(json).toLowerCase();
+    return body.contains('picked for you') ||
+        body.contains('recommended') ||
+        body.contains('new tracks');
   }
 
   String _notificationActor(Map<String, dynamic> json) {
@@ -583,6 +624,33 @@ class SocketService {
     return RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(value);
   }
 
+  String _messageNotificationTitle(Map<String, dynamic> message) {
+    final senderName = _senderDisplayNameFrom(message);
+    if (senderName.isEmpty) return 'New message';
+    return 'Message from $senderName';
+  }
+
+  String _messageNotificationBody(Map<String, dynamic> message) {
+    for (final key in const [
+      'contentSnippet',
+      'content',
+      'message',
+      'text',
+      'body',
+    ]) {
+      final value = message[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+
+    if (message['attachment'] != null || message['attachments'] != null) {
+      return 'Sent an attachment';
+    }
+
+    return 'Tap to open chat';
+  }
+
   String _conversationIdFrom(Map<String, dynamic> message) {
     final direct = message['conversationId'] ?? message['chatId'];
     final directValue = _idValue(direct);
@@ -599,6 +667,68 @@ class SocketService {
     return _idValue(message['senderId']).isNotEmpty
         ? _idValue(message['senderId'])
         : _idValue(message['sender']);
+  }
+
+  String _senderNameFrom(Map<String, dynamic> message) {
+    for (final key in const ['sender', 'senderId', 'from', 'user']) {
+      final value = message[key];
+      if (value is Map) {
+        final map = Map<String, dynamic>.from(value);
+        for (final nameKey in const ['displayName', 'username', 'name']) {
+          final name = map[nameKey]?.toString().trim();
+          if (name != null &&
+              name.isNotEmpty &&
+              !_looksLikeObjectId(name)) {
+            return name;
+          }
+        }
+      }
+    }
+    for (final key in const ['senderName', 'senderDisplayName', 'displayName']) {
+      final name = message[key]?.toString().trim();
+      if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+        return name;
+      }
+    }
+    return 'Someone';
+  }
+
+  String _senderDisplayNameFrom(Map<String, dynamic> message) {
+    for (final key in const [
+      'senderDisplayName',
+      'senderName',
+      'actorName',
+      'displayName',
+    ]) {
+      final value = message[key]?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+
+    final sender = message['senderId'] is Map
+        ? message['senderId']
+        : message['sender'] is Map
+            ? message['sender']
+            : null;
+    if (sender is Map) {
+      final map = Map<String, dynamic>.from(sender);
+      final value = map['displayName']?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+
+    final actors = message['actors'];
+    if (actors is List && actors.isNotEmpty && actors.first is Map) {
+      final first = Map<String, dynamic>.from(actors.first as Map);
+      final value = first['displayName']?.toString().trim();
+      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+        return value;
+      }
+    }
+
+    return '';
   }
 
   String _idValue(dynamic value) {

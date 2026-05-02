@@ -97,6 +97,7 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
         backgroundColor: _bg,
         elevation: 0,
         leading: IconButton(
+          key: const ValueKey('playlist_back_button'),
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: _saving ? null : () => Navigator.pop(context),
         ),
@@ -120,6 +121,7 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
                     ),
                   )
                 : GestureDetector(
+                    key: const ValueKey('playlist_save_button'),
                     onTap: _save,
                     child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 10),
@@ -172,6 +174,7 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
             ),
             const SizedBox(height: 24),
             TextField(
+              key: const ValueKey('playlist_name_field'),
               controller: _ctrl,
               autofocus: true,
               enabled: !_saving,
@@ -205,6 +208,7 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
                 ),
                 const Spacer(),
                 Switch(
+                  key: const ValueKey('playlist_privacy_toggle'),
                   value: _isPublic,
                   onChanged: _saving ? null : (v) => setState(() => _isPublic = v),
                   activeThumbColor: _primary,

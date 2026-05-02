@@ -79,6 +79,7 @@ class _PaymentSuccessPageState extends ConsumerState<PaymentSuccessPage> {
                       width: double.infinity,
                       height: 52,
                       child: ElevatedButton(
+                        key: const ValueKey('premium_confirm_button'),
                         onPressed: () => context.go('/upgrade/features'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF5500),

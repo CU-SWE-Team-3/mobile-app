@@ -35,8 +35,8 @@ class OfflineDownloadPage extends ConsumerWidget {
                 Expanded(
                   child: downloadsAsync.when(
                     loading: () => const Center(
-                      child: CircularProgressIndicator(
-                          color: Color(0xFFFF5500)),
+                      child:
+                          CircularProgressIndicator(color: Color(0xFFFF5500)),
                     ),
                     error: (_, __) => const Center(
                       child: Text('Could not load downloads.',
@@ -45,8 +45,8 @@ class OfflineDownloadPage extends ConsumerWidget {
                     data: (tracks) => tracks.isEmpty
                         ? _emptyState(context)
                         : ListView.builder(
-                            padding: const EdgeInsets.only(
-                                top: 8, bottom: 32),
+                            key: const ValueKey('offline_downloads_list'),
+                            padding: const EdgeInsets.only(top: 8, bottom: 32),
                             itemCount: tracks.length,
                             itemBuilder: (_, i) =>
                                 _DownloadedTrackTile(track: tracks[i]),
@@ -77,10 +77,10 @@ class OfflineDownloadPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 28),
-          const Center(
+          Center(
             child: Text(
               'Listen Anywhere, Anytime',
-              style: TextStyle(
+              style: const TextStyle(
                   color: Colors.white,
                   fontSize: 22,
                   fontWeight: FontWeight.w800),
@@ -88,11 +88,11 @@ class OfflineDownloadPage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-          const Center(
+          Center(
             child: Text(
               'Requires a Go+ Subscription for offline listening.',
-              style: TextStyle(
-                  color: Colors.white60, fontSize: 15, height: 1.6),
+              style:
+                  TextStyle(color: Colors.white60, fontSize: 15, height: 1.6),
               textAlign: TextAlign.center,
             ),
           ),
@@ -129,8 +129,7 @@ class OfflineDownloadPage extends ConsumerWidget {
                 elevation: 0,
               ),
               child: const Text('Upgrade to Go+',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ),
           ),
         ],
@@ -158,9 +157,7 @@ class OfflineDownloadPage extends ConsumerWidget {
           const Text(
             'Offline Downloads Unlocked',
             style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w800),
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
@@ -190,8 +187,7 @@ class OfflineDownloadPage extends ConsumerWidget {
                 elevation: 0,
               ),
               child: const Text('Browse Tracks',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ),
           ),
         ],
@@ -259,8 +255,8 @@ class _DownloadedTrackTile extends StatelessWidget {
     final hasArt = artworkUrl != null && artworkUrl.isNotEmpty;
 
     return Padding(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      key: ValueKey('offline_download_tile_${track.trackId ?? track.title}'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -280,9 +276,10 @@ class _DownloadedTrackTile extends StatelessWidget {
                     ? CachedNetworkImage(
                         imageUrl: artworkUrl,
                         fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) =>
-                            const Icon(Icons.music_note,
-                                color: Colors.white38, size: 24),
+                        errorWidget: (_, __, ___) => const Icon(
+                            Icons.music_note,
+                            color: Colors.white38,
+                            size: 24),
                       )
                     : const Icon(Icons.music_note,
                         color: Colors.white38, size: 24),
@@ -308,8 +305,7 @@ class _DownloadedTrackTile extends StatelessWidget {
                     track.artistName as String,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 12),
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -319,11 +315,10 @@ class _DownloadedTrackTile extends StatelessWidget {
                                 'metadataOnly'
                             ? Icons.info_outline
                             : Icons.download_done,
-                        color:
-                            (track.downloadMode as String? ?? 'file') ==
-                                    'metadataOnly'
-                                ? Colors.orange
-                                : const Color(0xFF4CAF50),
+                        color: (track.downloadMode as String? ?? 'file') ==
+                                'metadataOnly'
+                            ? Colors.orange
+                            : const Color(0xFF4CAF50),
                         size: 12,
                       ),
                       const SizedBox(width: 4),
@@ -344,15 +339,14 @@ class _DownloadedTrackTile extends StatelessWidget {
                           ),
                           child: const Text(
                             'Preview saved',
-                            style: TextStyle(
-                                color: Colors.orange, fontSize: 10),
+                            style:
+                                TextStyle(color: Colors.orange, fontSize: 10),
                           ),
                         )
                       else if (track.localPath != null)
                         const Text(
                           'Saved file',
-                          style: TextStyle(
-                              color: Colors.white24, fontSize: 11),
+                          style: TextStyle(color: Colors.white24, fontSize: 11),
                         ),
                     ],
                   ),
@@ -392,9 +386,7 @@ class _FeatureRow extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: locked
-                  ? const Color(0xFF1C1C1E)
-                  : const Color(0xFF1A3300),
+              color: locked ? const Color(0xFF1C1C1E) : const Color(0xFF1A3300),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon,
@@ -415,8 +407,7 @@ class _FeatureRow extends StatelessWidget {
                             fontWeight: FontWeight.w600)),
                     if (locked) ...[
                       const SizedBox(width: 6),
-                      const Icon(Icons.lock,
-                          color: Colors.white24, size: 14),
+                      const Icon(Icons.lock, color: Colors.white24, size: 14),
                     ],
                   ],
                 ),

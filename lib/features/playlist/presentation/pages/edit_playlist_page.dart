@@ -68,11 +68,13 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
       _errorMessage = null;
     });
     try {
+      final desc = _descController.text.trim();
       await ref.read(playlistsProvider.notifier).updateMetadata(
             widget.playlist!.id,
             title: _titleController.text.trim(),
             isPublic: !_isPrivate,
             artworkUrl: _artworkUrl,
+            description: desc.isEmpty ? null : desc,
           );
       if (mounted) Navigator.pop(context);
     } catch (_) {
@@ -94,6 +96,12 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
           backgroundColor: _bg,
           elevation: 0,
           iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            key: const ValueKey('playlist_back_button'),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                color: Colors.white, size: 20),
+            onPressed: () => Navigator.maybePop(context),
+          ),
         ),
         body: const Center(
           child: Text('Playlist not found',
@@ -108,13 +116,19 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
         backgroundColor: _bg,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          key: const ValueKey('playlist_back_button'),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Colors.white, size: 20),
+          onPressed: _submitting ? null : () => Navigator.maybePop(context),
+        ),
         title: const Text(
           'Edit Playlist',
           style: TextStyle(color: Colors.white, fontSize: 16),
         ),
         actions: [
           TextButton(
-            key: const Key('saveButton'),
+            key: const ValueKey('playlist_save_button'),
             onPressed: _canSave ? _save : null,
             child: Text(
               _submitting ? 'Saving…' : 'Save',
@@ -162,7 +176,7 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
                 _sectionLabel('TITLE'),
                 const SizedBox(height: 8),
                 _buildTextField(
-                  key: const Key('titleField'),
+                  key: const ValueKey('playlist_name_field'),
                   controller: _titleController,
                   hint: 'Playlist title',
                   error: _titleController.text.trim().isNotEmpty &&
@@ -174,7 +188,7 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
                 _sectionLabel('DESCRIPTION (OPTIONAL)'),
                 const SizedBox(height: 8),
                 _buildTextField(
-                  key: const Key('descField'),
+                  key: const ValueKey('playlist_description_field'),
                   controller: _descController,
                   hint: 'Add a description…',
                   maxLines: 5,
@@ -283,6 +297,7 @@ class _EditPlaylistPageState extends ConsumerState<EditPlaylistPage> {
                 ),
               ),
               Switch(
+                key: const ValueKey('playlist_privacy_toggle'),
                 value: _isPrivate,
                 onChanged: (_) => setState(() => _isPrivate = !_isPrivate),
                 activeTrackColor: const Color(0xFFFF5500),

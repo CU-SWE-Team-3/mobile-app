@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,12 +14,19 @@ class UploadProgressPage extends ConsumerStatefulWidget {
   ConsumerState<UploadProgressPage> createState() => _UploadProgressPageState();
 }
 
-class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
+class _UploadProgressPageState extends ConsumerState<UploadProgressPage>
+    with SingleTickerProviderStateMixin {
   bool _uploadStarted = false;
+  bool _navigationScheduled = false;
+  late final AnimationController _motionController;
 
   @override
   void initState() {
     super.initState();
+    _motionController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_uploadStarted) {
         _uploadStarted = true;
@@ -29,6 +38,12 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
   }
 
   @override
+  void dispose() {
+    _motionController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final uploadState = ref.watch(uploadProvider);
     final isComplete =
@@ -37,7 +52,10 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
         uploadState.processingState != 'Finished';
 
     // Auto navigate when upload completes successfully
-    if (isComplete && uploadState.successMessage != null) {
+    if (isComplete &&
+        uploadState.successMessage != null &&
+        !_navigationScheduled) {
+      _navigationScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
           Future.delayed(const Duration(milliseconds: 1500), () {
@@ -82,53 +100,12 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // ── PROGRESS CIRCLE ────────────────────
-                  SizedBox(
-                    width: 150,
-                    height: 150,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircularProgressIndicator(
-                          value:
-                              isProcessing ? 1.0 : uploadState.uploadProgress,
-                          strokeWidth: 8,
-                          valueColor: const AlwaysStoppedAnimation<Color>(
-                            AppTheme.primary,
-                          ),
-                          backgroundColor: AppTheme.surface,
-                        ),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (!isProcessing)
-                              Text(
-                                '${(uploadState.uploadProgress * 100).toStringAsFixed(0)}%',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              )
-                            else
-                              const SizedBox(height: 8),
-                            const SizedBox(height: 4),
-                            Text(
-                              isProcessing
-                                  ? 'Processing on server...'
-                                  : isComplete
-                                      ? 'Complete!'
-                                      : 'Uploading...',
-                              style: TextStyle(
-                                color: isProcessing
-                                    ? AppTheme.primary
-                                    : Colors.white.withValues(alpha: 0.6),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  _AnimatedUploadHero(
+                    controller: _motionController,
+                    progress: isProcessing ? 1 : uploadState.uploadProgress,
+                    isProcessing: isProcessing,
+                    isComplete:
+                        isComplete && uploadState.successMessage != null,
                   ),
                   const SizedBox(height: 48),
 
@@ -142,17 +119,10 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: LinearProgressIndicator(
-                            value:
-                                isProcessing ? 1.0 : uploadState.uploadProgress,
-                            minHeight: 6,
-                            backgroundColor: const Color(0xFF2A2A2A),
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                              Color(0xFFFF5500),
-                            ),
-                          ),
+                        _GlowingProgressBar(
+                          progress:
+                              isProcessing ? 1.0 : uploadState.uploadProgress,
+                          controller: _motionController,
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -390,6 +360,237 @@ class _UploadProgressPageState extends ConsumerState<UploadProgressPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AnimatedUploadHero extends StatelessWidget {
+  final AnimationController controller;
+  final double progress;
+  final bool isProcessing;
+  final bool isComplete;
+
+  const _AnimatedUploadHero({
+    required this.controller,
+    required this.progress,
+    required this.isProcessing,
+    required this.isComplete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: progress.clamp(0, 1).toDouble()),
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      builder: (context, animatedProgress, _) {
+        return AnimatedBuilder(
+          animation: controller,
+          builder: (context, __) {
+            final pulse = isComplete
+                ? 1.0
+                : 1 + (math.sin(controller.value * math.pi * 2) * 0.025);
+            return Transform.scale(
+              scale: pulse,
+              child: SizedBox(
+                width: 190,
+                height: 190,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                const Color(0xFFFF5500).withValues(alpha: 0.24),
+                            blurRadius: 34,
+                            spreadRadius: 3,
+                          ),
+                          BoxShadow(
+                            color:
+                                const Color(0xFF8A3FFC).withValues(alpha: 0.18),
+                            blurRadius: 52,
+                            spreadRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                    CustomPaint(
+                      size: const Size.square(178),
+                      painter: _PremiumProgressRingPainter(
+                        progress: animatedProgress,
+                        rotation: controller.value,
+                        isComplete: isComplete,
+                      ),
+                    ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 260),
+                      switchInCurve: Curves.easeOutBack,
+                      child: isComplete
+                          ? const Icon(
+                              Icons.check_rounded,
+                              key: ValueKey('upload_success_check'),
+                              color: Colors.white,
+                              size: 58,
+                            )
+                          : Column(
+                              key: const ValueKey('upload_progress_percent'),
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${(animatedProgress * 100).round()}%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 38,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  isProcessing ? 'Processing' : 'Uploading',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.68),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _PremiumProgressRingPainter extends CustomPainter {
+  final double progress;
+  final double rotation;
+  final bool isComplete;
+
+  _PremiumProgressRingPainter({
+    required this.progress,
+    required this.rotation,
+    required this.isComplete,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.width / 2 - 12;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final start = -math.pi / 2 + (rotation * math.pi * 2);
+    final sweep = math.pi * 2 * progress.clamp(0, 1);
+
+    final trackPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFF26262A);
+    canvas.drawArc(rect, 0, math.pi * 2, false, trackPaint);
+
+    final shadowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 18
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9)
+      ..shader = const SweepGradient(
+        colors: [Color(0xFFFF5500), Color(0xFF8A3FFC), Color(0xFFFF5500)],
+      ).createShader(rect);
+    canvas.drawArc(rect, start, sweep, false, shadowPaint);
+
+    final ringPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 12
+      ..strokeCap = StrokeCap.round
+      ..shader = const SweepGradient(
+        colors: [
+          Color(0xFFFF5500),
+          Color(0xFFFFB000),
+          Color(0xFF8A3FFC),
+          Color(0xFFFF5500),
+        ],
+      ).createShader(rect);
+    canvas.drawArc(rect, start, sweep, false, ringPaint);
+
+    final innerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = Colors.white.withValues(alpha: isComplete ? 0.18 : 0.08);
+    canvas.drawCircle(center.translate(-3, -5), radius - 22, innerPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PremiumProgressRingPainter oldDelegate) {
+    return progress != oldDelegate.progress ||
+        rotation != oldDelegate.rotation ||
+        isComplete != oldDelegate.isComplete;
+  }
+}
+
+class _GlowingProgressBar extends StatelessWidget {
+  final double progress;
+  final AnimationController controller;
+
+  const _GlowingProgressBar({
+    required this.progress,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: progress.clamp(0, 1).toDouble()),
+      duration: const Duration(milliseconds: 360),
+      curve: Curves.easeOutCubic,
+      builder: (context, animatedProgress, _) {
+        return AnimatedBuilder(
+          animation: controller,
+          builder: (context, __) {
+            return Container(
+              height: 9,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A2A2A),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: animatedProgress,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: LinearGradient(
+                      begin: Alignment(-1 + controller.value * 2, 0),
+                      end: Alignment(1 + controller.value * 2, 0),
+                      colors: const [
+                        Color(0xFFFF5500),
+                        Color(0xFFFFB000),
+                        Color(0xFF8A3FFC),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF5500).withValues(alpha: 0.45),
+                        blurRadius: 16,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

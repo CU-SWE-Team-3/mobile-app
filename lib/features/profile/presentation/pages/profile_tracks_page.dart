@@ -4,158 +4,71 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
+import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
-class _MyTrack {
-  final String id;
-  final String title;
-  final String artistName;
-  final String? artworkUrl;
-  final String hlsUrl;
-  final List<int>? waveform;
-  final Duration? duration;
-
-  const _MyTrack({
-    required this.id,
-    required this.title,
-    required this.artistName,
-    required this.artworkUrl,
-    required this.hlsUrl,
-    this.waveform,
-    this.duration,
-  });
-
-  factory _MyTrack.fromJson(
-    Map<String, dynamic> json, {
-    String fallbackArtistName = '',
-  }) {
-    final artist = json['artist'] as Map<String, dynamic>? ?? {};
-    final user = json['user'] as Map<String, dynamic>? ?? {};
-    final durationRaw = json['duration'];
-    final artistName = (artist['displayName'] ??
-            artist['username'] ??
-            artist['name'] ??
-            user['displayName'] ??
-            user['username'] ??
-            user['name'] ??
-            json['artistName'] ??
-            '')
-        .toString();
-
-    return _MyTrack(
-      id: json['_id'] as String? ?? '',
-      title: json['title'] as String? ?? '',
-      artistName: artistName.isNotEmpty ? artistName : fallbackArtistName,
-      artworkUrl: json['artworkUrl'] as String?,
-      hlsUrl: json['hlsUrl'] as String? ?? '',
-      waveform: (json['waveform'] as List<dynamic>?)
-          ?.map((e) => (e as num).toInt())
-          .toList(),
-      duration: durationRaw != null
-          ? Duration(seconds: (durationRaw as num).toInt())
-          : null,
-    );
-  }
-
-  PlayerTrack toPlayerTrack() => PlayerTrack(
-        id: id,
-        title: title,
-        artist: artistName,
-        audioUrl: hlsUrl,
-        coverUrl: artworkUrl,
-        waveform: waveform,
-        duration: duration,
-      );
-}
-
-class ProfileTracksPage extends ConsumerStatefulWidget {
+class ProfileTracksPage extends ConsumerWidget {
   const ProfileTracksPage({super.key});
 
-  @override
-  ConsumerState<ProfileTracksPage> createState() => _ProfileTracksPageState();
-}
-
-class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
   static const _bg = Color(0xFF111111);
 
-  List<_MyTrack> _tracks = [];
-  bool _isLoading = true;
-  bool _hasError = false;
-  String _currentArtistName = '';
+  List<PlayerTrack> _playableQueue(List<UploadTrack> tracks) => tracks
+      .where((track) => track.hlsUrl != null && track.hlsUrl!.isNotEmpty)
+      .map(
+        (track) => PlayerTrack(
+          id: track.id ?? track.hlsUrl!,
+          title: track.title,
+          artist: track.artist,
+          audioUrl: track.hlsUrl!,
+          coverUrl: track.artworkUrl,
+          waveform: track.waveform,
+          duration:
+              track.duration != null ? Duration(seconds: track.duration!) : null,
+        ),
+      )
+      .toList();
 
-  @override
-  void initState() {
-    super.initState();
-    _loadCurrentArtistName();
-    _fetchTracks();
-  }
-
-  Future<void> _loadCurrentArtistName() async {
-    final prefs = await SharedPreferences.getInstance();
-    final name = prefs.getString('displayName') ??
-        prefs.getString('username') ??
-        prefs.getString('name') ??
-        '';
-    if (!mounted) return;
-    setState(() => _currentArtistName = name);
-  }
-
-  Future<void> _fetchTracks() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
-
-    try {
-      final dio = ref.read(dioClientProvider).dio;
-      final response = await dio.get('/tracks/my-tracks');
-      final data = response.data['data'];
-
-      if (data is! List) {
-        throw const FormatException('Expected tracks list');
-      }
-
-      final fallbackArtistName = _currentArtistName;
-      final tracks = data
-          .whereType<Map<String, dynamic>>()
-          .map((track) => _MyTrack.fromJson(
-                track,
-                fallbackArtistName: fallbackArtistName,
-              ))
-          .where((track) => track.hlsUrl.isNotEmpty)
-          .toList();
-
-      if (!mounted) return;
-      setState(() {
-        _tracks = tracks;
-        _isLoading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-      });
+  void _playFrom(
+    BuildContext context,
+    WidgetRef ref,
+    List<UploadTrack> tracks,
+    int index,
+  ) {
+    final tapped = tracks[index];
+    if (tapped.hlsUrl == null || tapped.hlsUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This track is still processing.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
     }
-  }
 
-  void _playFrom(int index) {
-    if (_tracks.isEmpty) return;
+    final queue = _playableQueue(tracks);
+    if (queue.isEmpty) return;
 
-    final startIndex = index.clamp(0, _tracks.length - 1);
-    final queue = _tracks.map((track) => track.toPlayerTrack()).toList();
-
+    final startIndex = queue.indexWhere(
+      (track) => track.id == (tapped.id ?? tapped.hlsUrl),
+    );
     ref.read(playerProvider.notifier).playQueue(
           queue,
-          startIndex: startIndex,
+          startIndex: startIndex < 0 ? 0 : startIndex,
         );
   }
 
+  void _playAll(WidgetRef ref, List<UploadTrack> tracks, {bool shuffle = false}) {
+    final queue = _playableQueue(tracks);
+    if (queue.isEmpty) return;
+    if (shuffle) queue.shuffle(Random());
+    ref.read(playerProvider.notifier).playQueue(queue);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tracksAsync = ref.watch(myTracksProvider);
+
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -193,133 +106,114 @@ class _ProfileTracksPageState extends ConsumerState<ProfileTracksPage> {
                     ),
                   ),
                   const Spacer(),
-                  GestureDetector(
-                    key: const ValueKey('profile_tracks_cast_button'),
-                    onTap: () {},
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.cast_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-              child: Row(
-                children: [
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () {
-                      if (_tracks.isEmpty) return;
-                      _playFrom(Random().nextInt(_tracks.length));
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.shuffle_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () => _playFrom(0),
-                    child: Container(
-                      width: 52,
-                      height: 52,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow_rounded,
-                        color: Colors.black,
-                        size: 28,
+            tracksAsync.maybeWhen(
+              data: (tracks) => Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                child: Row(
+                  children: [
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => _playAll(ref, tracks, shuffle: true),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.shuffle_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    GestureDetector(
+                      onTap: () => _playAll(ref, tracks),
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.black,
+                          size: 28,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              orElse: () => const SizedBox(height: 76),
             ),
             Expanded(
-              child: _buildBody(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+              child: tracksAsync.when(
+                loading: () => const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+                error: (_, __) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Failed to load tracks',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () => ref.invalidate(myTracksProvider),
+                        child: const Text(
+                          'Retry',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                data: (tracks) {
+                  if (tracks.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No tracks yet',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    );
+                  }
 
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      );
-    }
-
-    if (_hasError) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Failed to load tracks',
-              style: TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: _fetchTracks,
-              child: const Text(
-                'Retry',
-                style: TextStyle(color: Colors.white),
+                  return ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: tracks.length,
+                    itemBuilder: (_, index) => _TrackTile(
+                      key: ValueKey(
+                        'profile_tracks_tile_${tracks[index].id ?? index}_$index',
+                      ),
+                      track: tracks[index],
+                      onTap: () => _playFrom(context, ref, tracks, index),
+                    ),
+                  );
+                },
               ),
             ),
           ],
         ),
-      );
-    }
-
-    if (_tracks.isEmpty) {
-      return const Center(
-        child: Text(
-          'No tracks yet',
-          style: TextStyle(color: Colors.white54),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      physics: const BouncingScrollPhysics(),
-      itemCount: _tracks.length,
-      itemBuilder: (_, index) => _TrackTile(
-        track: _tracks[index],
-        onTap: () => _playFrom(index),
       ),
     );
   }
 }
 
 class _TrackTile extends StatelessWidget {
-  final _MyTrack track;
+  final UploadTrack track;
   final VoidCallback onTap;
 
   const _TrackTile({
+    super.key,
     required this.track,
     required this.onTap,
   });
@@ -327,10 +221,9 @@ class _TrackTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sub = Colors.white.withValues(alpha: 0.55);
-    final duration = track.duration;
-    final durationLabel = duration != null
-        ? '${duration.inMinutes}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}'
-        : '';
+    final durationLabel = _formatDuration(track.duration);
+    final isProcessing =
+        track.processingState != null && track.processingState != 'Finished';
 
     return GestureDetector(
       onTap: onTap,
@@ -367,24 +260,37 @@ class _TrackTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    track.artistName,
+                    track.artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: sub, fontSize: 13),
                   ),
-                  if (durationLabel.isNotEmpty) ...[
+                  if (durationLabel.isNotEmpty || isProcessing) ...[
                     const SizedBox(height: 3),
-                    Text(
-                      durationLabel,
-                      style: TextStyle(color: sub, fontSize: 12),
+                    Row(
+                      children: [
+                        if (durationLabel.isNotEmpty)
+                          Text(
+                            durationLabel,
+                            style: TextStyle(color: sub, fontSize: 12),
+                          ),
+                        if (durationLabel.isNotEmpty && isProcessing)
+                          const SizedBox(width: 8),
+                        if (isProcessing)
+                          const Text(
+                            'Processing',
+                            style: TextStyle(
+                              color: Color(0xFFFF5500),
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ],
               ),
             ),
-            GestureDetector(
-              key: const ValueKey('profile_tracks_more_button'),
-              onTap: () {},
-              child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
-            ),
+            Icon(Icons.more_vert_rounded, color: sub, size: 20),
           ],
         ),
       ),
@@ -397,4 +303,11 @@ class _TrackTile extends StatelessWidget {
         color: const Color(0xFF6699BB),
         child: const Icon(Icons.music_note, color: Colors.white70, size: 30),
       );
+
+  String _formatDuration(int? seconds) {
+    if (seconds == null || seconds <= 0) return '';
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = (seconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$remainingSeconds';
+  }
 }

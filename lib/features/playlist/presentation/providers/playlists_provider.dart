@@ -138,6 +138,9 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
                 ownerName: p.ownerName,
                 trackCount: p.trackCount,
                 isPublic: isPublic,
+                permalink: p.permalink,
+                ownerPermalink: p.ownerPermalink,
+                secretToken: p.secretToken,
               )
             : p)
         .toList();
@@ -150,8 +153,7 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
         _kPlaylistsKey, jsonEncode(state.map((p) => p.toJson()).toList()));
   }
 
-  /// PATCH /playlists/{id} title and visibility, then mirrors both changes into
-  /// local state. Calls updatePrivacy unconditionally (idempotent on the server).
+  /// PATCH /playlists/{id} — title, visibility, and description in one call.
   /// Throws on any API failure — state is not mutated on error.
   /// Pass [artworkUrl] when the caller has already uploaded new artwork so the
   /// in-memory Playlist reflects the new cover without a separate reload.
@@ -160,9 +162,14 @@ class PlaylistNotifier extends StateNotifier<List<Playlist>> {
     required String title,
     required bool isPublic,
     String? artworkUrl,
+    String? description,
   }) async {
-    await _repository.updateMetadata(id, title: title);
-    await _repository.updatePrivacy(id, isPublic);
+    await _repository.updateMetadata(
+      id,
+      title: title,
+      isPublic: isPublic,
+      description: description,
+    );
     state = state
         .map((p) => p.id == id
             ? Playlist(

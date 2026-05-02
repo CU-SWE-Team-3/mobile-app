@@ -117,6 +117,7 @@ class PlaylistOptionsSheet extends ConsumerWidget {
             ),
             // Delete
             _optionRow(
+              key: const ValueKey('playlist_delete_button'),
               icon: Icons.delete_outline,
               label: 'Delete',
               onTap: () {
@@ -189,11 +190,13 @@ class PlaylistOptionsSheet extends ConsumerWidget {
   }
 
   Widget _optionRow({
+    Key? key,
     required IconData icon,
     required String label,
     required VoidCallback onTap,
   }) =>
       GestureDetector(
+        key: key,
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

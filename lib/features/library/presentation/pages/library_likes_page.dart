@@ -157,20 +157,6 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                     ),
                   ),
                   const Spacer(),
-                  GestureDetector(
-                    key: const ValueKey('library_likes_cast_button'),
-                    onTap: () {},
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.cast_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -380,6 +366,9 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
                                 physics: const BouncingScrollPhysics(),
                                 itemCount: tracks.length,
                                 itemBuilder: (_, i) => _LikeTile(
+                                  key: ValueKey(
+                                    'library_likes_track_tile_${tracks[i].id}',
+                                  ),
                                   track: tracks[i],
                                   onRemove: () {},
                                 ),
@@ -467,7 +456,7 @@ class _LikeTile extends ConsumerStatefulWidget {
   final TrackSummary track;
   final VoidCallback onRemove;
 
-  const _LikeTile({required this.track, required this.onRemove});
+  const _LikeTile({super.key, required this.track, required this.onRemove});
 
   @override
   ConsumerState<_LikeTile> createState() => _LikeTileState();
@@ -552,7 +541,6 @@ class _LikeTileState extends ConsumerState<_LikeTile> {
         widget.track.artworkUrl!.startsWith('http');
 
     return GestureDetector(
-      key: const ValueKey('library_likes_track_tile'),
       onTap: () {
         if (widget.track.audioUrl != null) {
           ref.read(playerProvider.notifier).playTrack(

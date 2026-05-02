@@ -50,7 +50,7 @@ const _kPlans = [
       'Unlimited audio uploads',
       'Unlimited playlists',
       'Ad-free listening',
-      'Creator analytics',
+      'Scheduled releases',
     ],
   ),
   _PlanData(
@@ -66,7 +66,7 @@ const _kPlans = [
       'Unlimited audio uploads',
       'Unlimited playlists',
       'Ad-free listening',
-      'Creator analytics',
+      'Scheduled releases',
     ],
   ),
   _PlanData(
@@ -153,138 +153,152 @@ class _PricingTiersPageState extends ConsumerState<PricingTiersPage> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Close ──────────────────────────────────────────────────
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  key: const ValueKey('paywall_dismiss_button'),
-                  icon: const Icon(Icons.close, color: Colors.white, size: 26),
-                  onPressed: () => context.pop(),
-                ),
-              ),
-
-              // ── Header ─────────────────────────────────────────────────
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "What's next in music is\nfirst on SoundCloud",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
-                        height: 1.2,
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      'Whether you want to share your sound or enjoy\n'
-                      'ad-free listening, we have the right plan for you.',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ── Active plan banner ──────────────────────────────────────
-              if (sub.isPremium &&
-                  sub.planType != null &&
-                  !sub.cancelAtPeriodEnd)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF00C853).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.verified,
-                            color: Color(0xFF00C853), size: 16),
-                        const SizedBox(width: 8),
-                        Text(
-                          key: const ValueKey('premium_current_plan_label'),
-                          'Active: ${sub.displayPlanName}',
-                          style: const TextStyle(
-                            color: Color(0xFF00C853),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Close ──────────────────────────────────────────────────
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    key: const ValueKey('paywall_dismiss_button'),
+                    icon:
+                        const Icon(Icons.close, color: Colors.white, size: 26),
+                    onPressed: () => context.pop(),
                   ),
                 ),
 
-              // ── Plan cards carousel ─────────────────────────────────────
-              // clipBehavior: Clip.none is required so that the neighboring
-              // cards (visible because viewportFraction < 1) are not clipped.
-              Expanded(
-                child: PageView.builder(
-                  controller: _pageController,
-                  clipBehavior: Clip.none,
-                  itemCount: _kPlans.length,
-                  onPageChanged: _onPageChanged,
-                  itemBuilder: (context, i) {
-                    final plan = _kPlans[i];
-                    final alreadySubscribed =
-                        sub.isPremium && !sub.cancelAtPeriodEnd;
-                    return _PlanCard(
-                      plan: plan,
-                      isLoading: sub.isLoading,
-                      isCurrentPlan:
-                          sub.isPremium && sub.planType == plan.backendPlanType,
-                      onSubscribe: () {
-                        if (alreadySubscribed) {
-                          // Do not call checkout — user is subscribed.
-                          // Navigate to subscription management instead.
-                          context.push('/upgrade/status');
-                        } else {
-                          ref
-                              .read(subscriptionProvider.notifier)
-                              .checkout(plan.backendPlanType);
-                        }
-                      },
-                      error: sub.error,
-                    );
-                  },
-                ),
-              ),
-
-              // ── 4-dot page indicator ────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.only(bottom: 20, top: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(_kPlans.length, (i) {
-                    final active = i == _currentPage;
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      width: active ? 20 : 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: active ? Colors.white : Colors.white38,
-                        borderRadius: BorderRadius.circular(4),
+                // ── Header ─────────────────────────────────────────────────
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "What's next in music is\nfirst on BioBeats",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          height: 1.2,
+                        ),
                       ),
-                    );
-                  }),
+                      SizedBox(height: 10),
+                      Text(
+                        'Whether you want to share your sound or enjoy\n'
+                        'ad-free listening, we have the right plan for you.',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 16),
+
+                // ── Active plan banner ──────────────────────────────────────
+                if (sub.isPremium &&
+                    sub.planType != null &&
+                    !sub.cancelAtPeriodEnd)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00C853).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified,
+                              color: Color(0xFF00C853), size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            key: const ValueKey('premium_current_plan_label'),
+                            'Active: ${sub.displayPlanName}',
+                            style: const TextStyle(
+                              color: Color(0xFF00C853),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // ── Plan cards carousel ─────────────────────────────────────
+                // clipBehavior: Clip.none is required so that the neighboring
+                // cards (visible because viewportFraction < 1) are not clipped.
+                SizedBox(
+                  height: 480,
+                  child: PageView.builder(
+                    controller: _pageController,
+                    clipBehavior: Clip.none,
+                    itemCount: _kPlans.length,
+                    onPageChanged: _onPageChanged,
+                    itemBuilder: (context, i) {
+                      final plan = _kPlans[i];
+                      final alreadySubscribed =
+                          sub.isPremium && !sub.cancelAtPeriodEnd;
+                      return _PlanCard(
+                        key: ValueKey('premium_plan_tile_$i'),
+                        plan: plan,
+                        isLoading: sub.isLoading,
+                        isCurrentPlan: sub.isPremium &&
+                            sub.planType == plan.backendPlanType,
+                        onSubscribe: () {
+                          if (alreadySubscribed) {
+                            context.push('/upgrade/status');
+                          } else {
+                            ref
+                                .read(subscriptionProvider.notifier)
+                                .checkout(plan.backendPlanType);
+                          }
+                        },
+                        error: sub.error,
+                      );
+                    },
+                  ),
+                ),
+
+                // ── 4-dot page indicator ────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, top: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(_kPlans.length, (i) {
+                      final active = i == _currentPage;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: active ? 20 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: active ? Colors.white : Colors.white38,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+
+                // ── "BioBeats supports independent artists" section ─────────
+                const _ArtistSupportSection(),
+
+                // ── Quote card ───────────────────────────────────────────────
+                const _QuoteCard(),
+
+                // ── FAQ accordion ────────────────────────────────────────────
+                const _FaqSection(),
+
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
       ),
@@ -304,6 +318,7 @@ class _PlanCard extends StatelessWidget {
   final String? error;
 
   const _PlanCard({
+    super.key,
     required this.plan,
     required this.isLoading,
     required this.isCurrentPlan,
@@ -356,181 +371,509 @@ class _PlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Container(
-        key: plan.tileKey,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(20),
-          border: isCurrentPlan
-              ? Border.all(color: const Color(0xFF00C853), width: 1.5)
-              : null,
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Audience + billing badges ─────────────────────────────
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  _Badge(label: plan.badge, color: const Color(0xFF1A6FFF)),
-                  _Badge(
-                    label: plan.billingCycle.toUpperCase(),
-                    color: plan.billingCycle == 'Yearly'
-                        ? const Color(0xFF6B1DC8)
-                        : const Color(0xFF444446),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 14),
-
-              // ── Plan name ─────────────────────────────────────────────
-              Row(
-                children: [
-                  Text(
-                    plan.displayName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
+      child: KeyedSubtree(
+        key: const ValueKey('premium_plan_tile'),
+        child: Container(
+          key: plan.tileKey,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(20),
+            border: isCurrentPlan
+                ? Border.all(color: const Color(0xFF00C853), width: 1.5)
+                : null,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Audience + billing badges ─────────────────────────────
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _Badge(label: plan.badge, color: const Color(0xFF1A6FFF)),
+                    _Badge(
+                      label: plan.billingCycle.toUpperCase(),
+                      color: plan.billingCycle == 'Yearly'
+                          ? const Color(0xFF6B1DC8)
+                          : const Color(0xFF444446),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    plan.titleIcon,
-                    style: const TextStyle(
-                      color: Color(0xFFFFAA00),
-                      fontSize: 20,
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 4),
-
-              // ── Price ─────────────────────────────────────────────────
-              Text(
-                plan.price,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
+                  ],
                 ),
-              ),
-              if (plan.priceSecondary != null)
+
+                const SizedBox(height: 14),
+
+                // ── Plan name ─────────────────────────────────────────────
+                Row(
+                  children: [
+                    Text(
+                      plan.displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      plan.titleIcon,
+                      style: const TextStyle(
+                        color: Color(0xFFFFAA00),
+                        fontSize: 20,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 4),
+
+                // ── Price ─────────────────────────────────────────────────
                 Text(
-                  plan.priceSecondary!,
-                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                  plan.price,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
+                if (plan.priceSecondary != null)
+                  Text(
+                    plan.priceSecondary!,
+                    style: const TextStyle(color: Colors.white54, fontSize: 13),
+                  ),
 
-              const SizedBox(height: 20),
+                const SizedBox(height: 20),
 
-              // ── Features ──────────────────────────────────────────────
-              ...plan.features.map(
-                (f) => Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: f == 'Ad-free listening'
-                        ? () => _showPlanAdFreeDialog(context, plan)
-                        : null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.check,
-                              color: Color(0xFFFF5500), size: 20),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              f,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                height: 1.4,
+                // ── Features ──────────────────────────────────────────────
+                ...plan.features.map(
+                  (f) => Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: f == 'Ad-free listening'
+                          ? () => _showPlanAdFreeDialog(context, plan)
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.check,
+                                color: Color(0xFFFF5500), size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                f,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  height: 1.4,
+                                ),
                               ),
                             ),
-                          ),
-                          if (f == 'Ad-free listening')
-                            const Icon(Icons.info_outline,
-                                color: Colors.white38, size: 18),
-                        ],
+                            if (f == 'Ad-free listening')
+                              const Icon(Icons.info_outline,
+                                  color: Colors.white38, size: 18),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 8),
+                const SizedBox(height: 8),
 
-              // ── Subscribe button ──────────────────────────────────────
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  key: const ValueKey('premium_subscribe_button'),
-                  onPressed: isCurrentPlan || isLoading ? null : onSubscribe,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        isCurrentPlan ? const Color(0xFF00C853) : Colors.white,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(32),
+                // ── Subscribe button ──────────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    key: const ValueKey('premium_subscribe_button'),
+                    onPressed: isCurrentPlan || isLoading ? null : onSubscribe,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isCurrentPlan
+                          ? const Color(0xFF00C853)
+                          : Colors.white,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(32),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.black,
+                            ),
+                          )
+                        : Text(
+                            isCurrentPlan ? '✓ Current Plan' : 'Subscribe now',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: Colors.black,
-                          ),
-                        )
-                      : Text(
-                          isCurrentPlan ? '✓ Current Plan' : 'Subscribe now',
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
                 ),
-              ),
 
-              const SizedBox(height: 10),
-
-              RichText(
-                text: const TextSpan(
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
-                  children: [
-                    TextSpan(text: 'Cancel anytime. '),
-                    TextSpan(
-                      text: 'Restrictions apply',
-                      style: TextStyle(color: Color(0xFF1A6FFF)),
-                    ),
-                  ],
-                ),
-              ),
-
-              if (error != null) ...[
                 const SizedBox(height: 10),
-                Text(
-                  error!,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+
+                RichText(
+                  text: const TextSpan(
+                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                    children: [
+                      TextSpan(text: 'Cancel anytime. '),
+                      TextSpan(
+                        text: 'Restrictions apply',
+                        style: TextStyle(color: Color(0xFF1A6FFF)),
+                      ),
+                    ],
+                  ),
                 ),
+
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    error!,
+                    style:
+                        const TextStyle(color: Colors.redAccent, fontSize: 12),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Artist support section
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ArtistSupportSection extends StatelessWidget {
+  const _ArtistSupportSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFFF5500), Color(0xFFFF8800)],
+                  ),
+                ),
+                child:
+                    const Icon(Icons.headphones, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Text(
+                  'BioBeats supports independent artists',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _SupportPoint(
+            icon: Icons.attach_money_rounded,
+            text:
+                '100% of subscription revenue goes directly to the artists you listen to.',
+          ),
+          const SizedBox(height: 12),
+          _SupportPoint(
+            icon: Icons.bar_chart_rounded,
+            text:
+                'Real-time insights help you understand and grow your audience.',
+          ),
+          const SizedBox(height: 12),
+          _SupportPoint(
+            icon: Icons.cloud_upload_rounded,
+            text:
+                'Unlimited uploads mean your catalogue is never held back by limits.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SupportPoint extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _SupportPoint({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: const Color(0xFFFF5500), size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quote card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _QuoteCard extends StatelessWidget {
+  const _QuoteCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1A0A3B), Color(0xFF2E0A54)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border:
+            Border.all(color: const Color(0xFF9B3FFF).withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.format_quote, color: Color(0xFF9B3FFF), size: 32),
+          const SizedBox(height: 12),
+          const Text(
+            'BioBeats gave me the tools to release music on my own terms. '
+            'Unlimited uploads, real fan data, and no gatekeepers.',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontStyle: FontStyle.italic,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF9B3FFF), Color(0xFFE0188A)],
+                  ),
+                ),
+                child: const Center(
+                  child: Text(
+                    'D',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Dina M.',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  Text(
+                    'Electronic Artist · Artist Pro',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FAQ accordion
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _kFaqItems = [
+  (
+    q: 'Can I cancel my subscription at any time?',
+    a: 'Yes. You can cancel any time from your subscription settings. '
+        'Your access continues until the end of the current billing period.',
+  ),
+  (
+    q: 'What happens to my uploads if I downgrade?',
+    a: 'Your uploaded tracks remain live and accessible to listeners. '
+        'You will no longer be able to upload new tracks beyond the free plan limit.',
+  ),
+  (
+    q: 'Is there a free trial?',
+    a: 'New subscribers on Artist Pro can access a 30-day trial. '
+        'No charge is made until the trial period ends.',
+  ),
+  (
+    q: 'What is the difference between Artist Pro and Go+?',
+    a: 'Artist Pro is built for creators — unlimited uploads, scheduled releases, '
+        'and audience insights. Go+ is for listeners — offline downloads and ad-free '
+        'streaming without creator tools.',
+  ),
+  (
+    q: 'Can I switch between plans?',
+    a: 'Yes. You can upgrade or change your plan at any time. '
+        'The new rate takes effect at your next billing cycle.',
+  ),
+];
+
+class _FaqSection extends StatelessWidget {
+  const _FaqSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Frequently asked questions',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ..._kFaqItems
+              .map((item) => _FaqItem(question: item.q, answer: item.a)),
+        ],
+      ),
+    );
+  }
+}
+
+class _FaqItem extends StatefulWidget {
+  final String question;
+  final String answer;
+  const _FaqItem({required this.question, required this.answer});
+
+  @override
+  State<_FaqItem> createState() => _FaqItemState();
+}
+
+class _FaqItemState extends State<_FaqItem> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => setState(() => _expanded = !_expanded),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.question,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.25 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.arrow_forward_ios,
+                        color: Colors.white54, size: 14),
+                  ),
+                ],
+              ),
+            ),
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: Text(
+                  widget.answer,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.6,
+                  ),
+                ),
+              ),
+              crossFadeState: _expanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 220),
+              sizeCurve: Curves.easeInOut,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _Badge extends StatelessWidget {
   final String label;
