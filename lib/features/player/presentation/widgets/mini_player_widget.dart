@@ -50,7 +50,7 @@ class _MiniPlayerWidgetState extends ConsumerState<MiniPlayerWidget> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
-            height: 60,
+            height: 64,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [

@@ -188,15 +188,6 @@ class _AddWidgetsPageState extends State<AddWidgetsPage> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    onPressed: () {},
-                    splashRadius: 24,
-                    icon: const Icon(
-                      Icons.cast_outlined,
-                      color: Colors.white,
-                      size: 33,
-                    ),
-                  ),
                 ],
               ),
             ),

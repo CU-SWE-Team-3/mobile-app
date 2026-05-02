@@ -18,13 +18,10 @@ class _Genre {
   final Color color;
   final int imageWidth;
   final int imageHeight;
+  final String? routeOverride;
   const _Genre(
-    this.name,
-    this.assetPath,
-    this.color,
-    this.imageWidth,
-    this.imageHeight,
-  );
+      this.name, this.assetPath, this.color, this.imageWidth, this.imageHeight,
+      [this.routeOverride]);
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────

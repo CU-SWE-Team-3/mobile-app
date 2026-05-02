@@ -496,9 +496,13 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
       if (!mounted) return;
       setState(() => _localMessages!.removeWhere((m) => m.id == optimisticId));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This track is private and cannot be shared.'),
-          backgroundColor: Color(0xFF3A1A1A),
+        SnackBar(
+          content: Text(
+            attachment == null
+                ? 'This person only accepts messages from people they follow.'
+                : 'This track is private and cannot be shared.',
+          ),
+          backgroundColor: const Color(0xFF3A1A1A),
         ),
       );
     } on DioException catch (e) {
@@ -649,17 +653,17 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   @override
   Widget build(BuildContext context) {
     final currentUserId = ref.watch(sessionUserIdProvider);
-    final messagesAsync = ref.watch(messagesProvider(widget.conversationId));
     final conversationsAsync = ref.watch(conversationsProvider);
+    final conversations = conversationsAsync.valueOrNull ?? const [];
+    final conversationLookupComplete = conversationsAsync.hasValue;
+    final conversationExists =
+        conversations.any((c) => c.id == widget.conversationId);
+    final messagesAsync = ref.watch(messagesProvider(widget.conversationId));
     final otherParticipant = _resolveOtherParticipant(currentUserId) ??
         _fallbackParticipantFromMessages(
           currentUserId,
           messagesAsync.valueOrNull,
         );
-    final conversations = conversationsAsync.valueOrNull ?? const [];
-    final conversationLookupComplete = conversationsAsync.hasValue;
-    final conversationExists =
-        conversations.any((c) => c.id == widget.conversationId);
 
     final isEditing = _editingMessageId != null;
 

@@ -172,6 +172,7 @@ class _FeatureList extends ConsumerWidget {
         final isAdFree = f.title == 'Ad-free Listening';
         final hasAction = f.route != null || isAdFree;
         return ListTile(
+          key: f.tileKey,
           contentPadding:
               const EdgeInsets.symmetric(vertical: 10, horizontal: 0),
           leading: Container(
@@ -296,6 +297,13 @@ class _FeatureList extends ConsumerWidget {
           route: '/upgrade/offline',
         ),
         const _Feature(
+          icon: Icons.playlist_add,
+          title: 'Unlimited Playlists',
+          subtitle: 'Create as many playlists as you need.',
+          route: '/playlist/create',
+          tileKey: ValueKey('premium_unlimited_playlists_feature_tile'),
+        ),
+        const _Feature(
           icon: Icons.cloud_upload_outlined,
           title: 'Uploads (up to 3)',
           subtitle: 'Go+ includes 3 track uploads.',
@@ -317,6 +325,7 @@ class _FeatureList extends ConsumerWidget {
         title: 'Unlimited Playlists',
         subtitle: 'Create as many playlists as you need.',
         route: '/playlist/create',
+        tileKey: ValueKey('premium_unlimited_playlists_feature_tile'),
       ),
       const _Feature(
         icon: Icons.music_off,
@@ -339,11 +348,13 @@ class _Feature {
   final String title;
   final String subtitle;
   final String? route;
+  final Key? tileKey;
 
   const _Feature({
     required this.icon,
     required this.title,
     required this.subtitle,
     this.route,
+    this.tileKey,
   });
 }

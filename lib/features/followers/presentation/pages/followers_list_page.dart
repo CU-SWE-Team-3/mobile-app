@@ -141,12 +141,6 @@ class _FollowersListPageState extends State<FollowersListPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(

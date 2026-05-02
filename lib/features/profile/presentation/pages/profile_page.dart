@@ -980,7 +980,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   void _onSpotlightEdit() {
     final sub = ref.read(subscriptionProvider);
     if (!sub.isPremium) {
-      context.push('/premium');
+      context.push('/upgrade');
       return;
     }
     _showSpotlightPinDialog();
