@@ -924,8 +924,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                                 t.artist,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style:
-                                    TextStyle(color: _sub, fontSize: 12),
+                                style: TextStyle(color: _sub, fontSize: 12),
                               ),
                             ],
                           ),
@@ -945,7 +944,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   void _onSpotlightEdit() {
     final sub = ref.read(subscriptionProvider);
     if (!sub.isPremium) {
-      context.push('/premium');
+      context.push('/upgrade');
       return;
     }
     _showSpotlightPinDialog();
@@ -1017,8 +1016,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         t.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 13),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
                       ),
                       trailing: isPinned
                           ? const Icon(Icons.push_pin,
@@ -1536,7 +1535,6 @@ class _ProfilePlaylist {
           '',
     );
   }
-
 }
 
 // ── track tile ───────────────────────────────────────────────────────────
@@ -1609,7 +1607,8 @@ class _TrackTile extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.play_arrow_rounded, size: 13, color: sub),
+                            Icon(Icons.play_arrow_rounded,
+                                size: 13, color: sub),
                             Text('  ${track.duration}',
                                 style: TextStyle(color: sub, fontSize: 11)),
                           ],
