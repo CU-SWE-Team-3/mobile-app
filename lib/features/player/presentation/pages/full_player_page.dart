@@ -510,6 +510,9 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                       progress: progress,
                                       waveform: playerState
                                           .currentTrack?.waveform,
+                                      fallbackSeed:
+                                          playerState.currentTrack?.id ??
+                                              playerState.currentTrack?.title,
                                       isPlaying: playerState.isPlaying),
                                 ),
                               ),
@@ -1039,10 +1042,14 @@ class _EmojiButton extends StatelessWidget {
 class _WaveformPainter extends CustomPainter {
   final double progress;
   final List<int>? waveform;
+  final String? fallbackSeed;
   final bool isPlaying;
 
   _WaveformPainter(
-      {required this.progress, this.waveform, required this.isPlaying});
+      {required this.progress,
+      this.waveform,
+      this.fallbackSeed,
+      required this.isPlaying});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1050,15 +1057,18 @@ class _WaveformPainter extends CustomPainter {
     final splitX = (size.width * progress).clamp(0.0, size.width);
 
     if (!isPlaying) {
-      const strokeWidth = 2.0;
+      const strokeWidth = 2.5;
       final playedPaint = Paint()
         ..color = AppTheme.primary
         ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
       final unplayedPaint = Paint()
         ..color = Colors.white.withOpacity(0.25)
         ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round
         ..style = PaintingStyle.stroke;
+
       canvas.drawLine(Offset(0, y), Offset(splitX, y), playedPaint);
       canvas.drawLine(Offset(splitX, y), Offset(size.width, y), unplayedPaint);
       if (progress > 0) {
@@ -1075,7 +1085,7 @@ class _WaveformPainter extends CustomPainter {
 
     final heights = (waveform != null && waveform!.isNotEmpty)
         ? waveform!.map((v) => (v / 100.0).clamp(0.05, 1.0)).toList()
-        : _buildFallbackHeights(size.width);
+        : _buildFallbackHeights(size.width, fallbackSeed);
 
     final barCount = heights.length;
     if (barCount == 0) return;
@@ -1101,14 +1111,35 @@ class _WaveformPainter extends CustomPainter {
       canvas.drawRRect(
           rect, i / barCount < progress ? playedPaint : unplayedPaint);
     }
+
+    if (progress > 0) {
+      canvas.drawCircle(
+        Offset(splitX, y),
+        4.5,
+        Paint()
+          ..color = AppTheme.primary
+          ..style = PaintingStyle.fill,
+      );
+    }
   }
 
-  List<double> _buildFallbackHeights(double width) {
+  List<double> _buildFallbackHeights(double width, String? seed) {
     final count = (width / 6).floor().clamp(18, 72);
+    final seedValue = seed?.codeUnits.fold<int>(
+          0,
+          (sum, unit) => (sum + unit) & 0x7fffffff,
+        ) ??
+        0;
     return List<double>.generate(count, (index) {
-      final waveA = (sin(index * 0.52) + 1) / 2;
-      final waveB = (cos(index * 0.21) + 1) / 2;
-      final value = (waveA * 0.65) + (waveB * 0.35);
+      final phaseA = (seedValue % 31) / 10.0;
+      final phaseB = (seedValue % 47) / 13.0;
+      final rateA = 0.34 + (seedValue % 9) * 0.035;
+      final rateB = 0.16 + (seedValue % 7) * 0.028;
+      final mix = 0.45 + (seedValue % 30) / 100.0;
+      final waveA = (sin(index * rateA + phaseA) + 1) / 2;
+      final waveB = (cos(index * rateB + phaseB) + 1) / 2;
+      final waveC = (sin((index + seedValue % 13) * 0.91) + 1) / 2;
+      final value = (waveA * mix) + (waveB * (0.8 - mix / 2)) + (waveC * 0.2);
       return value.clamp(0.18, 0.92);
     });
   }
@@ -1117,5 +1148,6 @@ class _WaveformPainter extends CustomPainter {
   bool shouldRepaint(_WaveformPainter old) =>
       old.progress != progress ||
       old.isPlaying != isPlaying ||
+      old.fallbackSeed != fallbackSeed ||
       old.waveform != waveform;
 }

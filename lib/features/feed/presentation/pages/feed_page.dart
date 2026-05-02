@@ -172,8 +172,22 @@ class _FeedPageState extends ConsumerState<FeedPage> {
     if (index < 0 || index >= tracks.length) return;
     setState(() => _currentPage = index);
     final track = tracks[index];
-    ref.read(playerProvider.notifier).playTrack(track.toPlayerTrack());
+    _playDiscoverPreview(track);
     _maybeLoadMoreFollowing(index, tracks.length);
+  }
+
+  Future<void> _playDiscoverPreview(FeedTrack track) async {
+    final playerTrack = track.toPlayerTrack();
+    final notifier = ref.read(playerProvider.notifier);
+    await notifier.playTrack(playerTrack);
+
+    final duration = playerTrack.duration ?? Duration.zero;
+    if (duration <= const Duration(seconds: 30)) return;
+
+    final start = Duration(
+      milliseconds: ((duration.inMilliseconds - 30000) / 2).round(),
+    );
+    await notifier.seekTo(start);
   }
 
   void _maybeLoadMoreFollowing(int index, int totalTracks) {
@@ -203,9 +217,13 @@ class _FeedPageState extends ConsumerState<FeedPage> {
         if ((prev == null || prev.tracks.isEmpty) &&
             next.tracks.isNotEmpty &&
             _currentPage == 0) {
-          ref
-              .read(playerProvider.notifier)
-              .playTrack(next.tracks[0].toPlayerTrack());
+          if (_tab == _Tab.discover) {
+            _playDiscoverPreview(next.tracks[0]);
+          } else {
+            ref
+                .read(playerProvider.notifier)
+                .playTrack(next.tracks[0].toPlayerTrack());
+          }
         }
       },
     );
@@ -215,10 +233,10 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 16),
+            if (_tab == _Tab.following) const SizedBox(height: 8),
 
             // ── Toggle buttons ─────────────────────────────────────
-            Center(
+            if (_tab == _Tab.following) Center(
               child: Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFF1A1A1A),
@@ -249,16 +267,63 @@ class _FeedPageState extends ConsumerState<FeedPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            if (_tab == _Tab.following) const SizedBox(height: 8),
 
             // â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            Expanded(child: _buildFeedBody(feedState)),
+            Expanded(
+              child: _tab == _Tab.discover
+                  ? Stack(
+                      children: [
+                        _buildFeedBody(feedState),
+                        Positioned(
+                          top: 8,
+                          left: 0,
+                          right: 0,
+                          child: _buildTransparentDiscoverTabs(),
+                        ),
+                      ],
+                    )
+                  : _buildFeedBody(feedState),
+            ),
 
             // â”€â”€ Mini player bar (Following tab only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            MiniPlayerWidget(),
+            if (_tab == _Tab.following) MiniPlayerWidget(),
             // ── Body ───────────────────────────────────────────────
 
             // ── Mini player bar (Following tab only) ───────────────
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransparentDiscoverTabs() {
+    final selectedColor = Colors.black.withValues(alpha: 0.34);
+
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(32),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _TabButton(
+              key: const ValueKey('feed_discover_tab_button_overlay'),
+              label: 'Discover',
+              isSelected: _tab == _Tab.discover,
+              selectedColor: selectedColor,
+              onTap: () => _switchTab(_Tab.discover),
+            ),
+            _TabButton(
+              key: const ValueKey('feed_following_tab_button_overlay'),
+              label: 'Following',
+              isSelected: _tab == _Tab.following,
+              selectedColor: selectedColor,
+              onTap: () => _switchTab(_Tab.following),
+            ),
           ],
         ),
       ),
@@ -396,12 +461,14 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 class _TabButton extends StatelessWidget {
   final String label;
   final bool isSelected;
+  final Color selectedColor;
   final VoidCallback onTap;
 
   const _TabButton({
     super.key,
     required this.label,
     required this.isSelected,
+    this.selectedColor = const Color(0xFF2A2A2A),
     required this.onTap,
   });
 
@@ -413,7 +480,7 @@ class _TabButton extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF2A2A2A) : Colors.transparent,
+          color: isSelected ? selectedColor : Colors.transparent,
           borderRadius: BorderRadius.circular(32),
         ),
         child: Text(

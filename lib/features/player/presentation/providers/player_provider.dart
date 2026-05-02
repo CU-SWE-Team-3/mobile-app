@@ -533,6 +533,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
     state = state.copyWith(
       currentTrack: current.copyWith(
+        id: current.id.isEmpty ? details.id : current.id,
         title: details.title.isNotEmpty ? details.title : current.title,
         artist: details.artist.isNotEmpty ? details.artist : current.artist,
         audioUrl: details.audioUrl.isNotEmpty ? details.audioUrl : current.audioUrl,
@@ -561,6 +562,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         trackId: track.id,
         position: position.inSeconds.toDouble(),
         isPlaying: state.isPlaying,
+        queueContext: state.queueContext,
+        contextId: state.contextId,
       );
     });
   }
