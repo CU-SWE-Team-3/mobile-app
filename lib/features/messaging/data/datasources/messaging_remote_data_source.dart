@@ -82,7 +82,7 @@ class MessagingRemoteDataSource {
           attachmentId != null &&
           attachmentType.isNotEmpty &&
           attachmentId.isNotEmpty) ...{
-        'attachmentType': attachmentType.toLowerCase(),
+        'attachmentType': _attachmentTypeForApi(attachmentType),
         'attachmentId': attachmentId,
       },
     };
@@ -176,5 +176,16 @@ class MessagingRemoteDataSource {
     }
 
     return const [];
+  }
+
+  String _attachmentTypeForApi(String type) {
+    switch (type.trim().toLowerCase()) {
+      case 'track':
+        return 'Track';
+      case 'playlist':
+        return 'Playlist';
+      default:
+        return type.trim();
+    }
   }
 }

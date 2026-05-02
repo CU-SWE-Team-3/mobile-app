@@ -1308,7 +1308,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   // ── playlist row ─────────────────────────────────────────────────────
   Widget _playlistRow(BuildContext context) {
-    if (_playlistsLoading) {
+    final visiblePlaylists = _playlists;
+
+    if (_playlistsLoading && visiblePlaylists.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
         child: Center(
@@ -1321,7 +1323,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       );
     }
-    if (_playlists.isEmpty) {
+    if (visiblePlaylists.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Text('No playlists yet',
@@ -1333,9 +1335,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _playlists.length,
+        itemCount: visiblePlaylists.length,
         itemBuilder: (_, i) {
-          final p = _playlists[i];
+          final p = visiblePlaylists[i];
           // Artwork chain: own HTTPS artwork → first track HTTPS artwork → placeholder
           final cardArtwork = () {
             final own = p.artworkUrl;
@@ -1534,6 +1536,7 @@ class _ProfilePlaylist {
           '',
     );
   }
+
 }
 
 // ── track tile ───────────────────────────────────────────────────────────
@@ -1553,70 +1556,81 @@ class _TrackTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sub = Colors.white.withOpacity(0.55);
-    return GestureDetector(
-      key: const ValueKey('profile_track_tile'),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: (artworkUrl != null && artworkUrl!.isNotEmpty)
-                  ? CachedNetworkImage(
-                      imageUrl: artworkUrl!,
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
-                        width: 56,
-                        height: 56,
-                        color: const Color(0xFF2A2A2A),
-                        child: const Icon(Icons.music_note,
-                            color: Colors.white38, size: 24),
-                      ),
-                    )
-                  : Container(
-                      width: 56,
-                      height: 56,
-                      color: const Color(0xFF2A2A2A),
-                      child: const Icon(Icons.music_note,
-                          color: Colors.white38, size: 24),
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              key: const ValueKey('profile_track_tile'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: Row(
                 children: [
-                  Text(track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(track.artist,
-                      style: TextStyle(color: sub, fontSize: 12)),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(Icons.play_arrow_rounded, size: 13, color: sub),
-                      Text('  ${track.duration}',
-                          style: TextStyle(color: sub, fontSize: 11)),
-                    ],
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: (artworkUrl != null && artworkUrl!.isNotEmpty)
+                        ? CachedNetworkImage(
+                            imageUrl: artworkUrl!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(
+                              width: 56,
+                              height: 56,
+                              color: const Color(0xFF2A2A2A),
+                              child: const Icon(Icons.music_note,
+                                  color: Colors.white38, size: 24),
+                            ),
+                          )
+                        : Container(
+                            width: 56,
+                            height: 56,
+                            color: const Color(0xFF2A2A2A),
+                            child: const Icon(Icons.music_note,
+                                color: Colors.white38, size: 24),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(track.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 2),
+                        Text(track.artist,
+                            style: TextStyle(color: sub, fontSize: 12)),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.play_arrow_rounded, size: 13, color: sub),
+                            Text('  ${track.duration}',
+                                style: TextStyle(color: sub, fontSize: 11)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            GestureDetector(
-              key: const ValueKey('profile_track_more_button'),
-              onTap: onMore,
+          ),
+          GestureDetector(
+            key: const ValueKey('profile_track_more_button'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onMore,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

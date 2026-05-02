@@ -943,7 +943,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
               ),
             ),
             IconButton(
-              onPressed: () => _showTrackOptionsSheet(track.id),
+              onPressed: () => _showTrackOptionsSheet(track),
               icon: const Icon(Icons.more_horiz, color: Colors.white54),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -956,7 +956,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
     );
   }
 
-  void _showTrackOptionsSheet(String trackId) {
+  void _showTrackOptionsSheet(_Track track) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1A1A1A),
@@ -964,7 +964,17 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => TrackOptionsSheet(trackId: trackId),
+      builder: (_) => TrackOptionsSheet(
+        trackId: track.id,
+        title: track.title,
+        artistName: track.artistName,
+        artworkUrl: track.artworkUrl.isEmpty ? null : track.artworkUrl,
+        audioUrl: track.hlsUrl.isEmpty ? null : track.hlsUrl,
+        waveform: track.waveform,
+        artistId: track.artistId.isEmpty ? null : track.artistId,
+        artistPermalink: track.artistPermalink.isEmpty ? null : track.artistPermalink,
+        trackPermalink: track.permalink.isEmpty ? null : track.permalink,
+      ),
     );
   }
 
@@ -1253,7 +1263,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
             ),
           ),
           IconButton(
-            onPressed: () => _showTrackOptionsSheet(track.id),
+            onPressed: () => _showTrackOptionsSheet(track),
             icon: const Icon(Icons.more_horiz, color: Colors.white54, size: 24),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -1328,7 +1338,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
                 ),
               ),
             IconButton(
-              onPressed: () => _showTrackOptionsSheet(track.id),
+              onPressed: () => _showTrackOptionsSheet(track),
               icon: const Icon(Icons.more_horiz, color: Colors.white54),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),

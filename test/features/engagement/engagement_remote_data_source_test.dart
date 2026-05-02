@@ -64,17 +64,39 @@ void main() {
   // ── likeTrack / unlikeTrack ──────────────────────────────────────────────
 
   group('likeTrack', () {
-    test('issues POST /tracks/{id}/like', () async {
-      when(() => mockDio.post('/tracks/abc/like'))
-          .thenAnswer((_) async => successResponse({}));
+    test('issues POST /tracks/{id}/like with Track target', () async {
+      when(() => mockDio.post(
+            '/tracks/abc/like',
+            data: {'targetModel': 'Track'},
+          )).thenAnswer((_) async => successResponse({}));
 
       await dataSource.likeTrack('abc');
 
-      verify(() => mockDio.post('/tracks/abc/like')).called(1);
+      verify(() => mockDio.post(
+            '/tracks/abc/like',
+            data: {'targetModel': 'Track'},
+          )).called(1);
+    });
+
+    test('can issue POST with Playlist target', () async {
+      when(() => mockDio.post(
+            '/tracks/playlist-1/like',
+            data: {'targetModel': 'Playlist'},
+          )).thenAnswer((_) async => successResponse({}));
+
+      await dataSource.likeTrack('playlist-1', targetModel: 'Playlist');
+
+      verify(() => mockDio.post(
+            '/tracks/playlist-1/like',
+            data: {'targetModel': 'Playlist'},
+          )).called(1);
     });
 
     test('propagates DioException on failure', () async {
-      when(() => mockDio.post(any())).thenThrow(
+      when(() => mockDio.post(
+            any(),
+            data: any(named: 'data'),
+          )).thenThrow(
         DioException(requestOptions: RequestOptions(path: '')),
       );
 
@@ -86,13 +108,18 @@ void main() {
   });
 
   group('unlikeTrack', () {
-    test('issues DELETE /tracks/{id}/like', () async {
-      when(() => mockDio.delete('/tracks/abc/like'))
-          .thenAnswer((_) async => successResponse({}));
+    test('issues DELETE /tracks/{id}/like with Track target', () async {
+      when(() => mockDio.delete(
+            '/tracks/abc/like',
+            data: {'targetModel': 'Track'},
+          )).thenAnswer((_) async => successResponse({}));
 
       await dataSource.unlikeTrack('abc');
 
-      verify(() => mockDio.delete('/tracks/abc/like')).called(1);
+      verify(() => mockDio.delete(
+            '/tracks/abc/like',
+            data: {'targetModel': 'Track'},
+          )).called(1);
     });
   });
 
@@ -100,23 +127,33 @@ void main() {
 
   group('repostTrack', () {
     test('issues POST /tracks/{id}/repost', () async {
-      when(() => mockDio.post('/tracks/xyz/repost'))
-          .thenAnswer((_) async => successResponse({}));
+      when(() => mockDio.post(
+            '/tracks/xyz/repost',
+            data: {'targetModel': 'Track'},
+          )).thenAnswer((_) async => successResponse({}));
 
       await dataSource.repostTrack('xyz');
 
-      verify(() => mockDio.post('/tracks/xyz/repost')).called(1);
+      verify(() => mockDio.post(
+            '/tracks/xyz/repost',
+            data: {'targetModel': 'Track'},
+          )).called(1);
     });
   });
 
   group('unRepostTrack', () {
     test('issues DELETE /tracks/{id}/repost', () async {
-      when(() => mockDio.delete('/tracks/xyz/repost'))
-          .thenAnswer((_) async => successResponse({}));
+      when(() => mockDio.delete(
+            '/tracks/xyz/repost',
+            data: {'targetModel': 'Track'},
+          )).thenAnswer((_) async => successResponse({}));
 
       await dataSource.unRepostTrack('xyz');
 
-      verify(() => mockDio.delete('/tracks/xyz/repost')).called(1);
+      verify(() => mockDio.delete(
+            '/tracks/xyz/repost',
+            data: {'targetModel': 'Track'},
+          )).called(1);
     });
   });
 
