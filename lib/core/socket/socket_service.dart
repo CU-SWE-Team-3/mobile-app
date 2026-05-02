@@ -23,6 +23,7 @@ class SocketService {
   String? _blockedTokenFingerprint;
   final Set<String> _recentLocalNotificationMessageIds = {};
   final Set<String> _activeConversationIds = {};
+  final Map<String, DateTime> _recentNotificationPopups = {};
 
   final _newMessageController =
       StreamController<Map<String, dynamic>>.broadcast();
@@ -142,12 +143,12 @@ class SocketService {
       _activeConversationIds.contains(conversationId);
 
   // ── NEW ──────────────────────────────────────────────────────────────────
-  void sendTyping(String conversationId) {
-    _socket?.emit('typing', {'conversationId': conversationId});
+  void sendTyping(String receiverId) {
+    _socket?.emit('typing', {'receiverId': receiverId});
   }
 
-  void sendStoppedTyping(String conversationId) {
-    _socket?.emit('stop_typing', {'conversationId': conversationId});
+  void sendStoppedTyping(String receiverId) {
+    _socket?.emit('stop_typing', {'receiverId': receiverId});
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -466,6 +467,9 @@ class SocketService {
       if ((notification['type']?.toString().toUpperCase() ?? '') == 'MESSAGE') {
         return;
       }
+      if (_shouldSuppressNotificationPopup(notification)) {
+        return;
+      }
       unawaited(
         LocalNotificationService.showNotification(
           title: _notificationTitle(notification),
@@ -476,6 +480,33 @@ class SocketService {
     } catch (e) {
       debugPrint('[SocketService] new_notification parse error: $e');
     }
+  }
+
+  bool _shouldSuppressNotificationPopup(Map<String, dynamic> json) {
+    final key = _notificationDedupeKey(json);
+    if (key.isEmpty) return false;
+    final now = DateTime.now();
+    _recentNotificationPopups.removeWhere(
+      (_, shownAt) => now.difference(shownAt) > const Duration(minutes: 10),
+    );
+    final lastShown = _recentNotificationPopups[key];
+    if (lastShown != null &&
+        now.difference(lastShown) < const Duration(minutes: 10)) {
+      return true;
+    }
+    _recentNotificationPopups[key] = now;
+    return false;
+  }
+
+  String _notificationDedupeKey(Map<String, dynamic> json) {
+    final id =
+        (json['_id'] ?? json['id'] ?? json['notificationId'])?.toString() ?? '';
+    if (id.isNotEmpty) return 'id:$id';
+    final type = (json['type'] ?? '').toString().toUpperCase();
+    final body = _notificationBody(json).trim().toLowerCase();
+    final actor = _notificationActor(json).trim().toLowerCase();
+    if (type.isEmpty && body.isEmpty) return '';
+    return '$type|$actor|$body';
   }
 
   String _notificationPayload(Map<String, dynamic> json) {
@@ -492,6 +523,11 @@ class SocketService {
         final permalink = actor['permalink']?.toString();
         if (permalink != null && permalink.trim().isNotEmpty) {
           return '/user/${permalink.replaceFirst('@', '')}';
+        }
+        return '/notifications';
+      case 'SYSTEM':
+        if (_isRecommendationNotification(json)) {
+          return '/home/recommended';
         }
         return '/notifications';
       default:
@@ -533,6 +569,13 @@ class SocketService {
     if (snippet != null && snippet.trim().isNotEmpty) return snippet;
     if (trackTitle != null && trackTitle.trim().isNotEmpty) return trackTitle;
     return 'Tap to open BioBeats';
+  }
+
+  bool _isRecommendationNotification(Map<String, dynamic> json) {
+    final body = _notificationBody(json).toLowerCase();
+    return body.contains('picked for you') ||
+        body.contains('recommended') ||
+        body.contains('new tracks');
   }
 
   String _notificationActor(Map<String, dynamic> json) {

@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
-import 'package:soundcloud_clone/features/player/domain/entities/player_track.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 
 class _Track {
@@ -141,7 +140,7 @@ class _RecommendedTracksPageState extends ConsumerState<RecommendedTracksPage> {
       );
     }
     if (_error != null) {
-      return Center(
+      return const Center(
         child: Text(
           'Failed to load tracks',
           style: TextStyle(color: Colors.white54, fontSize: 14),

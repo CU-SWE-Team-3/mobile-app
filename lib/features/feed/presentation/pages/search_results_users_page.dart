@@ -32,14 +32,54 @@ class _SearchResultsUsersPageState extends State<SearchResultsUsersPage> {
   Future<Set<String>> _fetchBlockedIds() async {
     try {
       final response = await dioClient.dio.get('/network/blocked-users');
-      final raw = response.data['data'];
-      if (raw is List) {
-        return raw.map((u) => u['_id'] as String).toSet();
-      }
+      return _extractBlockedList(response.data)
+          .map(_blockedUserId)
+          .where((id) => id.isNotEmpty)
+          .toSet();
     } on DioException {
       // proceed with empty set
     }
     return {};
+  }
+
+  List<dynamic> _extractBlockedList(dynamic raw) {
+    if (raw is List) return raw;
+    if (raw is! Map) return const [];
+    final data = raw['data'];
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in const ['blockedUsers', 'users', 'blocked']) {
+        final value = data[key];
+        if (value is List) return value;
+      }
+    }
+    for (final key in const ['blockedUsers', 'users', 'blocked']) {
+      final value = raw[key];
+      if (value is List) return value;
+    }
+    return const [];
+  }
+
+  String _blockedUserId(dynamic raw) {
+    if (raw == null) return '';
+    if (raw is String) return raw;
+    if (raw is! Map) return raw.toString();
+    final map = Map<String, dynamic>.from(raw);
+    for (final key in const ['_id', 'id', 'userId', 'blockedUserId']) {
+      final value = map[key]?.toString() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    for (final key in const ['blockedUser', 'user', 'target']) {
+      final value = map[key];
+      if (value is Map) {
+        final id = _blockedUserId(value);
+        if (id.isNotEmpty) return id;
+      } else {
+        final id = value?.toString() ?? '';
+        if (id.isNotEmpty) return id;
+      }
+    }
+    return '';
   }
 
   Future<void> _search(String query) async {

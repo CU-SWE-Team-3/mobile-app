@@ -21,14 +21,79 @@ class SearchRepository {
   // ── API ──────────────────────────────────────────────────────────────────────
 
   Future<SearchResults> globalSearch(String query) async {
-    final response = await _dio.get(
-      '/tracks/search',
-      queryParameters: {'q': query, 'page': 1, 'limit': 20},
+    final responses = await Future.wait<dynamic>([
+      _dio.get(
+        '/tracks/search',
+        queryParameters: {'q': query, 'page': 1, 'limit': 20},
+      ),
+      _fetchBlockedIds(),
+    ]);
+    final results = _parse((responses[0] as Response).data);
+    final blockedIds = responses[1] as Set<String>;
+    if (blockedIds.isEmpty) return results;
+    return (
+      tracks: results.tracks,
+      users: results.users.where((u) => !blockedIds.contains(u.id)).toList(),
+      playlists: results.playlists,
     );
-    return _parse(response.data);
   }
 
-  SearchResults _parse(dynamic responseData) {
+  Future<Set<String>> _fetchBlockedIds() async {
+    try {
+      final response = await _dio.get('/network/blocked-users');
+      return _extractBlockedList(response.data)
+          .map(_blockedUserId)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    } on DioException {
+      return {};
+    }
+  }
+
+  List<dynamic> _extractBlockedList(dynamic raw) {
+    if (raw is List) return raw;
+    if (raw is! Map) return const [];
+    final data = raw['data'];
+    if (data is List) return data;
+    if (data is Map) {
+      for (final key in const ['blockedUsers', 'users', 'blocked']) {
+        final value = data[key];
+        if (value is List) return value;
+      }
+    }
+    for (final key in const ['blockedUsers', 'users', 'blocked']) {
+      final value = raw[key];
+      if (value is List) return value;
+    }
+    return const [];
+  }
+
+  String _blockedUserId(dynamic raw) {
+    if (raw == null) return '';
+    if (raw is String) return raw;
+    if (raw is! Map) return raw.toString();
+    final map = Map<String, dynamic>.from(raw);
+    for (final key in const ['_id', 'id', 'userId', 'blockedUserId']) {
+      final value = map[key]?.toString() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    for (final key in const ['blockedUser', 'user', 'target']) {
+      final value = map[key];
+      if (value is Map) {
+        final id = _blockedUserId(value);
+        if (id.isNotEmpty) return id;
+      } else {
+        final id = value?.toString() ?? '';
+        if (id.isNotEmpty) return id;
+      }
+    }
+    return '';
+  }
+
+  SearchResults _parse(
+    dynamic responseData, {
+    SearchEntityType? forcedType,
+  }) {
     List<SearchResultTrack> tracks = [];
     List<SearchResultUser> users = [];
     List<SearchResultPlaylist> playlists = [];
@@ -65,7 +130,7 @@ class SearchRepository {
     } else if (data is List) {
       // Flat list — discriminate by 'type' field, default to track
       for (final item in data.whereType<Map<String, dynamic>>()) {
-        final kind = item['type'] as String?;
+        final kind = forcedType?.name ?? item['type'] as String?;
         if (kind == 'user') {
           users.add(SearchResultUser.fromJson(item));
         } else if (kind == 'playlist') {

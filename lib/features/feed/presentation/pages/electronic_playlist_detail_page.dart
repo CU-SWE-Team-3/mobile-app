@@ -1020,4 +1020,3 @@ class _ElectronicPlaylistDetailPageState
         child: const Icon(Icons.music_note, color: Colors.white38, size: 24),
       );
 }
-

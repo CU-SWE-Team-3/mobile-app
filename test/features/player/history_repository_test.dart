@@ -21,7 +21,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    repo = HistoryRepository();
+    repo = HistoryRepository('test-user''test_user');
   });
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ void main() {
 
     test('returns empty list when stored value is malformed JSON', () async {
       SharedPreferences.setMockInitialValues({
-        'listening_history_v1': '[[[ not valid json',
+        'listening_history_v1:test-user': '[[[ not valid json',
       });
       final entries = await repo.load();
       expect(entries, isEmpty);
@@ -73,7 +73,7 @@ void main() {
     test('returns empty list when stored value is valid JSON but wrong shape',
         () async {
       SharedPreferences.setMockInitialValues({
-        'listening_history_v1': '"just a string"',
+        'listening_history_v1:test-user': '"just a string"',
       });
       final entries = await repo.load();
       expect(entries, isEmpty);
@@ -114,13 +114,12 @@ void main() {
       );
       await repo.save([entry]);
       final loaded = await repo.load();
-      expect(loaded.first.track.duration,
-          const Duration(minutes: 3, seconds: 22));
+      expect(
+          loaded.first.track.duration, const Duration(minutes: 3, seconds: 22));
     });
 
     test('preserves artistId through roundtrip', () async {
-      final entry =
-          makeEntry(track: makeTrack(artistId: 'artist-uuid-99'));
+      final entry = makeEntry(track: makeTrack(artistId: 'artist-uuid-99'));
       await repo.save([entry]);
       final loaded = await repo.load();
       expect(loaded.first.track.artistId, 'artist-uuid-99');

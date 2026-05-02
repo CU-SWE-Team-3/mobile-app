@@ -893,9 +893,8 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Widget _buildTrendingPreviewTile(List<_Track> tracks, int index) {
     final track = tracks[index];
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        !track.artworkUrl!.contains('default-artwork');
+    final hasArtwork = track.artworkUrl.isNotEmpty &&
+        !track.artworkUrl.contains('default-artwork');
 
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
@@ -907,7 +906,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
               borderRadius: BorderRadius.circular(8),
               child: hasArtwork
                   ? CachedNetworkImage(
-                      imageUrl: track.artworkUrl!,
+                      imageUrl: track.artworkUrl,
                       width: 52,
                       height: 52,
                       fit: BoxFit.cover,
@@ -944,7 +943,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
               ),
             ),
             IconButton(
-              onPressed: () => _showTrackOptionsSheet(track.id),
+              onPressed: () => _showTrackOptionsSheet(track),
               icon: const Icon(Icons.more_horiz, color: Colors.white54),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -957,7 +956,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
     );
   }
 
-  void _showTrackOptionsSheet(String trackId) {
+  void _showTrackOptionsSheet(_Track track) {
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1A1A1A),
@@ -965,7 +964,17 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => TrackOptionsSheet(trackId: trackId),
+      builder: (_) => TrackOptionsSheet(
+        trackId: track.id,
+        title: track.title,
+        artistName: track.artistName,
+        artworkUrl: track.artworkUrl.isEmpty ? null : track.artworkUrl,
+        audioUrl: track.hlsUrl.isEmpty ? null : track.hlsUrl,
+        waveform: track.waveform,
+        artistId: track.artistId.isEmpty ? null : track.artistId,
+        artistPermalink: track.artistPermalink.isEmpty ? null : track.artistPermalink,
+        trackPermalink: track.permalink.isEmpty ? null : track.permalink,
+      ),
     );
   }
 
@@ -1207,9 +1216,8 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Widget _buildFeaturedTrackRow(List<_Track> tracks, int index) {
     final track = tracks[index];
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        !track.artworkUrl!.contains('default-artwork');
+    final hasArtwork = track.artworkUrl.isNotEmpty &&
+        !track.artworkUrl.contains('default-artwork');
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
       child: Row(
@@ -1218,7 +1226,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
             borderRadius: BorderRadius.circular(10),
             child: hasArtwork
                 ? CachedNetworkImage(
-                    imageUrl: track.artworkUrl!,
+                    imageUrl: track.artworkUrl,
                     width: 52,
                     height: 52,
                     fit: BoxFit.cover,
@@ -1255,7 +1263,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
             ),
           ),
           IconButton(
-            onPressed: () => _showTrackOptionsSheet(track.id),
+            onPressed: () => _showTrackOptionsSheet(track),
             icon: const Icon(Icons.more_horiz, color: Colors.white54, size: 24),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -1269,9 +1277,8 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Widget _buildTrackListTile(List<_Track> tracks, int index) {
     final track = tracks[index];
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        !track.artworkUrl!.contains('default-artwork');
+    final hasArtwork = track.artworkUrl.isNotEmpty &&
+        !track.artworkUrl.contains('default-artwork');
 
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
@@ -1283,7 +1290,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
               borderRadius: BorderRadius.circular(8),
               child: hasArtwork
                   ? CachedNetworkImage(
-                      imageUrl: track.artworkUrl!,
+                      imageUrl: track.artworkUrl,
                       width: 50,
                       height: 50,
                       fit: BoxFit.cover,
@@ -1331,7 +1338,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
                 ),
               ),
             IconButton(
-              onPressed: () => _showTrackOptionsSheet(track.id),
+              onPressed: () => _showTrackOptionsSheet(track),
               icon: const Icon(Icons.more_horiz, color: Colors.white54),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -1346,7 +1353,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
 
   Widget _buildPlaylistListCard(_PlaylistInfo playlist) {
     final hasArtwork =
-        playlist.artworkUrl != null && playlist.artworkUrl!.isNotEmpty;
+        playlist.artworkUrl.isNotEmpty;
 
     return GestureDetector(
       onTap: () => context.push(
@@ -1368,7 +1375,7 @@ class _RnbGenrePageState extends ConsumerState<RnbGenrePage>
                 borderRadius: BorderRadius.circular(12),
                 child: hasArtwork
                     ? CachedNetworkImage(
-                        imageUrl: playlist.artworkUrl!,
+                        imageUrl: playlist.artworkUrl,
                         width: 72,
                         height: 72,
                         fit: BoxFit.cover,

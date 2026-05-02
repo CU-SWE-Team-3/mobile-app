@@ -132,7 +132,8 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
       final feedItems = _extractFeedItems(feedResponse.data);
       final pagination = _extractPagination(feedResponse.data);
 
-      // Fetch current user's own reposts; prepend them silently on failure.
+      // Fetch current user's own reposts; keep them before followed users'
+      // reposts.
       var myRepostItems = <Map<String, dynamic>>[];
       if (userId.isNotEmpty) {
         try {
@@ -212,9 +213,7 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     }
   }
 
-  // Extracts track-backed activity from /feed response. LIKE is included
-  // because it represents a followed user recommending a real track; PROMOTED
-  // remains excluded because ads are not playable feed tracks.
+  // Extracts only reposted tracks from /feed response.
   List<Map<String, dynamic>> _extractFeedItems(dynamic data) {
     final dataMap = data['data'];
     if (dataMap is! Map<String, dynamic>) return [];
@@ -223,11 +222,7 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     for (final raw in items) {
       if (raw is! Map<String, dynamic>) continue;
       final activityType = raw['activityType'] as String? ?? '';
-      if (activityType != 'TRACK_UPLOAD' &&
-          activityType != 'REPOST' &&
-          activityType != 'LIKE') {
-        continue;
-      }
+      if (activityType != 'REPOST') continue;
       final trackData = _asStringMap(raw['target']);
       if (trackData == null) continue;
       final actorsList = raw['actors'] as List?;
@@ -235,14 +230,9 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
           ? _asStringMap(actorsList.first)
           : null;
       final timestamp = raw['activityDate'] as String?;
-      final normalisedType = activityType == 'REPOST'
-          ? 'repost'
-          : activityType == 'LIKE'
-              ? 'like'
-              : 'post';
       result.add(<String, dynamic>{
         ...trackData,
-        '_activityType': normalisedType,
+        '_activityType': 'repost',
         if (actor != null) '_actor': actor,
         if (timestamp != null) '_activityTimestamp': timestamp,
       });

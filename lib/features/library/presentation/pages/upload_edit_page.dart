@@ -4,8 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
 
+import '../../../../core/network/dio_client.dart';
 import '../providers/upload_provider.dart';
+import '../providers/my_tracks_provider.dart';
+import '../../domain/entities/upload_track.dart';
 
 class UploadEditPage extends ConsumerStatefulWidget {
   const UploadEditPage({super.key});
@@ -26,6 +30,12 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
   DateTime? _scheduleDate;
   TimeOfDay? _scheduleTime;
 
+  // Edit-mode state
+  bool _isSaving = false;
+  bool? _editIsPublic;
+  bool? _editEnableDirectDownloads;
+  String? _editCoverImagePath; // newly picked cover in edit mode
+
   static const List<String> _genreList = [
     'All Music Genres',
     'Alternative Rock',
@@ -36,6 +46,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
     'Deep House',
     'Drum & Bass',
     'Electronic',
+    'Folk',
     'Hip-hop & Rap',
     'House',
     'Indie',
@@ -57,16 +68,29 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
   @override
   void initState() {
     super.initState();
-    final uploadState = ref.read(uploadProvider);
-
-    _titleController = TextEditingController(text: uploadState.track.title);
-    _artistController = TextEditingController(text: uploadState.track.artist);
-    _descriptionController =
-        TextEditingController(text: uploadState.track.description ?? '');
-    _tagInputController = TextEditingController();
-
-    _selectedTags = List.from(uploadState.track.tags);
-    _selectedGenre = uploadState.track.genre;
+    final editingTrack = ref.read(trackEditProvider);
+    if (editingTrack != null) {
+      // Edit existing uploaded track
+      _titleController = TextEditingController(text: editingTrack.title);
+      _artistController = TextEditingController(text: editingTrack.artist);
+      _descriptionController =
+          TextEditingController(text: editingTrack.description ?? '');
+      _tagInputController = TextEditingController();
+      _selectedTags = List.from(editingTrack.tags);
+      _selectedGenre = editingTrack.genre;
+      _editIsPublic = editingTrack.isPublic;
+      _editEnableDirectDownloads = editingTrack.enableDirectDownloads;
+    } else {
+      // New upload
+      final uploadState = ref.read(uploadProvider);
+      _titleController = TextEditingController(text: uploadState.track.title);
+      _artistController = TextEditingController(text: uploadState.track.artist);
+      _descriptionController =
+          TextEditingController(text: uploadState.track.description ?? '');
+      _tagInputController = TextEditingController();
+      _selectedTags = List.from(uploadState.track.tags);
+      _selectedGenre = uploadState.track.genre;
+    }
   }
 
   @override
@@ -75,6 +99,8 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
     _artistController.dispose();
     _descriptionController.dispose();
     _tagInputController.dispose();
+    // Clear edit state when leaving
+    ref.read(trackEditProvider.notifier).state = null;
     super.dispose();
   }
 
@@ -95,9 +121,14 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      ref.read(uploadProvider.notifier).updateTrackField(
-            coverImagePath: image.path,
-          );
+      final editingTrack = ref.read(trackEditProvider);
+      if (editingTrack != null) {
+        setState(() => _editCoverImagePath = image.path);
+      } else {
+        ref.read(uploadProvider.notifier).updateTrackField(
+              coverImagePath: image.path,
+            );
+      }
     }
   }
 
@@ -108,7 +139,9 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
         _selectedTags.add(tag);
       });
       _tagInputController.clear();
-      ref.read(uploadProvider.notifier).updateTrackField(tags: _selectedTags);
+      if (ref.read(trackEditProvider) == null) {
+        ref.read(uploadProvider.notifier).updateTrackField(tags: _selectedTags);
+      }
     }
   }
 
@@ -116,7 +149,9 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
     setState(() {
       _selectedTags.remove(tag);
     });
-    ref.read(uploadProvider.notifier).updateTrackField(tags: _selectedTags);
+    if (ref.read(trackEditProvider) == null) {
+      ref.read(uploadProvider.notifier).updateTrackField(tags: _selectedTags);
+    }
   }
 
   void _showGenrePicker() {
@@ -126,17 +161,18 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      builder: (ctx) {
         return _GenrePickerSheet(
           selectedGenre: _selectedGenre,
           onGenreSelected: (genre) {
-            setState(() {
-              _selectedGenre = genre == 'All Music Genres' ? null : genre;
-            });
-            ref.read(uploadProvider.notifier).updateTrackField(
-                  genre: _selectedGenre,
-                );
-            Navigator.pop(context);
+            final newGenre = genre == 'All Music Genres' ? null : genre;
+            setState(() => _selectedGenre = newGenre);
+            if (ref.read(trackEditProvider) == null) {
+              ref
+                  .read(uploadProvider.notifier)
+                  .updateTrackField(genre: newGenre);
+            }
+            Navigator.pop(ctx);
           },
           genres: _genreList,
         );
@@ -203,21 +239,122 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
           genre: _selectedGenre,
           tags: _selectedTags,
           isPublic: ref.read(uploadProvider).track.isPublic,
+          enableDirectDownloads:
+              ref.read(uploadProvider).track.enableDirectDownloads,
         );
 
     // Navigate to upload progress page - upload will start there
     context.push('/upload/progress');
   }
 
+  // Genre normalization to match backend accepted values
+  String? _normalizeGenreLocal(String? genre) {
+    if (genre == null) return null;
+    switch (genre.trim()) {
+      case 'All Music Genres':
+        return null;
+      case 'Deep House':
+        return 'Deep house';
+      case 'Hip-hop & Rap':
+        return 'Hiphop & rap';
+      case 'Jazz & Blues':
+        return 'Jazz & blues';
+      case 'R&B & Soul':
+        return 'R&B & soul';
+      default:
+        return genre.trim();
+    }
+  }
+
+  Future<void> _saveEditedTrack(UploadTrack editingTrack) async {
+    final trackId = editingTrack.id;
+    if (trackId == null || trackId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Track ID missing — cannot save.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final dio = ref.read(dioClientProvider).dio;
+      final normalizedGenre = _normalizeGenreLocal(_selectedGenre);
+
+      final body = <String, dynamic>{
+        'isPublic': _editIsPublic ?? editingTrack.isPublic,
+        'enableDirectDownloads':
+            _editEnableDirectDownloads ?? editingTrack.enableDirectDownloads,
+      };
+      final title = _titleController.text.trim();
+      if (title.isNotEmpty) body['title'] = title;
+      final desc = _descriptionController.text.trim();
+      if (desc.isNotEmpty) body['description'] = desc;
+      if (normalizedGenre != null) body['genre'] = normalizedGenre;
+      if (_selectedTags.isNotEmpty) body['tags'] = _selectedTags;
+
+      await dio.patch('/tracks/$trackId/metadata', data: body);
+
+      // Upload new cover if selected
+      if (_editCoverImagePath != null) {
+        try {
+          final artworkForm = FormData.fromMap({
+            'artwork': await MultipartFile.fromFile(_editCoverImagePath!),
+          });
+          await dio.patch('/tracks/$trackId/artwork', data: artworkForm);
+        } catch (_) {
+          // Non-fatal: metadata saved but artwork upload failed
+        }
+      }
+
+      // Refresh track list
+      ref.invalidate(myTracksProvider);
+      // Clear edit provider
+      ref.read(trackEditProvider.notifier).state = null;
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Track saved successfully ✓'),
+          backgroundColor: Color(0xFF333333),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      context.pop();
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e is DioException
+          ? (e.response?.data?['message'] ?? e.message ?? e.toString())
+          : e.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save: $msg'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final uploadState = ref.watch(uploadProvider);
+    final editingTrack = ref.watch(trackEditProvider);
+    final uploadState = editingTrack == null ? ref.watch(uploadProvider) : null;
+    final isEditMode = editingTrack != null;
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
+        title: isEditMode
+            ? const Text('Edit Track',
+                style: TextStyle(color: Colors.white, fontSize: 16))
+            : null,
         leading: GestureDetector(
           key: const ValueKey('upload_back_button'),
           onTap: () => context.pop(),
@@ -245,7 +382,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
             const SizedBox(height: 20),
             _buildChecklistCard(uploadState),
             const SizedBox(height: 20),
-            _buildArtworkFileRow(uploadState),
+            _buildArtworkFileRow(uploadState, editingTrack),
             const SizedBox(height: 20),
             _buildFormCard(),
             const SizedBox(height: 20),
@@ -255,16 +392,21 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
             const SizedBox(height: 20),
             _buildDescriptionSection(),
             const SizedBox(height: 20),
-            _buildPrivacySection(uploadState),
+            _buildPrivacySection(uploadState, editingTrack),
             const SizedBox(height: 20),
-            _buildSchedulePromoCard(),
-            const SizedBox(height: 20),
-            _buildScheduleSection(),
+            _buildDownloadableSection(uploadState, editingTrack),
+            if (!isEditMode) ...[
+              const SizedBox(height: 20),
+              _buildSchedulePromoCard(),
+              const SizedBox(height: 20),
+              _buildScheduleSection(),
+            ],
             const SizedBox(height: 100),
           ],
         ),
       ),
-      bottomNavigationBar: _buildUploadButton(),
+      bottomNavigationBar:
+          isEditMode ? _buildSaveButton(editingTrack) : _buildUploadButton(),
     );
   }
 
@@ -326,7 +468,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
     );
   }
 
-  Widget _buildChecklistCard(UploadState uploadState) {
+  Widget _buildChecklistCard(UploadState? uploadState) {
     final progress = _getChecklistProgress();
     return Container(
       padding: const EdgeInsets.all(16),
@@ -352,7 +494,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
                 Text(
                   'Fans play more when your track info is complete. Tap to learn more.',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withValues(alpha: 0.6),
                     fontSize: 12,
                   ),
                 ),
@@ -386,7 +528,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
                       TextSpan(
                         text: '/4',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.6),
+                          color: Colors.white.withValues(alpha: 0.6),
                           fontSize: 12,
                         ),
                       ),
@@ -401,9 +543,23 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
     );
   }
 
-  Widget _buildArtworkFileRow(UploadState uploadState) {
-    final filename =
-        uploadState.track.audioFilePath?.split('/').last ?? 'No file selected';
+  Widget _buildArtworkFileRow(
+      UploadState? uploadState, UploadTrack? editingTrack) {
+    // Determine which image to show
+    Widget artworkWidget;
+    if (_editCoverImagePath != null) {
+      artworkWidget = Image.file(File(_editCoverImagePath!), fit: BoxFit.cover);
+    } else if (editingTrack != null && editingTrack.artworkUrl != null) {
+      artworkWidget = Image.network(editingTrack.artworkUrl!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _defaultArtworkPlaceholder());
+    } else if (uploadState?.track.coverImagePath != null) {
+      artworkWidget = Image.file(File(uploadState!.track.coverImagePath!),
+          fit: BoxFit.cover);
+    } else {
+      artworkWidget = _defaultArtworkPlaceholder();
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -417,31 +573,14 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
               color: const Color(0xFF1C1C1E),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
                 width: 1.5,
               ),
             ),
-            child: uploadState.track.coverImagePath != null
-                ? Image.file(
-                    File(uploadState.track.coverImagePath!),
-                    fit: BoxFit.cover,
-                  )
-                : Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.graphic_eq,
-                        color: Colors.white.withOpacity(0.5),
-                        size: 24,
-                      ),
-                      const SizedBox(height: 8),
-                      const Icon(
-                        Icons.photo_camera_outlined,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ],
-                  ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: artworkWidget,
+            ),
           ),
         ),
         const SizedBox(width: 16),
@@ -449,45 +588,75 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'File name',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
-                  fontSize: 12,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                filename,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                key: const ValueKey('upload_replace_file_button'),
-                onPressed: () => context.pop(),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.white, width: 1.2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(22),
+              if (editingTrack == null) ...[
+                Text(
+                  'File name',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 12,
                   ),
                 ),
-                child: const Text(
-                  'Replace file',
-                  style: TextStyle(
+                const SizedBox(height: 8),
+                Text(
+                  uploadState?.track.audioFilePath?.split('/').last ??
+                      'No file selected',
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 13,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  key: const ValueKey('upload_replace_file_button'),
+                  onPressed: () => context.pop(),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.white, width: 1.2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                  ),
+                  child: const Text(
+                    'Replace file',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  'Tap artwork to change cover',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  editingTrack.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+              ],
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _defaultArtworkPlaceholder() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.graphic_eq,
+            color: Colors.white.withValues(alpha: 0.5), size: 24),
+        const SizedBox(height: 8),
+        const Icon(Icons.photo_camera_outlined, color: Colors.white, size: 24),
       ],
     );
   }
@@ -507,13 +676,13 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
             controller: _titleController,
             maxLines: 3,
           ),
-          Container(height: 0.5, color: Colors.white.withOpacity(0.1)),
+          Container(height: 0.5, color: Colors.white.withValues(alpha: 0.1)),
           _buildFormField(
             label: 'Track link',
             isReadOnly: true,
-            initialValue: 'https://soundcloud.com/[artist-slug]',
+            initialValue: 'https://biobeats.app/[artist-slug]',
           ),
-          Container(height: 0.5, color: Colors.white.withOpacity(0.1)),
+          Container(height: 0.5, color: Colors.white.withValues(alpha: 0.1)),
           _buildFormField(
             label: 'Artist',
             isRequired: true,
@@ -543,7 +712,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.white.withValues(alpha: 0.5),
                   fontSize: 12,
                 ),
               ),
@@ -566,7 +735,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
               contentPadding: EdgeInsets.zero,
               border: InputBorder.none,
               hintText: isReadOnly ? initialValue : null,
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
             ),
           ),
         ],
@@ -581,7 +750,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
         Text(
           'Genre',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha: 0.5),
             fontSize: 12,
           ),
         ),
@@ -675,7 +844,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
         Text(
           'Tags',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha: 0.5),
             fontSize: 12,
           ),
         ),
@@ -729,7 +898,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   hintText: 'Add tags to describe track for reachability',
                   hintStyle: TextStyle(
-                      color: Colors.white.withOpacity(0.4), fontSize: 13),
+                      color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
                   border: InputBorder.none,
                 ),
               ),
@@ -772,7 +941,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
             Text(
               '${4000 - _descriptionController.text.length}',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
+                color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 13,
               ),
             ),
@@ -783,7 +952,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
-                color: Colors.white.withOpacity(0.15),
+                color: Colors.white.withValues(alpha: 0.15),
                 width: 0.5,
               ),
             ),
@@ -799,7 +968,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
               contentPadding: EdgeInsets.zero,
               border: InputBorder.none,
               hintText: 'Add a description...',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
               counterText: '',
             ),
           ),
@@ -808,14 +977,19 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
     );
   }
 
-  Widget _buildPrivacySection(UploadState uploadState) {
+  Widget _buildPrivacySection(
+      UploadState? uploadState, UploadTrack? editingTrack) {
+    final isPublic = editingTrack != null
+        ? (_editIsPublic ?? editingTrack.isPublic)
+        : (uploadState?.track.isPublic ?? true);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Privacy',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha: 0.5),
             fontSize: 12,
           ),
         ),
@@ -823,21 +997,93 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
         _buildPrivacyOption(
           title: 'Public',
           subtitle: 'Anyone can find this',
-          isSelected: uploadState.track.isPublic,
+          isSelected: isPublic,
           onTap: () {
-            ref.read(uploadProvider.notifier).updateTrackField(isPublic: true);
+            if (editingTrack != null) {
+              setState(() => _editIsPublic = true);
+            } else {
+              ref
+                  .read(uploadProvider.notifier)
+                  .updateTrackField(isPublic: true);
+            }
           },
         ),
         const SizedBox(height: 16),
         _buildPrivacyOption(
           title: 'Unlisted (Private)',
           subtitle: 'Anyone with private link can access',
-          isSelected: !uploadState.track.isPublic,
+          isSelected: !isPublic,
           onTap: () {
-            ref.read(uploadProvider.notifier).updateTrackField(isPublic: false);
+            if (editingTrack != null) {
+              setState(() => _editIsPublic = false);
+            } else {
+              ref
+                  .read(uploadProvider.notifier)
+                  .updateTrackField(isPublic: false);
+            }
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildDownloadableSection(
+      UploadState? uploadState, UploadTrack? editingTrack) {
+    final enabled = editingTrack != null
+        ? (_editEnableDirectDownloads ?? editingTrack.enableDirectDownloads)
+        : (uploadState?.track.enableDirectDownloads ?? false);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Allow direct downloads',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Go+ listeners can download this track when enabled.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.55),
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            key: const ValueKey('track_downloadable_toggle'),
+            value: enabled,
+            activeThumbColor: const Color(0xFFFF5500),
+            onChanged: (value) {
+              setState(() {
+                if (editingTrack != null) {
+                  _editEnableDirectDownloads = value;
+                } else {
+                  ref.read(uploadProvider.notifier).updateTrackField(
+                        enableDirectDownloads: value,
+                      );
+                }
+              });
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -870,7 +1116,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
+                    color: Colors.white.withValues(alpha: 0.5),
                     fontSize: 12,
                   ),
                 ),
@@ -944,7 +1190,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
         Text(
           'Schedule',
           style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha: 0.5),
             fontSize: 12,
           ),
         ),
@@ -970,7 +1216,7 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
                     'Your track stays private until release.',
                     style: TextStyle(
                       color: _isScheduleEnabled
-                          ? Colors.white.withOpacity(0.5)
+                          ? Colors.white.withValues(alpha: 0.5)
                           : const Color(0xFF48484A),
                       fontSize: 11,
                     ),
@@ -1112,6 +1358,44 @@ class _UploadEditPageState extends ConsumerState<UploadEditPage> {
       ),
     );
   }
+
+  Widget _buildSaveButton(UploadTrack editingTrack) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ElevatedButton(
+          key: const ValueKey('track_edit_save_button'),
+          onPressed: _isSaving ? null : () => _saveEditedTrack(editingTrack),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.black,
+            minimumSize: const Size(double.infinity, 56),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(32),
+            ),
+            elevation: 0,
+          ),
+          child: _isSaving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.black,
+                  ),
+                )
+              : const Text(
+                  'Save',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
 }
 
 // Genre picker sheet widget
@@ -1187,13 +1471,13 @@ class _GenrePickerSheetState extends State<_GenrePickerSheet> {
                     decoration: InputDecoration(
                       hintText: 'Search genres...',
                       hintStyle:
-                          TextStyle(color: Colors.white.withOpacity(0.5)),
+                          TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                       prefixIcon: Icon(Icons.search,
-                          color: Colors.white.withOpacity(0.5)),
+                          color: Colors.white.withValues(alpha: 0.5)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                         ),
                       ),
                       fillColor: const Color(0xFF1C1C1E),

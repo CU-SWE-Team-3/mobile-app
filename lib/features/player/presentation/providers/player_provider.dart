@@ -5,10 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/providers/session_provider.dart';
 import '../../../../core/services/audio_handler_service.dart';
-import '../../../../injection_container.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
+import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../player/domain/entities/player_track.dart';
 import '../../data/services/player_api_service.dart';
+import 'mock_audio_ad_provider.dart';
 
 export '../../../player/domain/entities/player_track.dart';
 
@@ -100,21 +101,20 @@ class PlayerState {
 // ---------------------------------------------------------------------------
 
 class PlayerNotifier extends StateNotifier<PlayerState> {
+  final Ref _ref;
   final AppAudioHandler _audioHandler;
   final PlayerApiService _api;
-  final EngagementRemoteDataSource _engagementApi;
-  
+  double _lastAudibleVolume = 0.7;
 
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration?> _durationSub;
   late final StreamSubscription<PlaybackState> _playbackStateSub;
-  
 
   /// Fires PUT /player/state every 5 seconds while a track is playing.
   Timer? _heartbeatTimer;
   Timer? _seekSyncTimer;
 
-  PlayerNotifier(this._api, this._audioHandler, this._engagementApi)
+  PlayerNotifier(this._ref, this._api, this._audioHandler)
       : super(const PlayerState()) {
     _audioHandler.onSkipNextRequested = skipToNext;
     _audioHandler.onSkipPreviousRequested = skipToPrevious;
@@ -181,6 +181,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
   Future<void> playTrack(PlayerTrack track) async {
     try {
       state = state.copyWith(isLoading: true, clearError: true);
+      await _ref
+          .read(mockAudioAdProvider.notifier)
+          .maybeShowPreRollAd(track.id);
 
       // Report progress for the outgoing track before switching.
       final outgoing = state.currentTrack;
@@ -197,14 +200,18 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         );
       }
 
+      final initialEngagement = _ref.read(
+        engagementProvider(EngagementParams(trackId: track.id)),
+      );
+
       state = state.copyWith(
         currentTrack: track,
-        isCurrentTrackLiked: false,
+        isCurrentTrackLiked: initialEngagement.isLiked,
         isTogglingLike: false,
         position: Duration.zero,
         duration: track.duration ?? Duration.zero,
       );
-      _audioHandler.setLiked(false);
+      _audioHandler.setLiked(initialEngagement.isLiked);
       unawaited(
         _hydrateCurrentTrack(
           track.id,
@@ -370,9 +377,12 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     _audioHandler.pause();
   }
 
-  void resume() {
+  Future<void> resume() async {
     if (state.currentTrack != null) {
-      _audioHandler.play();
+      await _ref
+          .read(mockAudioAdProvider.notifier)
+          .maybeShowPreRollAd(state.currentTrack!.id);
+      await _audioHandler.play();
     }
   }
 
@@ -380,7 +390,7 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     if (state.isPlaying) {
       pause();
     } else {
-      resume();
+      unawaited(resume());
     }
   }
 
@@ -388,18 +398,36 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final track = state.currentTrack;
     if (track == null || state.isTogglingLike) return;
 
-    final wasLiked = state.isCurrentTrackLiked;
+    final engParams = EngagementParams(trackId: track.id);
+    final engState = _ref.read(engagementProvider(engParams));
+    final wasLiked = engState.isLiked;
+    final previousLikeCount = engState.likeCount;
     state = state.copyWith(
       isCurrentTrackLiked: !wasLiked,
       isTogglingLike: true,
     );
     _audioHandler.setLiked(!wasLiked);
+    _writeLikedTrackOverride(
+      track: track,
+      liked: !wasLiked,
+      likeCount: wasLiked ? previousLikeCount : previousLikeCount + 1,
+    );
 
     try {
-      if (wasLiked) {
-        await _engagementApi.unlikeTrack(track.id);
-      } else {
-        await _engagementApi.likeTrack(track.id);
+      final success =
+          await _ref.read(engagementProvider(engParams).notifier).toggleLike();
+      if (!success) {
+        state = state.copyWith(
+          isCurrentTrackLiked: wasLiked,
+          isTogglingLike: false,
+        );
+        _audioHandler.setLiked(wasLiked);
+        _writeLikedTrackOverride(
+          track: track,
+          liked: wasLiked,
+          likeCount: previousLikeCount,
+        );
+        return;
       }
       state = state.copyWith(isTogglingLike: false);
     } catch (_) {
@@ -408,7 +436,39 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         isTogglingLike: false,
       );
       _audioHandler.setLiked(wasLiked);
+      _writeLikedTrackOverride(
+        track: track,
+        liked: wasLiked,
+        likeCount: previousLikeCount,
+      );
     }
+  }
+
+  void _writeLikedTrackOverride({
+    required PlayerTrack track,
+    required bool liked,
+    required int likeCount,
+  }) {
+    final overrides = Map<String, TrackSummary>.from(
+      _ref.read(likedTrackOverridesProvider),
+    );
+    if (liked) {
+      overrides[track.id] = TrackSummary(
+        id: track.id,
+        title: track.title,
+        artistName: track.artist,
+        artistId: track.artistId,
+        artistPermalink: track.artistPermalink,
+        trackPermalink: track.trackPermalink,
+        artworkUrl: track.coverUrl,
+        audioUrl: track.audioUrl,
+        waveform: track.waveform,
+        likeCount: likeCount,
+      );
+    } else {
+      overrides.remove(track.id);
+    }
+    _ref.read(likedTrackOverridesProvider.notifier).state = overrides;
   }
 
   void stop() {
@@ -420,6 +480,17 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
     final clamped = volume.clamp(0.0, 1.0);
     await _audioHandler.setVolume(clamped);
     state = state.copyWith(volume: clamped);
+    if (clamped > 0.0) {
+      _lastAudibleVolume = clamped;
+    }
+  }
+
+  Future<void> toggleMute() async {
+    if (state.volume > 0.0) {
+      await setVolume(0.0);
+    } else {
+      await setVolume(_lastAudibleVolume);
+    }
   }
 
   /// Aliases used by the full-screen player UI.
@@ -468,9 +539,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
     state = state.copyWith(
       currentTrack: current.copyWith(
+        id: current.id.isEmpty ? details.id : current.id,
         title: details.title.isNotEmpty ? details.title : current.title,
         artist: details.artist.isNotEmpty ? details.artist : current.artist,
-        audioUrl: details.audioUrl.isNotEmpty ? details.audioUrl : current.audioUrl,
+        audioUrl:
+            details.audioUrl.isNotEmpty ? details.audioUrl : current.audioUrl,
         coverUrl: (current.coverUrl == null || current.coverUrl!.isEmpty)
             ? details.coverUrl
             : current.coverUrl,
@@ -496,6 +569,8 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
         trackId: track.id,
         position: position.inSeconds.toDouble(),
         isPlaying: state.isPlaying,
+        queueContext: state.queueContext,
+        contextId: state.contextId,
       );
     });
   }
@@ -518,9 +593,9 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 final playerProvider =
     StateNotifierProvider<PlayerNotifier, PlayerState>((ref) {
   final notifier = PlayerNotifier(
+    ref,
     ref.read(playerApiServiceProvider),
     appAudioHandler!,
-    sl<EngagementRemoteDataSource>(),
   );
 
   ref.listen<String>(sessionUserIdProvider, (previous, next) {

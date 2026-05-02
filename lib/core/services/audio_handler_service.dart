@@ -23,7 +23,7 @@ Future<AppAudioHandler> initAudioHandler() async {
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'biobeats_media_playback',
       androidNotificationChannelName: 'BioBeats playback',
-      androidNotificationOngoing: true,
+      androidNotificationOngoing: false,
       androidShowNotificationBadge: true,
     ),
   );

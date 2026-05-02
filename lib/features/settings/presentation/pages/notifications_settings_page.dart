@@ -88,7 +88,7 @@ class _NotificationsSettingsPageState
           const Divider(color: Color(0xFF2A2A2A), indent: 16, endIndent: 16, height: 32),
           const _SectionHeader(title: 'Push Notifications'),
           SwitchListTile(
-            activeColor: const Color(0xFFFF5500),
+            activeThumbColor: const Color(0xFFFF5500),
             secondary: Icon(
               Icons.notifications,
               color: _pushEnabled ? Colors.white : Colors.grey[700],
@@ -119,7 +119,7 @@ class _NotificationsSettingsPageState
   Widget _buildToggleTile(_NotifItem item) {
     final enabled = _toggles[item.key]!;
     return SwitchListTile(
-      activeColor: const Color(0xFFFF5500),
+      activeThumbColor: const Color(0xFFFF5500),
       secondary: Icon(
         item.icon,
         color: _pushEnabled ? Colors.white : Colors.grey[700],

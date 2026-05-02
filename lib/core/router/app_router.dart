@@ -102,6 +102,8 @@ import '../../features/premium/presentation/pages/offline_download_page.dart';
 import '../../features/premium/presentation/pages/payment_success_page.dart';
 import '../../features/premium/presentation/pages/explore_features_page.dart';
 
+import '../../features/station/presentation/pages/station_page.dart';
+
 import '../../features/settings/presentation/pages/settings_main_page.dart';
 import '../../features/settings/presentation/pages/account_settings_page.dart';
 import '../../features/settings/presentation/pages/basic_settings_page.dart';
@@ -566,6 +568,20 @@ final appRouter = GoRouter(
             path: 'settings',
             builder: (_, __) => const PushNotificationSettingsPage()),
       ],
+    ),
+
+    // ── STATION ───────────────────────────────────────────────────────
+    GoRoute(
+      path: '/station',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return StationPage(
+          trackId: extra['trackId'] as String? ?? '',
+          title: extra['title'] as String?,
+          artistName: extra['artistName'] as String?,
+          artworkUrl: extra['artworkUrl'] as String?,
+        );
+      },
     ),
 
     // ── SETTINGS ──────────────────────────────────────────────────────

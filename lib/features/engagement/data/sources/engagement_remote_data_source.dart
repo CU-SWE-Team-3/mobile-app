@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../models/comment_model.dart';
 import '../models/liker_user_model.dart';
+import '../../../playlist/domain/entities/playlist.dart';
 import 'package:flutter/foundation.dart';
 
 // ── Shared track summary model (liked tracks + reposts lists) ─────────────────
@@ -12,6 +13,7 @@ class TrackSummary {
   final String artistName;
   final String? artistId;
   final String? artistPermalink;
+  final String? trackPermalink;
   final String? artworkUrl;
   final String? audioUrl;
   final int playCount;
@@ -25,6 +27,7 @@ class TrackSummary {
     required this.artistName,
     this.artistId,
     this.artistPermalink,
+    this.trackPermalink,
     this.artworkUrl,
     this.audioUrl,
     this.playCount = 0,
@@ -48,6 +51,7 @@ class TrackSummary {
           '',
       artistId: artist['_id'] as String? ?? artist['id'] as String?,
       artistPermalink: artist['permalink'] as String?,
+      trackPermalink: json['permalink']?.toString(),
       artworkUrl: json['artworkUrl'] as String? ??
           json['coverUrl'] as String? ??
           json['imageUrl'] as String?,
@@ -145,12 +149,24 @@ class EngagementRemoteDataSource {
 
   // ── Like ──────────────────────────────────────────────────────────────────
 
-  Future<void> likeTrack(String trackId) async {
-    await _dio.post('/tracks/$trackId/like', data: {'targetModel': 'Track'});
+  Future<void> likeTrack(
+    String trackId, {
+    String targetModel = 'Track',
+  }) async {
+    await _dio.post(
+      '/tracks/$trackId/like',
+      data: {'targetModel': targetModel},
+    );
   }
 
-  Future<void> unlikeTrack(String trackId) async {
-    await _dio.delete('/tracks/$trackId/like', data: {'targetModel': 'Track'});
+  Future<void> unlikeTrack(
+    String trackId, {
+    String targetModel = 'Track',
+  }) async {
+    await _dio.delete(
+      '/tracks/$trackId/like',
+      data: {'targetModel': targetModel},
+    );
   }
 
   // ── Repost ────────────────────────────────────────────────────────────────
@@ -160,7 +176,8 @@ class EngagementRemoteDataSource {
   }
 
   Future<void> unRepostTrack(String trackId) async {
-    await _dio.delete('/tracks/$trackId/repost', data: {'targetModel': 'Track'});
+    await _dio
+        .delete('/tracks/$trackId/repost', data: {'targetModel': 'Track'});
   }
 
   // ── Likers list ───────────────────────────────────────────────────────────
@@ -222,8 +239,8 @@ class EngagementRemoteDataSource {
       //   C) none of those keys exist → itemMap IS the track record
       Map<String, dynamic> track;
       final targetVal = itemMap['target'];
-      final trackVal  = itemMap['track'];
-      final itemVal   = itemMap['item'];
+      final trackVal = itemMap['track'];
+      final itemVal = itemMap['item'];
 
       if (targetVal is Map) {
         track = _asStringMap(targetVal);
@@ -251,6 +268,61 @@ class EngagementRemoteDataSource {
     return tracks;
   }
 
+  Future<List<Playlist>> getUserLikedPlaylists(String userId) async {
+    final response = await _dio.get('/profile/$userId/likes');
+    final root = _asStringMap(response.data);
+    final data = _asStringMap(root['data']);
+
+    final rawItems = data['likedTracks'] ??
+        data['playlists'] ??
+        root['likedTracks'] ??
+        root['playlists'] ??
+        (root['data'] is List ? root['data'] : null);
+
+    if (rawItems is! List) {
+      debugPrint(
+          '[LikedPlaylists] Unexpected response shape: ${response.data}');
+      return const [];
+    }
+
+    final playlists = <Playlist>[];
+    for (final item in rawItems) {
+      final itemMap = _asStringMap(item);
+      if (itemMap.isEmpty) continue;
+
+      final targetModel = itemMap['targetModel']?.toString();
+      if (targetModel != null && targetModel.toLowerCase() != 'playlist') {
+        continue;
+      }
+
+      Map<String, dynamic> playlist;
+      final targetVal = itemMap['target'];
+      final playlistVal = itemMap['playlist'];
+      final itemVal = itemMap['item'];
+
+      if (targetVal is Map) {
+        playlist = _asStringMap(targetVal);
+      } else if (playlistVal is Map) {
+        playlist = _asStringMap(playlistVal);
+      } else if (itemVal is Map) {
+        playlist = _asStringMap(itemVal);
+      } else if (targetVal is String && targetVal.isNotEmpty) {
+        playlist = Map<String, dynamic>.from(itemMap)..['_id'] = targetVal;
+      } else if (playlistVal is String && playlistVal.isNotEmpty) {
+        playlist = Map<String, dynamic>.from(itemMap)..['_id'] = playlistVal;
+      } else {
+        playlist = itemMap;
+      }
+
+      if (playlist.isEmpty) continue;
+
+      final summary = Playlist.fromJson(playlist);
+      if (summary.id.isNotEmpty) playlists.add(summary);
+    }
+
+    return playlists;
+  }
+
   // ── Current user's reposted tracks ───────────────────────────────────────
   // GET /profile/{userId}/reposts
   // Response: { data: { repostedTracks: [{ repostDate, track: {...} }], pagination } }
@@ -263,7 +335,8 @@ class EngagementRemoteDataSource {
       final map = item as Map<String, dynamic>;
       // The backend uses 'target' as the track key (same as the likes endpoint).
       // Fall back to 'track' for backward compatibility with older API versions.
-      final track = (map['target'] ?? map['track']) as Map<String, dynamic>? ?? map;
+      final track =
+          (map['target'] ?? map['track']) as Map<String, dynamic>? ?? map;
       return TrackSummary.fromJson(track);
     }).toList();
   }

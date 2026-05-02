@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../providers/subscription_provider.dart' show subscriptionProvider, planDisplayName;
+import '../providers/subscription_provider.dart'
+    show SubscriptionEntitlements, subscriptionProvider;
 
 class PremiumPaywallPage extends ConsumerWidget {
   const PremiumPaywallPage({super.key});
@@ -40,51 +41,84 @@ class PremiumPaywallPage extends ConsumerWidget {
                   Positioned(
                     top: 40,
                     left: 60,
-                    child: _GlowCircle(size: 220, color: const Color(0xFFFF5500).withOpacity(0.18)),
+                    child: _GlowCircle(
+                        size: 220,
+                        color: const Color(0xFFFF5500).withValues(alpha: 0.18)),
                   ),
                   Positioned(
                     top: 20,
                     right: 30,
-                    child: _GlowCircle(size: 160, color: const Color(0xFF9B3FFF).withOpacity(0.22)),
+                    child: _GlowCircle(
+                        size: 160,
+                        color: const Color(0xFF9B3FFF).withValues(alpha: 0.22)),
                   ),
-                  // Simulated stacked-card look
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: IconButton(
+                      key: const ValueKey('paywall_dismiss_button'),
+                      onPressed: () {
+                        if (context.canPop()) {
+                          context.pop();
+                        } else {
+                          context.go('/home');
+                        }
+                      },
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ),
+                  // Artist Pro hero asset card
                   Positioned(
                     top: 40,
                     left: 0,
                     right: 0,
                     child: Center(
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Transform.rotate(
-                            angle: 0.12,
-                            child: Container(
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.96, end: 1),
+                        duration: const Duration(milliseconds: 520),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, scale, child) {
+                          return Transform.scale(scale: scale, child: child);
+                        },
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Transform.rotate(
+                              angle: 0.12,
+                              child: Container(
+                                width: 220,
+                                height: 260,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2C1A00),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                            Container(
                               width: 220,
                               height: 260,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF2C1A00),
-                                borderRadius: BorderRadius.circular(12),
+                                color: const Color(0xFF120D09),
+                                borderRadius: BorderRadius.circular(14),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 14),
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: Image.asset(
+                                  'assets/images/Screenshot 2026-05-01 204241.png',
+                                  fit: BoxFit.cover,
+                                  alignment: Alignment.center,
+                                ),
                               ),
                             ),
-                          ),
-                          Container(
-                            width: 220,
-                            height: 260,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Color(0xFF3A2200), Color(0xFF1A1000)],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.music_note,
-                              color: Color(0xFFFF5500),
-                              size: 80,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -106,7 +140,7 @@ class PremiumPaywallPage extends ConsumerWidget {
                   const Row(
                     children: [
                       _Pill(
-                        label: '✦ ARTIST PRO',
+                        label: 'ARTIST PRO',
                         color: Colors.white,
                         textColor: Colors.black,
                       ),
@@ -144,7 +178,8 @@ class PremiumPaywallPage extends ConsumerWidget {
                       ),
                       children: [
                         const TextSpan(
-                          text: 'For EGP 175.00, billed monthly.\nCancel anytime. ',
+                          text:
+                              'For EGP 175.00, billed monthly.\nCancel anytime. ',
                         ),
                         WidgetSpan(
                           child: GestureDetector(
@@ -223,12 +258,13 @@ class PremiumPaywallPage extends ConsumerWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.15),
+                        color: Colors.red.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         sub.error!,
-                        style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                        style: const TextStyle(
+                            color: Colors.redAccent, fontSize: 13),
                       ),
                     ),
                   ],
@@ -249,8 +285,8 @@ class PremiumPaywallPage extends ConsumerWidget {
                     text: 'Ad-free listening',
                   ),
                   const _FeatureRow(
-                    icon: Icons.schedule,
-                    text: 'Scheduled releases',
+                    icon: Icons.insights_outlined,
+                    text: 'Creator analytics',
                   ),
 
                   const SizedBox(height: 40),
@@ -272,7 +308,8 @@ class _SubscribedView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sub = ref.watch(subscriptionProvider);
-    final planName = planDisplayName(sub.planType);
+    final planLabel =
+        sub.isPlanKnown ? sub.displayPlanName : null; // null → unknown plan
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -297,7 +334,9 @@ class _SubscribedView extends ConsumerWidget {
 
               Text(
                 key: const ValueKey('premium_current_plan_label'),
-                'You are on $planName',
+                planLabel != null
+                    ? 'You are on $planLabel'
+                    : 'Subscribed — plan loading…',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 28,
@@ -306,17 +345,19 @@ class _SubscribedView extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
 
-              const Text(
-                'Your subscription is active.\nExplore all your premium features.',
-                style: TextStyle(
+              Text(
+                planLabel != null
+                    ? 'Your subscription is active.\nExplore all your premium features.'
+                    : 'Your subscription is active, but plan details are unavailable. Refresh or contact support.',
+                style: const TextStyle(
                     color: Colors.white70, fontSize: 15, height: 1.55),
               ),
 
               if (sub.cancelAtPeriodEnd) ...[
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.orange.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
@@ -336,8 +377,8 @@ class _SubscribedView extends ConsumerWidget {
               if (sub.error != null) ...[
                 const SizedBox(height: 12),
                 Text(sub.error!,
-                    style: const TextStyle(
-                        color: Colors.redAccent, fontSize: 13)),
+                    style:
+                        const TextStyle(color: Colors.redAccent, fontSize: 13)),
               ],
 
               const SizedBox(height: 40),
@@ -346,6 +387,7 @@ class _SubscribedView extends ConsumerWidget {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
+                  key: const ValueKey('premium_explore_features_button'),
                   onPressed: () => context.push('/upgrade/features'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFFF5500),
@@ -368,6 +410,7 @@ class _SubscribedView extends ConsumerWidget {
                 width: double.infinity,
                 height: 52,
                 child: OutlinedButton(
+                  key: const ValueKey('premium_manage_subscription_button'),
                   onPressed: () => context.push('/upgrade/status'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
@@ -393,12 +436,12 @@ class _SubscribedView extends ConsumerWidget {
                           child: CircularProgressIndicator(
                               color: Colors.redAccent, strokeWidth: 2))
                       : OutlinedButton(
-                          onPressed: () =>
-                              _confirmCancel(context, ref),
+                          key: const ValueKey(
+                              'premium_cancel_subscription_button'),
+                          onPressed: () => _confirmCancel(context, ref),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.redAccent,
-                            side:
-                                const BorderSide(color: Colors.redAccent),
+                            side: const BorderSide(color: Colors.redAccent),
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(32)),
                           ),
@@ -435,13 +478,10 @@ class _SubscribedView extends ConsumerWidget {
                 style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () {
               Navigator.pop(ctx);
-              ref
-                  .read(subscriptionProvider.notifier)
-                  .cancelSubscription();
+              ref.read(subscriptionProvider.notifier).cancelSubscription();
             },
             child: const Text('Cancel plan',
                 style: TextStyle(color: Colors.white)),
@@ -455,8 +495,18 @@ class _SubscribedView extends ConsumerWidget {
     try {
       final dt = DateTime.parse(iso).toLocal();
       const months = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
       ];
       return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
     } catch (_) {

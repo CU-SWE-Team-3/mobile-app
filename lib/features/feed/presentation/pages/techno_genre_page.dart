@@ -658,9 +658,8 @@ class _TechnoGenrePageState extends ConsumerState<TechnoGenrePage>
 
   Widget _buildTrendingPreviewTile(List<_Track> tracks, int index) {
     final track = tracks[index];
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        !track.artworkUrl!.contains('default-artwork');
+    final hasArtwork = track.artworkUrl.isNotEmpty &&
+        !track.artworkUrl.contains('default-artwork');
 
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
@@ -672,7 +671,7 @@ class _TechnoGenrePageState extends ConsumerState<TechnoGenrePage>
               borderRadius: BorderRadius.circular(8),
               child: hasArtwork
                   ? CachedNetworkImage(
-                      imageUrl: track.artworkUrl!,
+                      imageUrl: track.artworkUrl,
                       width: 52,
                       height: 52,
                       fit: BoxFit.cover,
@@ -736,9 +735,8 @@ class _TechnoGenrePageState extends ConsumerState<TechnoGenrePage>
 
   Widget _buildTrackListTile(List<_Track> tracks, int index) {
     final track = tracks[index];
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        !track.artworkUrl!.contains('default-artwork');
+    final hasArtwork = track.artworkUrl.isNotEmpty &&
+        !track.artworkUrl.contains('default-artwork');
 
     return GestureDetector(
       onTap: () => _playFrom(tracks, index),
@@ -750,7 +748,7 @@ class _TechnoGenrePageState extends ConsumerState<TechnoGenrePage>
               borderRadius: BorderRadius.circular(8),
               child: hasArtwork
                   ? CachedNetworkImage(
-                      imageUrl: track.artworkUrl!,
+                      imageUrl: track.artworkUrl,
                       width: 50,
                       height: 50,
                       fit: BoxFit.cover,
@@ -813,7 +811,7 @@ class _TechnoGenrePageState extends ConsumerState<TechnoGenrePage>
 
   Widget _buildPlaylistListCard(_PlaylistInfo playlist) {
     final hasArtwork =
-        playlist.artworkUrl != null && playlist.artworkUrl!.isNotEmpty;
+        playlist.artworkUrl.isNotEmpty;
 
     return GestureDetector(
       onTap: () => context.push(
@@ -837,7 +835,7 @@ class _TechnoGenrePageState extends ConsumerState<TechnoGenrePage>
                 borderRadius: BorderRadius.circular(12),
                 child: hasArtwork
                     ? CachedNetworkImage(
-                        imageUrl: playlist.artworkUrl!,
+                        imageUrl: playlist.artworkUrl,
                         width: 72,
                         height: 72,
                         fit: BoxFit.cover,

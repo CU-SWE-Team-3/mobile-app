@@ -19,6 +19,12 @@ class UploadTrack extends Equatable {
   final String? description;
   final int? duration; // in milliseconds
   final String? processingState; // "Processing", "Finished", or null
+  final bool enableDirectDownloads;
+  final int playCount;
+  final int likeCount;
+  final int commentCount;
+  final int repostCount;
+  final int downloadCount;
 
   const UploadTrack({
     this.id,
@@ -37,6 +43,12 @@ class UploadTrack extends Equatable {
     this.description,
     this.duration,
     this.processingState,
+    this.enableDirectDownloads = false,
+    this.playCount = 0,
+    this.likeCount = 0,
+    this.commentCount = 0,
+    this.repostCount = 0,
+    this.downloadCount = 0,
   });
 
   UploadTrack copyWith({
@@ -56,6 +68,12 @@ class UploadTrack extends Equatable {
     String? description,
     int? duration,
     String? processingState,
+    bool? enableDirectDownloads,
+    int? playCount,
+    int? likeCount,
+    int? commentCount,
+    int? repostCount,
+    int? downloadCount,
   }) {
     return UploadTrack(
       id: id ?? this.id,
@@ -74,6 +92,13 @@ class UploadTrack extends Equatable {
       description: description ?? this.description,
       duration: duration ?? this.duration,
       processingState: processingState ?? this.processingState,
+      enableDirectDownloads:
+          enableDirectDownloads ?? this.enableDirectDownloads,
+      playCount: playCount ?? this.playCount,
+      likeCount: likeCount ?? this.likeCount,
+      commentCount: commentCount ?? this.commentCount,
+      repostCount: repostCount ?? this.repostCount,
+      downloadCount: downloadCount ?? this.downloadCount,
     );
   }
 
@@ -95,5 +120,11 @@ class UploadTrack extends Equatable {
         description,
         duration,
         processingState,
+        enableDirectDownloads,
+        playCount,
+        likeCount,
+        commentCount,
+        repostCount,
+        downloadCount,
       ];
 }

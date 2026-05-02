@@ -12,7 +12,7 @@ class OfflineDownloadPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sub = ref.watch(subscriptionProvider);
-    final isGoPlus = sub.isPremium && sub.planType == 'Go+';
+    final canDownload = sub.canDownload;
     final downloadsAsync = ref.watch(offlineDownloadsProvider);
 
     return Scaffold(
@@ -26,8 +26,8 @@ class OfflineDownloadPage extends ConsumerWidget {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: !isGoPlus
-          ? _nonGoPlusBody(context, sub)
+      body: !canDownload
+          ? _goPlusRequiredBody(context)
           : Column(
               children: [
                 // Plan + download availability banner
@@ -35,8 +35,8 @@ class OfflineDownloadPage extends ConsumerWidget {
                 Expanded(
                   child: downloadsAsync.when(
                     loading: () => const Center(
-                      child: CircularProgressIndicator(
-                          color: Color(0xFFFF5500)),
+                      child:
+                          CircularProgressIndicator(color: Color(0xFFFF5500)),
                     ),
                     error: (_, __) => const Center(
                       child: Text('Could not load downloads.',
@@ -45,8 +45,8 @@ class OfflineDownloadPage extends ConsumerWidget {
                     data: (tracks) => tracks.isEmpty
                         ? _emptyState(context)
                         : ListView.builder(
-                            padding: const EdgeInsets.only(
-                                top: 8, bottom: 32),
+                            key: const ValueKey('offline_downloads_list'),
+                            padding: const EdgeInsets.only(top: 8, bottom: 32),
                             itemCount: tracks.length,
                             itemBuilder: (_, i) =>
                                 _DownloadedTrackTile(track: tracks[i]),
@@ -58,8 +58,7 @@ class OfflineDownloadPage extends ConsumerWidget {
     );
   }
 
-  Widget _nonGoPlusBody(BuildContext context, SubscriptionState sub) {
-    final isPro = sub.isPremium && sub.planType == 'Pro';
+  Widget _goPlusRequiredBody(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -80,7 +79,7 @@ class OfflineDownloadPage extends ConsumerWidget {
           const SizedBox(height: 28),
           Center(
             child: Text(
-              isPro ? 'Go+ Required' : 'Listen Anywhere, Anytime',
+              'Listen Anywhere, Anytime',
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 22,
@@ -91,11 +90,9 @@ class OfflineDownloadPage extends ConsumerWidget {
           const SizedBox(height: 12),
           Center(
             child: Text(
-              isPro
-                  ? 'Artist Pro unlocks creator tools. Offline downloads require a Go+ subscription.'
-                  : 'Download your favorite tracks and listen without an internet connection. Available with Go+.',
-              style: const TextStyle(
-                  color: Colors.white60, fontSize: 15, height: 1.6),
+              'Requires a Go+ Subscription for offline listening.',
+              style:
+                  TextStyle(color: Colors.white60, fontSize: 15, height: 1.6),
               textAlign: TextAlign.center,
             ),
           ),
@@ -123,7 +120,7 @@ class OfflineDownloadPage extends ConsumerWidget {
             width: double.infinity,
             height: 52,
             child: ElevatedButton(
-              onPressed: () => context.go(isPro ? '/upgrade/status' : '/upgrade'),
+              onPressed: () => context.go('/upgrade'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF5500),
                 foregroundColor: Colors.white,
@@ -131,11 +128,8 @@ class OfflineDownloadPage extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(32)),
                 elevation: 0,
               ),
-              child: Text(
-                isPro ? 'Manage subscription' : 'Upgrade to unlock downloads',
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w700),
-              ),
+              child: const Text('Upgrade to Go+',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ),
           ),
         ],
@@ -163,9 +157,7 @@ class OfflineDownloadPage extends ConsumerWidget {
           const Text(
             'Offline Downloads Unlocked',
             style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w800),
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
@@ -195,8 +187,7 @@ class OfflineDownloadPage extends ConsumerWidget {
                 elevation: 0,
               ),
               child: const Text('Browse Tracks',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700)),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             ),
           ),
         ],
@@ -214,8 +205,9 @@ class _PlanBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isGoPlus = planType == 'Go+';
-    final label = isGoPlus ? 'Offline downloads enabled' : 'Go+ required';
-    final plan = planType ?? 'Free';
+    final label =
+        isGoPlus ? 'Offline listening enabled' : 'Offline entitlement enabled';
+    final plan = planType ?? 'Pro';
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -263,8 +255,8 @@ class _DownloadedTrackTile extends StatelessWidget {
     final hasArt = artworkUrl != null && artworkUrl.isNotEmpty;
 
     return Padding(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      key: ValueKey('offline_download_tile_${track.trackId ?? track.title}'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
@@ -284,9 +276,10 @@ class _DownloadedTrackTile extends StatelessWidget {
                     ? CachedNetworkImage(
                         imageUrl: artworkUrl,
                         fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) =>
-                            const Icon(Icons.music_note,
-                                color: Colors.white38, size: 24),
+                        errorWidget: (_, __, ___) => const Icon(
+                            Icons.music_note,
+                            color: Colors.white38,
+                            size: 24),
                       )
                     : const Icon(Icons.music_note,
                         color: Colors.white38, size: 24),
@@ -312,29 +305,49 @@ class _DownloadedTrackTile extends StatelessWidget {
                     track.artistName as String,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 12),
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Icon(Icons.download_done,
-                          color: Color(0xFF4CAF50), size: 12),
+                      Icon(
+                        (track.downloadMode as String? ?? 'file') ==
+                                'metadataOnly'
+                            ? Icons.info_outline
+                            : Icons.download_done,
+                        color: (track.downloadMode as String? ?? 'file') ==
+                                'metadataOnly'
+                            ? Colors.orange
+                            : const Color(0xFF4CAF50),
+                        size: 12,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         _formatDate(track.downloadedAt as DateTime),
                         style: const TextStyle(
                             color: Colors.white38, fontSize: 11),
                       ),
-                      if (track.localPath != null) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.storage,
-                            color: Colors.white24, size: 11),
-                        const SizedBox(width: 2),
-                        const Text('Saved',
-                            style: TextStyle(
-                                color: Colors.white24, fontSize: 11)),
-                      ],
+                      const SizedBox(width: 8),
+                      if ((track.downloadMode as String? ?? 'file') ==
+                          'metadataOnly')
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: const Text(
+                            'Preview saved',
+                            style:
+                                TextStyle(color: Colors.orange, fontSize: 10),
+                          ),
+                        )
+                      else if (track.localPath != null)
+                        const Text(
+                          'Saved file',
+                          style: TextStyle(color: Colors.white24, fontSize: 11),
+                        ),
                     ],
                   ),
                 ],
@@ -373,9 +386,7 @@ class _FeatureRow extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: locked
-                  ? const Color(0xFF1C1C1E)
-                  : const Color(0xFF1A3300),
+              color: locked ? const Color(0xFF1C1C1E) : const Color(0xFF1A3300),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon,
@@ -396,8 +407,7 @@ class _FeatureRow extends StatelessWidget {
                             fontWeight: FontWeight.w600)),
                     if (locked) ...[
                       const SizedBox(width: 6),
-                      const Icon(Icons.lock,
-                          color: Colors.white24, size: 14),
+                      const Icon(Icons.lock, color: Colors.white24, size: 14),
                     ],
                   ],
                 ),
