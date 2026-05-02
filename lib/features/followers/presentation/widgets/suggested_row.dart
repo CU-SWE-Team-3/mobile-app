@@ -14,6 +14,7 @@ class _SuggestedUser {
   final String permalink;
   final String? avatarUrl;
   final int followerCount;
+  final bool? isBlocked;
 
   _SuggestedUser({
     required this.id,
@@ -21,24 +22,48 @@ class _SuggestedUser {
     required this.permalink,
     required this.avatarUrl,
     required this.followerCount,
+    this.isBlocked,
   });
 
   factory _SuggestedUser.fromJson(Map<String, dynamic> json) {
     final fc = json['followerCount'];
+    final blockedRaw = json['isBlocked'] ??
+        json['blocked'] ??
+        json['isBlockedByMe'] ??
+        json['blockedByMe'];
     return _SuggestedUser(
-      id: json['_id'] as String? ?? json['id'] as String? ?? '',
-      displayName: json['displayName'] as String? ??
-          json['username'] as String? ??
-          json['name'] as String? ??
-          '',
-      permalink: json['permalink'] as String? ??
-          json['username'] as String? ??
-          json['_id'] as String? ??
-          '',
-      avatarUrl: json['avatarUrl'] as String? ??
-          json['profileImageUrl'] as String? ??
-          json['photoUrl'] as String?,
+      id: _readString(json['_id']).isNotEmpty
+          ? _readString(json['_id'])
+          : _readString(json['id']),
+      displayName: _firstString([
+        json['displayName'],
+        json['username'],
+        json['name'],
+      ]),
+      permalink: _firstString([
+        json['permalink'],
+        json['username'],
+        json['_id'],
+        json['id'],
+      ]),
+      avatarUrl: _nullableString([
+        json['avatarUrl'],
+        json['profileImageUrl'],
+        json['photoUrl'],
+      ]),
       followerCount: fc is int ? fc : int.tryParse(fc?.toString() ?? '') ?? 0,
+      isBlocked: blockedRaw == true || blockedRaw?.toString() == 'true',
+    );
+  }
+
+  _SuggestedUser copyWith({bool? isBlocked}) {
+    return _SuggestedUser(
+      id: id,
+      displayName: displayName,
+      permalink: permalink,
+      avatarUrl: avatarUrl,
+      followerCount: followerCount,
+      isBlocked: isBlocked ?? this.isBlocked,
     );
   }
 }
@@ -49,10 +74,65 @@ Map<String, dynamic> _asStringMap(dynamic value) {
   return const {};
 }
 
+String _readString(dynamic value) => value?.toString().trim() ?? '';
+
+String _firstString(List<dynamic> values) {
+  for (final value in values) {
+    final text = _readString(value);
+    if (text.isNotEmpty && text.toLowerCase() != 'null') return text;
+  }
+  return '';
+}
+
+String? _nullableString(List<dynamic> values) {
+  final text = _firstString(values);
+  return text.isEmpty ? null : text;
+}
+
 String _formatCount(int count) {
   if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M followers';
   if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}K followers';
   return '$count followers';
+}
+
+List<dynamic> _extractBlockedList(dynamic raw) {
+  if (raw is List) return raw;
+  if (raw is! Map) return const [];
+  final data = raw['data'];
+  if (data is List) return data;
+  if (data is Map) {
+    for (final key in const ['blockedUsers', 'users', 'blocked']) {
+      final value = data[key];
+      if (value is List) return value;
+    }
+  }
+  for (final key in const ['blockedUsers', 'users', 'blocked']) {
+    final value = raw[key];
+    if (value is List) return value;
+  }
+  return const [];
+}
+
+String _blockedUserId(dynamic raw) {
+  if (raw == null) return '';
+  if (raw is String) return raw;
+  if (raw is! Map) return raw.toString();
+  final map = Map<String, dynamic>.from(raw);
+  for (final key in const ['_id', 'id', 'userId', 'blockedUserId']) {
+    final value = map[key]?.toString() ?? '';
+    if (value.isNotEmpty) return value;
+  }
+  for (final key in const ['blockedUser', 'user', 'target']) {
+    final value = map[key];
+    if (value is Map) {
+      final id = _blockedUserId(value);
+      if (id.isNotEmpty) return id;
+    } else {
+      final id = value?.toString() ?? '';
+      if (id.isNotEmpty) return id;
+    }
+  }
+  return '';
 }
 
 // ── Widget ────────────────────────────────────────────────────────────────────
@@ -84,6 +164,7 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final myId = prefs.getString('userId') ?? '';
+      final blockedIds = await _fetchBlockedIds();
       final response = await dioClient.dio
           .get('/network/suggested', queryParameters: {'page': 1, 'limit': 20});
       final raw = response.data['data'];
@@ -94,6 +175,9 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
               .map(_asStringMap)
               .where((e) => e.isNotEmpty)
               .map(_SuggestedUser.fromJson)
+              .map((u) => blockedIds.contains(u.id)
+                  ? u.copyWith(isBlocked: true)
+                  : u)
               .where((u) => u.id.isNotEmpty && u.id != myId)
               .toList();
           _isLoading = false;
@@ -103,6 +187,18 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
       // ignore: avoid_print
       print('=== SUGGESTED FETCH ERROR: $e\n$st');
       if (mounted) setState(() { _isLoading = false; _hasError = true; });
+    }
+  }
+
+  Future<Set<String>> _fetchBlockedIds() async {
+    try {
+      final response = await dioClient.dio.get('/network/blocked-users');
+      return _extractBlockedList(response.data)
+          .map(_blockedUserId)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    } on DioException {
+      return {};
     }
   }
 
@@ -144,7 +240,7 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
           const SizedBox(height: 12),
         ],
         SizedBox(
-          height: widget.compact ? 156 : 210,
+          height: widget.compact ? 206 : 210,
           child: _isLoading
               ? const Center(
                   child: CircularProgressIndicator(color: Color(0xFFFF5500)),
@@ -159,7 +255,8 @@ class _SuggestedRowState extends ConsumerState<SuggestedRow> {
                   : ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: _users.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 10),
+                      separatorBuilder: (_, __) =>
+                          SizedBox(width: widget.compact ? 28 : 10),
                       itemBuilder: (context, index) {
                         final user = _users[index];
                         final isFollowing = _followingMap[user.id] ?? false;
@@ -213,6 +310,7 @@ class _UserCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showImage = !_isDefaultAvatar(user.avatarUrl);
+    final avatarSize = compact ? 118.0 : 50.0;
 
     return GestureDetector(
       onTap: () => navigateToUserProfile(
@@ -222,25 +320,31 @@ class _UserCard extends StatelessWidget {
         displayName: user.displayName,
       ),
       child: Container(
-      width: compact ? 108 : 130,
-      padding: const EdgeInsets.all(12),
+      width: compact ? 132 : 130,
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 0 : 12,
+        vertical: compact ? 0 : 12,
+      ),
       decoration: BoxDecoration(
         color: compact ? Colors.transparent : const Color(0xFF1F1F1F),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment:
+            compact ? MainAxisAlignment.start : MainAxisAlignment.center,
         children: [
           // Avatar
           CircleAvatar(
-            radius: compact ? 34 : 25,
-            backgroundColor: _fallbackColor,
+            radius: avatarSize / 2,
+            backgroundColor:
+                showImage ? Colors.transparent : (compact ? const Color(0xFF303030) : _fallbackColor),
+            foregroundColor: const Color(0xFFCFCFCF),
             child: showImage
                 ? ClipOval(
                     child: CachedNetworkImage(
                       imageUrl: user.avatarUrl!,
-                      width: compact ? 68 : 50,
-                      height: compact ? 68 : 50,
+                      width: avatarSize,
+                      height: avatarSize,
                       fit: BoxFit.cover,
                       errorWidget: (_, __, ___) => Text(
                         user.displayName.isNotEmpty
@@ -254,18 +358,20 @@ class _UserCard extends StatelessWidget {
                       ),
                     ),
                   )
-                : Text(
-                    user.displayName.isNotEmpty
-                        ? user.displayName[0].toUpperCase()
-                        : '?',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                : compact
+                    ? const Icon(Icons.person, size: 96)
+                    : Text(
+                        user.displayName.isNotEmpty
+                            ? user.displayName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
           ),
-          SizedBox(height: compact ? 12 : 10),
+          SizedBox(height: compact ? 14 : 10),
 
           // Display name
           Text(
@@ -273,12 +379,59 @@ class _UserCard extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
-              fontSize: 13,
+              fontSize: compact ? 15 : 13,
               fontWeight: FontWeight.bold,
             ),
           ),
+          if (compact) const SizedBox(height: 14),
+          if (compact)
+            user.isBlocked == true
+                ? const Icon(
+                    Icons.block,
+                    color: Color(0xFFD6D6D6),
+                    size: 30,
+                  )
+                : SizedBox(
+                    width: 94,
+                    height: 34,
+                    child: ElevatedButton(
+                      onPressed: isButtonLoading ? null : onToggle,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isFollowing
+                            ? const Color(0xFFFF5500)
+                            : Colors.white,
+                        disabledBackgroundColor: isFollowing
+                            ? const Color(0xFFFF5500)
+                            : Colors.white,
+                        elevation: 0,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: isButtonLoading
+                          ? SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color:
+                                    isFollowing ? Colors.white : Colors.black,
+                              ),
+                            )
+                          : Text(
+                              isFollowing ? 'Following' : 'Follow',
+                              style: TextStyle(
+                                color:
+                                    isFollowing ? Colors.white : Colors.black,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                  ),
           if (!compact) const SizedBox(height: 2),
 
           if (!compact)
