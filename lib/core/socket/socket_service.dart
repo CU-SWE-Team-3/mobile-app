@@ -144,12 +144,12 @@ class SocketService {
       _activeConversationIds.contains(conversationId);
 
   // ── NEW ──────────────────────────────────────────────────────────────────
-  void sendTyping(String conversationId) {
-    _socket?.emit('typing', {'conversationId': conversationId});
+  void sendTyping(String receiverId) {
+    _socket?.emit('typing', {'receiverId': receiverId});
   }
 
-  void sendStoppedTyping(String conversationId) {
-    _socket?.emit('stop_typing', {'conversationId': conversationId});
+  void sendStoppedTyping(String receiverId) {
+    _socket?.emit('stop_typing', {'receiverId': receiverId});
   }
   // ─────────────────────────────────────────────────────────────────────────
 

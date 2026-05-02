@@ -132,6 +132,16 @@ final conversationsProvider =
   ConversationsNotifier.new,
 );
 
+// ── Total unread message count ────────────────────────────────────────────────
+
+/// Sum of unread counts across all conversations. Returns 0 while loading.
+final totalUnreadMessagesProvider = Provider<int>((ref) {
+  return ref.watch(conversationsProvider).maybeWhen(
+    data: (list) => list.fold<int>(0, (sum, c) => sum + c.unreadCount),
+    orElse: () => 0,
+  );
+});
+
 // ── Messages ──────────────────────────────────────────────────────────────────
 
 final messagesProvider = FutureProvider.autoDispose
