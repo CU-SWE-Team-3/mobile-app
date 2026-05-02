@@ -9,12 +9,15 @@ import '../../../../core/utils/profile_navigation.dart';
 import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
+import '../../../player/presentation/widgets/mini_player_widget.dart';
 import '../../../premium/data/services/track_download_service.dart';
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 class LibraryLikesPage extends ConsumerStatefulWidget {
-  const LibraryLikesPage({super.key});
+  final bool showMiniPlayer;
+
+  const LibraryLikesPage({super.key, this.showMiniPlayer = false});
 
   @override
   ConsumerState<LibraryLikesPage> createState() => _LibraryLikesPageState();
@@ -125,262 +128,283 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
 
     return Scaffold(
       backgroundColor: _bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── top bar ──────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    key: const ValueKey('library_likes_back_button'),
-                    onTap: () => context.pop(),
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Your likes',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                ],
-              ),
-            ),
-
-            // ── content ──────────────────────────────────────────────
-            Expanded(
-              child: async.when(
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-                ),
-                error: (_, __) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                // ── top bar ──────────────────────────────────────────────
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
                     children: [
-                      const Text('Failed to load likes',
-                          style: TextStyle(color: Colors.white54)),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        key: const ValueKey('library_likes_retry_button'),
-                        onPressed: () =>
-                            ref.invalidate(backendUserLikesProvider),
-                        child: const Text('Retry',
-                            style: TextStyle(color: Color(0xFFFF5500))),
+                      GestureDetector(
+                        key: const ValueKey('library_likes_back_button'),
+                        onTap: () => context.pop(),
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white, size: 18),
+                        ),
                       ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Your likes',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
                     ],
                   ),
                 ),
-                data: (allTracks) {
-                  final tracks =
-                      _applyFiltersAndSort(allTracks, const <String>{}, likedOrder);
-                  final playableTracks =
-                      tracks.where((t) => t.audioUrl != null).toList();
-                  final playableQueue = _toPlayerTracks(playableTracks);
-                  final currentTrackId = playerState.currentTrack?.id;
-                  final queueMatchesPage =
-                      _sameQueue(playerState.queue, playableQueue);
-                  final isFromThisPage = currentTrackId != null &&
-                      queueMatchesPage &&
-                      playableTracks.any((track) => track.id == currentTrackId);
-                  final showPause = isFromThisPage && playerState.isPlaying;
-                  final visibleTotalCount = allTracks.length;
 
-                  return Column(
-                    children: [
-                      // ── search + sort ─────────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(22),
-                                ),
-                                child: TextField(
-                                  controller: _searchController,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  decoration: InputDecoration(
-                                    hintText:
-                                        'Search $visibleTotalCount track${visibleTotalCount == 1 ? '' : 's'}',
-                                    hintStyle: TextStyle(
+                // ── content ──────────────────────────────────────────────
+                Expanded(
+                  child: async.when(
+                    loading: () => const Center(
+                      child:
+                          CircularProgressIndicator(color: Color(0xFFFF5500)),
+                    ),
+                    error: (_, __) => Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Failed to load likes',
+                              style: TextStyle(color: Colors.white54)),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            key: const ValueKey('library_likes_retry_button'),
+                            onPressed: () =>
+                                ref.invalidate(backendUserLikesProvider),
+                            child: const Text('Retry',
+                                style: TextStyle(color: Color(0xFFFF5500))),
+                          ),
+                        ],
+                      ),
+                    ),
+                    data: (allTracks) {
+                      final tracks = _applyFiltersAndSort(
+                          allTracks, const <String>{}, likedOrder);
+                      final playableTracks =
+                          tracks.where((t) => t.audioUrl != null).toList();
+                      final playableQueue = _toPlayerTracks(playableTracks);
+                      final currentTrackId = playerState.currentTrack?.id;
+                      final queueMatchesPage =
+                          _sameQueue(playerState.queue, playableQueue);
+                      final isFromThisPage = currentTrackId != null &&
+                          queueMatchesPage &&
+                          playableTracks
+                              .any((track) => track.id == currentTrackId);
+                      final showPause = isFromThisPage && playerState.isPlaying;
+                      final visibleTotalCount = allTracks.length;
+
+                      return Column(
+                        children: [
+                          // ── search + sort ─────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    height: 42,
+                                    decoration: BoxDecoration(
                                       color:
-                                          Colors.white.withValues(alpha: 0.4),
-                                      fontSize: 14,
+                                          Colors.white.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(22),
                                     ),
-                                    prefixIcon: Icon(
-                                      Icons.search_rounded,
+                                    child: TextField(
+                                      controller: _searchController,
+                                      style: const TextStyle(
+                                          color: Colors.white, fontSize: 14),
+                                      decoration: InputDecoration(
+                                        hintText:
+                                            'Search $visibleTotalCount track${visibleTotalCount == 1 ? '' : 's'}',
+                                        hintStyle: TextStyle(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.4),
+                                          fontSize: 14,
+                                        ),
+                                        prefixIcon: Icon(
+                                          Icons.search_rounded,
+                                          color: Colors.white
+                                              .withValues(alpha: 0.4),
+                                          size: 20,
+                                        ),
+                                        border: InputBorder.none,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                vertical: 12),
+                                      ),
+                                      onChanged: (v) =>
+                                          setState(() => _searchQuery = v),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                GestureDetector(
+                                  onTap: _showSortSheet,
+                                  child: Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
                                       color:
-                                          Colors.white.withValues(alpha: 0.4),
+                                          Colors.white.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(22),
+                                    ),
+                                    child: Icon(
+                                      Icons.tune_rounded,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.7),
                                       size: 20,
                                     ),
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        vertical: 12),
                                   ),
-                                  onChanged: (v) =>
-                                      setState(() => _searchQuery = v),
                                 ),
-                              ),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            GestureDetector(
-                              onTap: _showSortSheet,
-                              child: Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(22),
-                                ),
-                                child: Icon(
-                                  Icons.tune_rounded,
-                                  color: Colors.white.withValues(alpha: 0.7),
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
 
-                      // ── action row ────────────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                        child: Row(
-                          children: [
-                            // Download (placeholder)
-                            GestureDetector(
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Coming soon'),
-                                    duration: Duration(seconds: 2),
+                          // ── action row ────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                            child: Row(
+                              children: [
+                                // Download (placeholder)
+                                GestureDetector(
+                                  onTap: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Coming soon'),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  },
+                                  child: Icon(
+                                    Icons.download_rounded,
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    size: 26,
                                   ),
-                                );
-                              },
-                              child: Icon(
-                                Icons.download_rounded,
-                                color: Colors.white.withValues(alpha: 0.7),
-                                size: 26,
-                              ),
+                                ),
+                                const Spacer(),
+                                // Shuffle
+                                GestureDetector(
+                                  onTap: () {
+                                    final shuffledTracks =
+                                        List<TrackSummary>.from(tracks)
+                                          ..shuffle(Random());
+                                    ref
+                                            .read(likedTrackOrderProvider.notifier)
+                                            .state =
+                                        shuffledTracks
+                                            .map((track) => track.id)
+                                            .toList();
+                                    final shuffled =
+                                        _toPlayerTracks(shuffledTracks);
+                                    if (shuffled.isEmpty) return;
+                                    ref
+                                        .read(playerProvider.notifier)
+                                        .playQueue(shuffled);
+                                  },
+                                  child: Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.08),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.shuffle_rounded,
+                                      color: Colors.white,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                // Play all
+                                GestureDetector(
+                                  onTap: () {
+                                    if (isFromThisPage) {
+                                      ref
+                                          .read(playerProvider.notifier)
+                                          .togglePlayPause();
+                                      return;
+                                    }
+                                    if (playableQueue.isEmpty) return;
+                                    ref
+                                        .read(playerProvider.notifier)
+                                        .playQueue(playableQueue);
+                                  },
+                                  child: Container(
+                                    width: 52,
+                                    height: 52,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      showPause
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      color: Colors.black,
+                                      size: showPause ? 28 : 32,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const Spacer(),
-                            // Shuffle
-                            GestureDetector(
-                              onTap: () {
-                                final shuffledTracks =
-                                    List<TrackSummary>.from(tracks)
-                                      ..shuffle(Random());
-                                ref
-                                    .read(likedTrackOrderProvider.notifier)
-                                    .state = shuffledTracks
-                                        .map((track) => track.id)
-                                        .toList();
-                                final shuffled = _toPlayerTracks(shuffledTracks);
-                                if (shuffled.isEmpty) return;
-                                ref
-                                    .read(playerProvider.notifier)
-                                    .playQueue(shuffled);
-                              },
-                              child: Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.shuffle_rounded,
-                                  color: Colors.white,
-                                  size: 22,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            // Play all
-                            GestureDetector(
-                              onTap: () {
-                                if (isFromThisPage) {
-                                  ref
-                                      .read(playerProvider.notifier)
-                                      .togglePlayPause();
-                                  return;
-                                }
-                                if (playableQueue.isEmpty) return;
-                                ref
-                                    .read(playerProvider.notifier)
-                                    .playQueue(playableQueue);
-                              },
-                              child: Container(
-                                width: 52,
-                                height: 52,
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  showPause
-                                      ? Icons.pause_rounded
-                                      : Icons.play_arrow_rounded,
-                                  color: Colors.black,
-                                  size: showPause ? 28 : 32,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
 
-                      // ── track list ────────────────────────────────
-                      Expanded(
-                        child: tracks.isEmpty
-                            ? Center(
-                                child: Text(
-                                  _searchQuery.isEmpty
-                                      ? 'No liked tracks yet'
-                                      : 'No results',
-                                  style: const TextStyle(
-                                      color: Colors.white54, fontSize: 16),
-                                ),
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.only(bottom: 132),
-                                physics: const BouncingScrollPhysics(),
-                                itemCount: tracks.length,
-                                itemBuilder: (_, i) => _LikeTile(
-                                  key: ValueKey(
-                                    'library_likes_track_tile_${tracks[i].id}',
+                          // ── track list ────────────────────────────────
+                          Expanded(
+                            child: tracks.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      _searchQuery.isEmpty
+                                          ? 'No liked tracks yet'
+                                          : 'No results',
+                                      style: const TextStyle(
+                                          color: Colors.white54, fontSize: 16),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: const EdgeInsets.only(bottom: 132),
+                                    physics: const BouncingScrollPhysics(),
+                                    itemCount: tracks.length,
+                                    itemBuilder: (_, i) => _LikeTile(
+                                      key: ValueKey(
+                                        'library_likes_track_tile_${tracks[i].id}',
+                                      ),
+                                      track: tracks[i],
+                                      onRemove: () {},
+                                    ),
                                   ),
-                                  track: tracks[i],
-                                  onRemove: () {},
-                                ),
-                              ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          if (widget.showMiniPlayer)
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: MiniPlayerWidget(),
+            ),
+        ],
       ),
     );
   }
@@ -636,8 +660,7 @@ class _LikeTileState extends ConsumerState<_LikeTile> {
                               strokeWidth: 2,
                               color: Colors.orange,
                             )
-                          : Icon(Icons.download_rounded,
-                              color: sub, size: 20),
+                          : Icon(Icons.download_rounded, color: sub, size: 20),
                 ),
               ),
             ),

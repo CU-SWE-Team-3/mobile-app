@@ -840,6 +840,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         artistPermalink: track.artistPermalink,
         trackPermalink: track.trackPermalink,
         initialIsLiked: track.isLiked,
+        initialIsReposted: track.isReposted,
         initialLikeCount: track.likeCount,
         initialRepostCount: track.repostCount,
       ),

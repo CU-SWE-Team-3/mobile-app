@@ -36,6 +36,7 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
   final bool showShare;
   final bool showReport;
   final bool initialIsLiked;
+  final bool initialIsReposted;
   final int initialLikeCount;
   final int initialRepostCount;
 
@@ -55,6 +56,7 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
     this.showShare = true,
     this.showReport = true,
     this.initialIsLiked = false,
+    this.initialIsReposted = false,
     this.initialLikeCount = 0,
     this.initialRepostCount = 0,
   });
@@ -237,6 +239,7 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
     final engagementParams = EngagementParams(
       trackId: widget.trackId,
       isLiked: widget.initialIsLiked,
+      isReposted: widget.initialIsReposted,
       likeCount: widget.initialLikeCount,
       repostCount: widget.initialRepostCount,
     );
@@ -348,8 +351,17 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
               ),
               _OptionTile(
                 icon: Icons.repeat,
-                label: 'Repost on SoundCloud',
-                onTap: () => _showSoon('Repost coming soon'),
+                label: engagementState.isReposted
+                    ? 'Undo Repost'
+                    : 'Repost on SoundCloud',
+                onTap: engagementState.isLoadingRepost
+                    ? () {}
+                    : () {
+                        Navigator.pop(context);
+                        ref
+                            .read(engagementProvider(engagementParams).notifier)
+                            .toggleRepost();
+                      },
               ),
               const Divider(color: Color(0xFF2A2A2A), height: 1),
               _OptionTile(

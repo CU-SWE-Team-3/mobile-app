@@ -369,6 +369,7 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                       artistPermalink: playerState.currentTrack?.artistPermalink,
                                       trackPermalink: playerState.currentTrack?.trackPermalink,
                                       initialIsLiked: engState.isLiked,
+                                      initialIsReposted: engState.isReposted,
                                       initialLikeCount: engState.likeCount,
                                       initialRepostCount: engState.repostCount,
                                     ),

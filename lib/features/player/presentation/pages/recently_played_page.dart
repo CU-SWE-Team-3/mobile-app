@@ -11,6 +11,7 @@ class RecentlyPlayedPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final historyState = ref.watch(historyProvider);
+    final playerState = ref.watch(playerProvider);
     final tracks = historyState.recentlyPlayed;
     final notifier = ref.read(playerProvider.notifier);
 
@@ -38,14 +39,12 @@ class RecentlyPlayedPage extends ConsumerWidget {
                       SizedBox(height: 16),
                       Text(
                         'Nothing played yet',
-                        style:
-                            TextStyle(color: Colors.white38, fontSize: 16),
+                        style: TextStyle(color: Colors.white38, fontSize: 16),
                       ),
                       SizedBox(height: 8),
                       Text(
                         'Tracks you listen to will show up here',
-                        style:
-                            TextStyle(color: Colors.white24, fontSize: 13),
+                        style: TextStyle(color: Colors.white24, fontSize: 13),
                       ),
                     ],
                   ),
@@ -55,6 +54,7 @@ class RecentlyPlayedPage extends ConsumerWidget {
                   itemCount: tracks.length,
                   itemBuilder: (context, index) {
                     final track = tracks[index];
+                    final isCurrent = playerState.currentTrack?.id == track.id;
                     return ListTile(
                       key: const ValueKey('player_recently_played_track_tile'),
                       contentPadding: const EdgeInsets.symmetric(
@@ -68,8 +68,7 @@ class RecentlyPlayedPage extends ConsumerWidget {
                                 height: 50,
                                 fit: BoxFit.cover,
                                 placeholder: (_, __) => _coverFallback(),
-                                errorWidget: (_, __, ___) =>
-                                    _coverFallback(),
+                                errorWidget: (_, __, ___) => _coverFallback(),
                               )
                             : _coverFallback(),
                       ),
@@ -77,18 +76,17 @@ class RecentlyPlayedPage extends ConsumerWidget {
                         track.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 14),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 14),
                       ),
-                      subtitle: Text(
-                        track.artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 12),
+                      subtitle: _TrackSubtitle(
+                        artist: track.artist,
+                        progress: _trackProgress(playerState, track),
                       ),
-                      trailing: const Icon(
-                        Icons.play_circle_outline,
+                      trailing: Icon(
+                        isCurrent && playerState.isPlaying
+                            ? Icons.pause_circle_outline
+                            : Icons.play_circle_outline,
                         color: Colors.white38,
                         size: 28,
                       ),
@@ -108,4 +106,61 @@ class RecentlyPlayedPage extends ConsumerWidget {
         ),
         child: const Icon(Icons.music_note, color: Colors.white24, size: 22),
       );
+
+  static double? _trackProgress(PlayerState playerState, PlayerTrack track) {
+    if (playerState.currentTrack?.id != track.id) return null;
+    final duration = playerState.duration > Duration.zero
+        ? playerState.duration
+        : (track.duration ?? Duration.zero);
+    if (duration <= Duration.zero) return null;
+    return (playerState.position.inMilliseconds / duration.inMilliseconds)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+}
+
+class _TrackSubtitle extends StatelessWidget {
+  final String artist;
+  final double? progress;
+
+  const _TrackSubtitle({required this.artist, required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          artist,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+        if (progress != null) ...[
+          const SizedBox(height: 6),
+          _MiniProgressBar(progress: progress!),
+        ],
+      ],
+    );
+  }
+}
+
+class _MiniProgressBar extends StatelessWidget {
+  final double progress;
+
+  const _MiniProgressBar({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: LinearProgressIndicator(
+        minHeight: 3,
+        value: progress,
+        backgroundColor: Colors.white12,
+        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFF5500)),
+      ),
+    );
+  }
 }
