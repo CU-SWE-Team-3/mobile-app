@@ -383,6 +383,14 @@ final appRouter = GoRouter(
       path: '/payment-success',
       builder: (_, __) => const PaymentSuccessPage(),
     ),
+    GoRoute(
+      path: '/payment-cancel',
+      builder: (_, __) => const PremiumPaywallPage(),
+    ),
+    GoRoute(
+      path: '/payment-cancelled',
+      builder: (_, __) => const PremiumPaywallPage(),
+    ),
 
     // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─
     GoRoute(

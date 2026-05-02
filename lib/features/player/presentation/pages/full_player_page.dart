@@ -114,7 +114,8 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
           });
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Requires a Go+ Subscription for offline listening.'),
+              content:
+                  Text('Requires a Go+ Subscription for offline listening.'),
               backgroundColor: Color(0xFF333333),
             ),
           );
@@ -352,26 +353,30 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                               if (trackId == null) return;
                               showModalBottomSheet(
                                 context: context,
-                                backgroundColor: const Color(0xFF1E1E1E),
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(
-                                      top: Radius.circular(16)),
+                                isScrollControlled: true,
+                                useSafeArea: true,
+                                enableDrag: true,
+                                isDismissible: true,
+                                barrierColor:
+                                    Colors.black.withValues(alpha: 0.55),
+                                backgroundColor: Colors.transparent,
+                                builder: (_) => TrackOptionsSheet(
+                                  trackId: trackId,
+                                  title: playerState.currentTrack?.title,
+                                  artistName: playerState.currentTrack?.artist,
+                                  artworkUrl:
+                                      playerState.currentTrackArtworkUrl,
+                                  audioUrl: playerState.currentTrack?.audioUrl,
+                                  waveform: playerState.currentTrack?.waveform,
+                                  artistId: playerState.currentTrack?.artistId,
+                                  artistPermalink:
+                                      playerState.currentTrack?.artistPermalink,
+                                  trackPermalink:
+                                      playerState.currentTrack?.trackPermalink,
+                                  initialIsLiked: engState.isLiked,
+                                  initialLikeCount: engState.likeCount,
+                                  initialRepostCount: engState.repostCount,
                                 ),
-                                builder: (_) =>
-                                    TrackOptionsSheet(
-                                      trackId: trackId,
-                                      title: playerState.currentTrack?.title,
-                                      artistName: playerState.currentTrack?.artist,
-                                      artworkUrl: playerState.currentTrackArtworkUrl,
-                                      audioUrl: playerState.currentTrack?.audioUrl,
-                                      waveform: playerState.currentTrack?.waveform,
-                                      artistId: playerState.currentTrack?.artistId,
-                                      artistPermalink: playerState.currentTrack?.artistPermalink,
-                                      trackPermalink: playerState.currentTrack?.trackPermalink,
-                                      initialIsLiked: engState.isLiked,
-                                      initialLikeCount: engState.likeCount,
-                                      initialRepostCount: engState.repostCount,
-                                    ),
                               );
                             },
                           ),
@@ -757,50 +762,49 @@ class _FullPlayerPageState extends ConsumerState<FullPlayerPage> {
                                       playerState.currentTrack?.artist ?? '',
                                   artworkUrl:
                                       playerState.currentTrackArtworkUrl,
-                                  audioUrl:
-                                      playerState.currentTrack?.audioUrl,
+                                  audioUrl: playerState.currentTrack?.audioUrl,
                                 ),
                         child: KeyedSubtree(
                           key: const ValueKey('premium_download_button'),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                            SizedBox(
-                              width: 26,
-                              height: 26,
-                              child: _downloadSuccess
-                                  ? const Icon(
-                                      Icons.check_circle,
-                                      color: Color(0xFF00C853),
-                                      size: 26,
-                                    )
-                                  : _isDownloading
-                                      ? CircularProgressIndicator(
-                                          value: _downloadProgress > 0
-                                              ? _downloadProgress
-                                              : null,
-                                          strokeWidth: 2,
-                                          color: Colors.orange,
-                                        )
-                                      : const Icon(
-                                          Icons.download_outlined,
-                                          key: ValueKey(
-                                            'premium_download_button',
+                              SizedBox(
+                                width: 26,
+                                height: 26,
+                                child: _downloadSuccess
+                                    ? const Icon(
+                                        Icons.check_circle,
+                                        color: Color(0xFF00C853),
+                                        size: 26,
+                                      )
+                                    : _isDownloading
+                                        ? CircularProgressIndicator(
+                                            value: _downloadProgress > 0
+                                                ? _downloadProgress
+                                                : null,
+                                            strokeWidth: 2,
+                                            color: Colors.orange,
+                                          )
+                                        : const Icon(
+                                            Icons.download_outlined,
+                                            key: ValueKey(
+                                              'premium_download_button',
+                                            ),
+                                            color: Colors.white,
+                                            size: 26,
                                           ),
-                                          color: Colors.white,
-                                          size: 26,
-                                        ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _isDownloading
-                                  ? '${(_downloadProgress * 100).toInt()}%'
-                                  : '',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 11,
                               ),
-                            ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _isDownloading
+                                    ? '${(_downloadProgress * 100).toInt()}%'
+                                    : '',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
+                              ),
                             ],
                           ),
                         ),

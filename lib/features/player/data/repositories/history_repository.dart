@@ -11,8 +11,15 @@ import '../../domain/entities/player_track.dart';
 class HistoryEntry {
   final PlayerTrack track;
   final DateTime playedAt;
+  final Duration? progress;
+  final String? sourcePage;
 
-  const HistoryEntry({required this.track, required this.playedAt});
+  const HistoryEntry({
+    required this.track,
+    required this.playedAt,
+    this.progress,
+    this.sourcePage,
+  });
 }
 
 /// Persists listening history as JSON in [SharedPreferences].
@@ -70,6 +77,8 @@ class HistoryRepository {
         if (e.track.coverUrl != null) 'coverUrl': e.track.coverUrl,
         if (e.track.duration != null)
           'durationMs': e.track.duration!.inMilliseconds,
+        if (e.progress != null) 'progressMs': e.progress!.inMilliseconds,
+        if (e.sourcePage != null) 'sourcePage': e.sourcePage,
         if (e.track.artistId != null) 'artistId': e.track.artistId,
       };
 
@@ -86,5 +95,9 @@ class HistoryRepository {
               ? Duration(milliseconds: m['durationMs'] as int)
               : null,
         ),
+        progress: m['progressMs'] != null
+            ? Duration(milliseconds: m['progressMs'] as int)
+            : null,
+        sourcePage: m['sourcePage'] as String?,
       );
 }

@@ -5,6 +5,9 @@ class UploadTrack extends Equatable {
   final String? id;
   final String? hlsUrl;
   final String? artworkUrl;
+  final String? permalink;
+  final String? shareUrl;
+  final String? publicUrl;
   final List<int>? waveform;
 
   final String? audioFilePath;
@@ -30,6 +33,9 @@ class UploadTrack extends Equatable {
     this.id,
     this.hlsUrl,
     this.artworkUrl,
+    this.permalink,
+    this.shareUrl,
+    this.publicUrl,
     this.waveform,
     this.audioFilePath,
     this.coverImagePath,
@@ -55,6 +61,9 @@ class UploadTrack extends Equatable {
     String? id,
     String? hlsUrl,
     String? artworkUrl,
+    String? permalink,
+    String? shareUrl,
+    String? publicUrl,
     List<int>? waveform,
     String? audioFilePath,
     String? coverImagePath,
@@ -79,6 +88,9 @@ class UploadTrack extends Equatable {
       id: id ?? this.id,
       hlsUrl: hlsUrl ?? this.hlsUrl,
       artworkUrl: artworkUrl ?? this.artworkUrl,
+      permalink: permalink ?? this.permalink,
+      shareUrl: shareUrl ?? this.shareUrl,
+      publicUrl: publicUrl ?? this.publicUrl,
       waveform: waveform ?? this.waveform,
       audioFilePath: audioFilePath ?? this.audioFilePath,
       coverImagePath: coverImagePath ?? this.coverImagePath,
@@ -107,6 +119,9 @@ class UploadTrack extends Equatable {
         id,
         hlsUrl,
         artworkUrl,
+        permalink,
+        shareUrl,
+        publicUrl,
         waveform,
         audioFilePath,
         coverImagePath,

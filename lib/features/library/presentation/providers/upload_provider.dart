@@ -128,6 +128,17 @@ class UploadNotifier extends StateNotifier<UploadState> {
     state = state.copyWith(waveformLoaded: loaded);
   }
 
+  String? _firstString(Map<dynamic, dynamic>? map, List<String> keys) {
+    if (map == null) return null;
+    for (final key in keys) {
+      final value = map[key];
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
   // Real API upload with Azure blob storage
   Future<void> uploadTrack() async {
     if (state.track.audioFilePath == null) {
@@ -281,6 +292,9 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
       final trackId = uploadInitResponse.data['data']['trackId'] as String;
       final uploadUrl = uploadInitResponse.data['data']['uploadUrl'] as String;
+      final initData = uploadInitResponse.data['data'] is Map
+          ? uploadInitResponse.data['data'] as Map
+          : null;
       final responseGenre = uploadInitResponse.data['data']?['genre'] ??
           uploadInitResponse.data['data']?['track']?['genre'];
       debugPrint('[Upload] backend response genre=${responseGenre ?? "null"}');
@@ -329,7 +343,19 @@ class UploadNotifier extends StateNotifier<UploadState> {
         '/tracks/$trackId/confirm',
       );
 
-      final permalink = confirmResponse.data['data']['permalink'] as String?;
+      final confirmData = confirmResponse.data['data'] is Map
+          ? confirmResponse.data['data'] as Map
+          : null;
+      final permalink = _firstString(
+        confirmData,
+        const ['permalink', 'slug'],
+      ) ??
+          _firstString(initData, const ['permalink', 'slug']);
+      final shareUrl = _firstString(
+            confirmData,
+            const ['shareUrl', 'trackLink', 'publicUrl'],
+          ) ??
+          _firstString(initData, const ['shareUrl', 'trackLink', 'publicUrl']);
 
       // Step D: PATCH /tracks/{trackId}/metadata — non-null fields only
       state = state.copyWith(uploadProgress: 0.85);
@@ -373,6 +399,12 @@ class UploadNotifier extends StateNotifier<UploadState> {
       }
 
       state = state.copyWith(
+        track: state.track.copyWith(
+          id: trackId,
+          permalink: permalink,
+          shareUrl: shareUrl,
+          publicUrl: shareUrl,
+        ),
         isUploading: false,
         uploadProgress: 1.0,
         successMessage: 'Upload complete! ✓',
