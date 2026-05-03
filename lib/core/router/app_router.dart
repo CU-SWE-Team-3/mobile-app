@@ -88,6 +88,7 @@ import '../../features/playlist/presentation/pages/playlist_privacy_page.dart';
 import '../../features/playlist/presentation/pages/share_playlist_page.dart';
 import '../../features/playlist/presentation/pages/add_to_playlist_page.dart';
 
+import '../../features/messaging/domain/entities/participant.dart';
 import '../../features/messaging/presentation/pages/chat_inbox_page.dart';
 import '../../features/messaging/presentation/pages/chat_room_page.dart';
 import '../../features/messaging/presentation/pages/new_message_page.dart';
@@ -558,7 +559,20 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(
           path: 'new',
-          builder: (_, __) => const NewMessagePage(),
+          builder: (_, state) {
+            final extras = state.extra as Map<String, dynamic>?;
+            Participant? preselected;
+            final uid = extras?['userId']?.toString() ?? '';
+            if (uid.isNotEmpty) {
+              preselected = Participant(
+                id: uid,
+                displayName: extras?['displayName']?.toString() ?? '',
+                avatarUrl: extras?['avatarUrl']?.toString(),
+                permalink: extras?['permalink']?.toString() ?? '',
+              );
+            }
+            return NewMessagePage(preselectedUser: preselected);
+          },
         ),
         GoRoute(
           path: 'chat/:conversationId',
