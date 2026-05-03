@@ -50,14 +50,21 @@ class _PlaylistPrivacyPageState extends ConsumerState<PlaylistPrivacyPage> {
           _loading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[PlaylistPrivacyPage] update failed: $e');
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = 'Failed to update privacy. Please try again.';
+          _error = _privacyErrorMessage(e);
         });
       }
     }
+  }
+
+  String _privacyErrorMessage(Object error) {
+    final message = error.toString().replaceFirst('Exception: ', '').trim();
+    if (message.startsWith('Update playlist privacy failed')) return message;
+    return 'Failed to update privacy. Please try again.';
   }
 
   /// Builds the private-link URL using current local state for isPublic/secretToken.

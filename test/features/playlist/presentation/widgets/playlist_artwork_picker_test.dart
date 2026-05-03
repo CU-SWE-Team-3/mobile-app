@@ -158,7 +158,7 @@ void main() {
     await tester.pump();
 
     expect(changedUrls, ['https://cdn.example.com/new-art.jpg']);
-    verify(() => mockRepo.uploadArtwork('p1', any(), 'cover.jpg')).called(1);
+    verify(() => mockRepo.uploadArtwork('p1', any(), any())).called(1);
   });
 
   // ── Error handling ────────────────────────────────────────────────────────

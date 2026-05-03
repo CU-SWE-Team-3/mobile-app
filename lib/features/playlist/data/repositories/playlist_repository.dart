@@ -83,13 +83,43 @@ class PlaylistRepository {
     if (isPublic != null) body['isPrivate'] = !isPublic;
     if (description != null) body['description'] = description;
     if (body.isEmpty) return;
-    await _dio.patch('/playlists/$id', data: body);
+    try {
+      debugPrint(
+        '[PlaylistRepository.updateMetadata] PATCH /playlists/$id $body',
+      );
+      await _dio.patch('/playlists/$id', data: body);
+    } on DioException catch (e) {
+      final raw = e.response?.data ?? e.message;
+      debugPrint(
+        '[PlaylistRepository.updateMetadata] failed '
+        'status=${e.response?.statusCode} raw=$raw',
+      );
+      throw Exception(
+        'Update playlist failed (${e.response?.statusCode}): $raw',
+      );
+    }
   }
 
   /// PATCH /playlists/{id} — toggle public/private visibility.
   Future<Playlist?> updatePrivacy(String id, bool isPublic) async {
-    final response =
-        await _dio.patch('/playlists/$id', data: {'isPrivate': !isPublic});
+    final body = {'isPrivate': !isPublic};
+    late final Response<dynamic> response;
+    try {
+      debugPrint(
+        '[PlaylistRepository.updatePrivacy] PATCH /playlists/$id $body',
+      );
+      response = await _dio.patch('/playlists/$id', data: body);
+    } on DioException catch (e) {
+      final raw = e.response?.data ?? e.message;
+      debugPrint(
+        '[PlaylistRepository.updatePrivacy] failed '
+        'status=${e.response?.statusCode} raw=$raw',
+      );
+      throw Exception(
+        'Update playlist privacy failed (${e.response?.statusCode}): $raw',
+      );
+    }
+    debugPrint('[PlaylistRepository.updatePrivacy] raw: ${response.data}');
     final data = response.data is Map ? response.data['data'] : null;
     final raw = data is Map ? data['playlist'] : null;
     if (raw is Map) {
