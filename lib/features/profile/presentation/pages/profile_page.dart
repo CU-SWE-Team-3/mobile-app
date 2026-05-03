@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +16,7 @@ import 'package:soundcloud_clone/features/library/presentation/providers/my_trac
 import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
+import 'package:soundcloud_clone/core/providers/session_provider.dart';
 import 'package:soundcloud_clone/features/premium/presentation/providers/subscription_provider.dart';
 import 'package:soundcloud_clone/injection_container.dart';
 
@@ -660,7 +662,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             _iconBtn(Icons.arrow_back_ios_new_rounded,
                 () => context.canPop() ? context.pop() : null),
             const Spacer(),
-            _iconBtn(Icons.more_vert_rounded, () {}),
+            _iconBtn(Icons.more_vert_rounded, _showMyProfileMoreSheet,
+                key: const ValueKey('my_profile_more_button')),
           ],
         ),
       );
@@ -1527,8 +1530,160 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
+  // ── My profile more sheet ─────────────────────────────────────────────────
+
+  void _showMyProfileMoreSheet() {
+    final userId = ref.read(sessionUserIdProvider);
+    final link = userId.isNotEmpty
+        ? 'https://biobeats.app/users/$userId'
+        : 'https://biobeats.app';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 8),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: const Color(0xFFFF5500), width: 2),
+                    ),
+                    child: ClipOval(
+                      child: _avatarUrl.isNotEmpty &&
+                              !_avatarUrl.contains('default-avatar')
+                          ? CachedNetworkImage(
+                              imageUrl: _avatarUrl,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) =>
+                                  const _AvatarFallback(),
+                            )
+                          : const _AvatarFallback(),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _username,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          '$_followerCount followers',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white12, height: 1),
+            _profileSheetTile(
+              key: const ValueKey('my_profile_share_button'),
+              icon: Icons.share_outlined,
+              label: 'Share profile',
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: link));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Profile link copied to clipboard')),
+                );
+              },
+            ),
+            _profileSheetTile(
+              key: const ValueKey('my_profile_copy_link_button'),
+              icon: Icons.link,
+              label: 'Copy link',
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: link));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Profile link copied')),
+                );
+              },
+            ),
+            _profileSheetTile(
+              key: const ValueKey('my_profile_start_station_button'),
+              icon: Icons.radio,
+              label: 'Start station',
+              onTap: () {
+                Navigator.pop(ctx);
+                if (_cachedTracks.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content:
+                            Text('No tracks available to start station.')),
+                  );
+                  return;
+                }
+                _playFrom(0);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _profileSheetTile({
+    Key? key,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) =>
+      InkWell(
+        key: key,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: Colors.white70, size: 22),
+              const SizedBox(width: 16),
+              Text(label,
+                  style: const TextStyle(color: Colors.white, fontSize: 15)),
+            ],
+          ),
+        ),
+      );
+
   // ── helpers ──────────────────────────────────────────────────────────
-  Widget _iconBtn(IconData icon, VoidCallback? onTap) => GestureDetector(
+  Widget _iconBtn(IconData icon, VoidCallback? onTap, {Key? key}) =>
+      GestureDetector(
+        key: key,
         onTap: onTap,
         child: Container(
           width: 38,
