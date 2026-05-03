@@ -58,7 +58,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   List<Map<String, dynamic>>? _likedTracks;
   bool _isLoadingLikes = false;
   bool _hasLikesError = false;
-  String _notifPref = 'none'; // 'all' | 'personalized' | 'none', stored locally per user
+  String _notifPref =
+      'none'; // 'all' | 'personalized' | 'none', stored locally per user
 
   String get _permalink => widget.permalink;
 
@@ -387,7 +388,9 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       }
       // Sync shared followProvider so genre pages, feed cards, full player
       // and any FollowUnfollowButton watching this userId update immediately.
-      ref.read(followProvider(_targetUserId).notifier).setFollowState(!wasFollowing);
+      ref
+          .read(followProvider(_targetUserId).notifier)
+          .setFollowState(!wasFollowing);
       ref.invalidate(followingFeedProvider);
       await ref.read(followingFeedProvider.notifier).load();
     } on DioException catch (e) {
@@ -397,7 +400,9 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
           _followerCount += wasFollowing ? 1 : -1;
         });
         // Revert shared state as well.
-        ref.read(followProvider(_targetUserId).notifier).setFollowState(wasFollowing);
+        ref
+            .read(followProvider(_targetUserId).notifier)
+            .setFollowState(wasFollowing);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -746,8 +751,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title:
             const Text('Profile info', style: TextStyle(color: Colors.white)),
         content: Column(
@@ -769,8 +773,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close',
-                style: TextStyle(color: Color(0xFFFF5500))),
+            child:
+                const Text('Close', style: TextStyle(color: Color(0xFFFF5500))),
           ),
         ],
       ),
@@ -788,8 +792,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
               ),
               TextSpan(
                 text: value,
-                style:
-                    const TextStyle(color: Colors.white, fontSize: 14),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ],
           ),
@@ -826,8 +829,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
                 Text(
                   '${_formatCount(_followerCount)} followers'
                   '${_tracks.isNotEmpty ? ' · ${_tracks.length} tracks' : ''}',
-                  style:
-                      const TextStyle(color: Colors.white54, fontSize: 13),
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
                 ),
               ],
             ),
@@ -854,8 +856,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
               Icon(icon, color: iconColor ?? Colors.white70, size: 22),
               const SizedBox(width: 16),
               Text(label,
-                  style:
-                      const TextStyle(color: Colors.white, fontSize: 15)),
+                  style: const TextStyle(color: Colors.white, fontSize: 15)),
             ],
           ),
         ),
@@ -933,8 +934,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
               ),
               _sheetTile(
                 key: const ValueKey('other_profile_block_button'),
-                icon:
-                    _isBlocked ? Icons.lock_open_outlined : Icons.block,
+                icon: _isBlocked ? Icons.lock_open_outlined : Icons.block,
                 label: _isBlocked ? 'Unblock user' : 'Block user',
                 onTap: () {
                   Navigator.of(context).pop();
