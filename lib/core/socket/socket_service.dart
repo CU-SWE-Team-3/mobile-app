@@ -479,9 +479,6 @@ class SocketService {
       if (isMessage && messageId.isNotEmpty) {
         _recentLocalNotificationMessageIds.add(messageId);
       }
-      if (_shouldSuppressNotificationPopup(notification)) {
-        return;
-      }
       unawaited(
         LocalNotificationService.showNotification(
           title: _notificationTitle(notification),
