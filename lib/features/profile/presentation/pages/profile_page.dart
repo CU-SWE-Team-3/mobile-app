@@ -1568,8 +1568,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     height: 56,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: const Color(0xFFFF5500), width: 2),
+                      border:
+                          Border.all(color: const Color(0xFFFF5500), width: 2),
                     ),
                     child: ClipOval(
                       child: _avatarUrl.isNotEmpty &&
@@ -1643,8 +1643,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 if (_cachedTracks.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                        content:
-                            Text('No tracks available to start station.')),
+                        content: Text('No tracks available to start station.')),
                   );
                   return;
                 }

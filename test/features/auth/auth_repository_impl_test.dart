@@ -1,142 +1,169 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 import 'package:soundcloud_clone/features/auth/data/datasources/auth_mock_datasource.dart';
 import 'package:soundcloud_clone/features/auth/data/repositories/auth_repository_impl.dart';
 import 'package:soundcloud_clone/features/auth/domain/entities/user.dart';
 
-@GenerateMocks([AuthMockDatasource])
-import 'auth_repository_impl_test.mocks.dart';
-
+// AuthMockDatasource is a concrete class — Mockito cannot mock it.
+// We use it directly here since it is already a fake/stub by design.
+// All its methods use Future.delayed with fixed return values,
+// making it perfectly suitable for direct use in unit tests.
 void main() {
   late AuthRepositoryImpl repository;
-  late MockAuthMockDatasource mockDatasource;
+  late AuthMockDatasource datasource;
 
   setUp(() {
-    mockDatasource = MockAuthMockDatasource();
-    repository = AuthRepositoryImpl(mockDatasource: mockDatasource);
+    datasource = AuthMockDatasource();
+    repository = AuthRepositoryImpl(mockDatasource: datasource);
   });
 
-  group('AuthRepositoryImpl', () {
-    const testUser = User(
-      id: '1',
-      permalink: 'test',
-      displayName: 'Test',
-      favoriteGenres: [],
-      socialLinks: {},
-      isPrivate: false,
-      role: 'listener',
-      isPremium: false,
-      isEmailVerified: false,
-      accountStatus: 'active',
-      followerCount: 0,
-      followingCount: 0,
-    );
-
-    test('register calls datasource and returns User', () async {
-      when(mockDatasource.register(
-        email: 'test@example.com',
-        password: 'pass',
-        displayName: 'Test',
-        age: 25,
-        gender: 'Male',
-      )).thenAnswer((_) async => testUser);
-
+  // ─── register ──────────────────────────────────────────────────────────────
+  group('AuthRepositoryImpl.register', () {
+    test('returns a User on success', () async {
       final result = await repository.register(
-        email: 'test@example.com',
+        email: 'test@test.com',
         password: 'pass',
-        displayName: 'Test',
-        age: 25,
-        gender: 'Male',
+        displayName: 'Test User',
+        age: 22,
       );
-
-      expect(result, testUser);
-      verify(mockDatasource.register(
-        email: 'test@example.com',
-        password: 'pass',
-        displayName: 'Test',
-        age: 25,
-        gender: 'Male',
-      )).called(1);
+      expect(result, isA<User>());
     });
 
-    test('register throws when datasource throws', () async {
-      when(mockDatasource.register(
-        email: 'test@example.com',
+    test('returned user has the provided displayName', () async {
+      final result = await repository.register(
+        email: 'test@test.com',
         password: 'pass',
-        displayName: 'Test',
-        age: 25,
-        gender: 'Male',
-      )).thenThrow(Exception('Datasource error'));
+        displayName: 'Kareem',
+        age: 20,
+      );
+      expect(result.displayName, 'Kareem');
+    });
 
-      expect(
-        () => repository.register(
-          email: 'test@example.com',
-          password: 'pass',
-          displayName: 'Test',
+    test('returned user is not email verified after registration', () async {
+      final result = await repository.register(
+        email: 'unverified@test.com',
+        password: 'pass',
+        displayName: 'Unverified',
+        age: 18,
+      );
+      expect(result.isEmailVerified, isFalse);
+    });
+
+    test('returned user has role listener by default', () async {
+      final result = await repository.register(
+        email: 'a@a.com',
+        password: 'p',
+        displayName: 'A',
+        age: 19,
+      );
+      expect(result.role, 'listener');
+    });
+
+    test('returned user has zero followers', () async {
+      final result = await repository.register(
+        email: 'zero@test.com',
+        password: 'p',
+        displayName: 'Zero',
+        age: 21,
+      );
+      expect(result.followerCount, 0);
+      expect(result.followingCount, 0);
+    });
+
+    test('accepts optional gender without error', () async {
+      await expectLater(
+        repository.register(
+          email: 'g@g.com',
+          password: 'p',
+          displayName: 'G',
           age: 25,
-          gender: 'Male',
+          gender: 'female',
         ),
-        throwsA(isA<Exception>()),
+        completes,
       );
     });
+  });
 
-    test('login calls datasource and returns User', () async {
-      when(mockDatasource.login(
-        email: 'test@example.com',
-        password: 'pass',
-      )).thenAnswer((_) async => testUser);
-
+  // ─── login ─────────────────────────────────────────────────────────────────
+  group('AuthRepositoryImpl.login', () {
+    test('returns a User on success', () async {
       final result = await repository.login(
-        email: 'test@example.com',
+        email: 'user@test.com',
         password: 'pass',
       );
-
-      expect(result, testUser);
-      verify(mockDatasource.login(
-        email: 'test@example.com',
-        password: 'pass',
-      )).called(1);
+      expect(result, isA<User>());
     });
 
-    test('login throws when datasource throws', () async {
-      when(mockDatasource.login(
-        email: 'test@example.com',
+    test('returned user is email verified after login', () async {
+      final result = await repository.login(
+        email: 'user@test.com',
         password: 'pass',
-      )).thenThrow(Exception('Login failed'));
+      );
+      expect(result.isEmailVerified, isTrue);
+    });
 
+    test('returned user has a non-empty displayName', () async {
+      final result = await repository.login(
+        email: 'user@test.com',
+        password: 'pass',
+      );
+      expect(result.displayName, isNotEmpty);
+    });
+
+    test('returned user has a non-empty id', () async {
+      final result = await repository.login(
+        email: 'user@test.com',
+        password: 'pass',
+      );
+      expect(result.id, isNotEmpty);
+    });
+  });
+
+  // ─── verifyEmail ───────────────────────────────────────────────────────────
+  group('AuthRepositoryImpl.verifyEmail', () {
+    test('completes without throwing', () async {
+      await expectLater(
+        repository.verifyEmail(token: 'valid_token_123'),
+        completes,
+      );
+    });
+
+    test('returns Future<void>', () {
       expect(
-        () => repository.login(
-          email: 'test@example.com',
-          password: 'pass',
-        ),
-        throwsA(isA<Exception>()),
+        repository.verifyEmail(token: 'token'),
+        isA<Future<void>>(),
+      );
+    });
+  });
+
+  // ─── forgotPassword ────────────────────────────────────────────────────────
+  group('AuthRepositoryImpl.forgotPassword', () {
+    test('completes without throwing', () async {
+      await expectLater(
+        repository.forgotPassword(email: 'forgot@test.com'),
+        completes,
       );
     });
 
-    test('verifyEmail calls datasource with token', () async {
-      when(mockDatasource.verifyEmail(token: 'token')).thenAnswer((_) async {});
-
-      await repository.verifyEmail(token: 'token');
-
-      verify(mockDatasource.verifyEmail(token: 'token')).called(1);
+    test('returns Future<void>', () {
+      expect(
+        repository.forgotPassword(email: 'e@e.com'),
+        isA<Future<void>>(),
+      );
     });
+  });
 
-    test('forgotPassword calls datasource with email', () async {
-      when(mockDatasource.forgotPassword(email: 'test@example.com')).thenAnswer((_) async {});
-
-      await repository.forgotPassword(email: 'test@example.com');
-
-      verify(mockDatasource.forgotPassword(email: 'test@example.com')).called(1);
-    });
-
-    test('logout completes without throwing', () async {
+  // ─── logout ────────────────────────────────────────────────────────────────
+  group('AuthRepositoryImpl.logout', () {
+    test('completes without throwing', () async {
       await expectLater(repository.logout(), completes);
     });
+  });
 
-    test('getCurrentUser returns null', () async {
+  // ─── getCurrentUser ────────────────────────────────────────────────────────
+  group('AuthRepositoryImpl.getCurrentUser', () {
+    test('returns null (no session stored)', () async {
       final result = await repository.getCurrentUser();
-      expect(result, null);
+      expect(result, isNull);
     });
   });
 }

@@ -142,7 +142,7 @@ class _OAuthLoginPageState extends ConsumerState<OAuthLoginPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Image.asset('assets/images/soundcloud_logo.png',
+                Image.asset('assets/icons/logo.png',
                     width: 100, height: 100),
                 Container(width: 2, height: 100, color: Colors.white),
                 Image.asset('assets/icons/Google_Icon.png',
