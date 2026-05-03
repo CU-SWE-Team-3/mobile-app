@@ -51,6 +51,12 @@ class FollowNotifier extends StateNotifier<FollowState> {
     }
   }
 
+  /// Directly sets follow state without making an API call.
+  /// Used to sync shared state after another widget completes the toggle.
+  void setFollowState(bool isFollowing) {
+    if (mounted) state = state.copyWith(isFollowing: isFollowing, isChecking: false);
+  }
+
   Future<void> toggle(String artistId) async {
     if (state.isChecking || state.isLoading) return;
     final wasFollowing = state.isFollowing;

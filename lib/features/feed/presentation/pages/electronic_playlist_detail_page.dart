@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/network/dio_client.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
-import '../../../player/domain/entities/player_track.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 
 class _PlaylistMeta {

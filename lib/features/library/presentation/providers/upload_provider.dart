@@ -347,9 +347,9 @@ class UploadNotifier extends StateNotifier<UploadState> {
           ? confirmResponse.data['data'] as Map
           : null;
       final permalink = _firstString(
-        confirmData,
-        const ['permalink', 'slug'],
-      ) ??
+            confirmData,
+            const ['permalink', 'slug'],
+          ) ??
           _firstString(initData, const ['permalink', 'slug']);
       final shareUrl = _firstString(
             confirmData,

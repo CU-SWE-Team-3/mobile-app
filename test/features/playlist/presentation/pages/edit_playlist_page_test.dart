@@ -199,7 +199,9 @@ void main() {
         (tester) async {
       when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
           .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+        return null;
+      });
 
       await _pumpEditPage(tester, mockRepo);
 
@@ -218,7 +220,9 @@ void main() {
         (tester) async {
       when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
           .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+        return null;
+      });
 
       await _pumpEditPage(tester, mockRepo); // isPublic: true
 
@@ -236,7 +240,9 @@ void main() {
         (tester) async {
       when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
           .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+        return null;
+      });
 
       await _pumpEditPage(tester, mockRepo, playlist: _privatePlaylist);
 
@@ -257,7 +263,9 @@ void main() {
         (tester) async {
       when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
           .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+        return null;
+      });
 
       await _pumpEditPage(tester, mockRepo, withParentRoute: true);
 
@@ -273,7 +281,9 @@ void main() {
         (tester) async {
       when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
           .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+        return null;
+      });
       SharedPreferences.setMockInitialValues({});
       when(() => mockRepo.fetchById(any())).thenAnswer((_) async => {});
 

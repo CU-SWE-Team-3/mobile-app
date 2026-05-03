@@ -774,7 +774,7 @@ class _FollowingTrackItem extends ConsumerWidget {
                 children: [
                   hasArtwork
                       ? CachedNetworkImage(
-                          imageUrl: artworkUrl!,
+                          imageUrl: artworkUrl,
                           fit: BoxFit.cover,
                           placeholder: (_, __) =>
                               const ColoredBox(color: Color(0xFF1A1A1A)),
