@@ -242,6 +242,11 @@ class PlayerNotifier extends StateNotifier<PlayerState> {
 
       await _audioHandler.loadTrack(track, resolvedUrl);
       await _audioHandler.play();
+      unawaited(_api.reportProgress(
+        trackId: track.id,
+        listenedSeconds: 0,
+        totalSeconds: (track.duration ?? state.duration).inSeconds,
+      ));
     } catch (e) {
       state = state.copyWith(
         isLoading: false,

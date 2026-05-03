@@ -1,24 +1,13 @@
-const _kBioBeatsShareScheme = 'biobeats';
-const _kBioBeatsShareHost = 'open';
+const _kBioBeatsShareBase = 'https://biobeats.duckdns.org';
 
 String buildTrackUrl({
   required String trackId,
   String? artistPermalink,
   String? trackPermalink,
 }) {
-  final artist = artistPermalink?.trim().replaceFirst('@', '');
   final track = trackPermalink?.trim();
+  final trackRef = track != null && track.isNotEmpty ? track : trackId.trim();
 
-  final segments = artist != null &&
-          artist.isNotEmpty &&
-          track != null &&
-          track.isNotEmpty
-      ? [artist, track]
-      : ['tracks', trackId.trim()];
-
-  return Uri(
-    scheme: _kBioBeatsShareScheme,
-    host: _kBioBeatsShareHost,
-    pathSegments: segments,
-  ).toString();
+  return Uri.parse(_kBioBeatsShareBase)
+      .replace(pathSegments: ['tracks', trackRef]).toString();
 }

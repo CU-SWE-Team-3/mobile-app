@@ -61,6 +61,9 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   // Typing emit state
   bool _isTypingEmitted = false;
   Timer? _typingStopTimer;
+  // Cached receiver ID — populated from otherParticipant in build() so that
+  // _onTextChanged and dispose() can emit without touching the provider layer.
+  String? _receiverId;
 
   // Typing indicator (incoming from other user)
   bool _otherUserIsTyping = false;
@@ -212,10 +215,17 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   // ── Typing indicator (incoming) ────────────────────────────────────────────
 
   void _onUserTyping(Map<String, dynamic> data) {
-    final convId = _conversationIdFrom(data);
-    if (convId != widget.conversationId) return;
+    if (!_typingEventBelongsHere(data)) return;
     _typingHideTimer?.cancel();
+    final wasNearBottom = _isNearBottom();
     setState(() => _otherUserIsTyping = true);
+    if (wasNearBottom) {
+      // Wait for AnimatedSize to finish expanding before scrolling so that
+      // maxScrollExtent reflects the indicator's full height as the target.
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (mounted) _scrollToBottom(force: true);
+      });
+    }
     // Safety-net: auto-hide after 3 s in case stop event is lost.
     _typingHideTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _otherUserIsTyping = false);
@@ -223,10 +233,33 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   }
 
   void _onUserStoppedTyping(Map<String, dynamic> data) {
-    final convId = _conversationIdFrom(data);
-    if (convId != widget.conversationId) return;
+    if (!_typingEventBelongsHere(data)) return;
     _typingHideTimer?.cancel();
     if (mounted) setState(() => _otherUserIsTyping = false);
+  }
+
+  // The server's user_typing / user_stopped_typing payload may or may not
+  // include a conversationId. When it does, use it for routing. When it
+  // doesn't, fall back to matching on senderId vs the cached _receiverId
+  // (the other participant's user ID). This handles servers that only send
+  // {senderId: "..."} in the typing event payload.
+  bool _typingEventBelongsHere(Map<String, dynamic> data) {
+    final convId = _conversationIdFrom(data);
+    if (convId.isNotEmpty) return convId == widget.conversationId;
+
+    // No conversationId in payload — match by senderId.
+    final senderId = data['senderId']?.toString() ??
+        data['userId']?.toString() ??
+        data['from']?.toString() ??
+        '';
+    final receiverId = _receiverId;
+    if (senderId.isNotEmpty && receiverId != null) {
+      return senderId == receiverId;
+    }
+
+    // Cannot filter deterministically — allow through so the indicator
+    // is not silently suppressed when only one chat is open.
+    return true;
   }
 
   // ── Edit / delete socket events ────────────────────────────────────────────
@@ -267,31 +300,32 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   // ── Typing emit logic ──────────────────────────────────────────────────────
 
   void _onTextChanged() {
-    final convId = widget.conversationId;
+    final receiverId = _receiverId;
 
     if (_textController.text.isEmpty) {
-      _stopTypingIfNeeded(convId);
+      _stopTypingIfNeeded();
       return;
     }
 
-    if (!_isTypingEmitted) {
+    if (!_isTypingEmitted && receiverId != null) {
       _isTypingEmitted = true;
-      _socketService.sendTyping(convId);
+      _socketService.sendTyping(receiverId);
     }
 
     _typingStopTimer?.cancel();
     _typingStopTimer = Timer(const Duration(seconds: 2), () {
       _isTypingEmitted = false;
-      _socketService.sendStoppedTyping(convId);
+      if (receiverId != null) _socketService.sendStoppedTyping(receiverId);
     });
   }
 
-  void _stopTypingIfNeeded(String convId) {
+  void _stopTypingIfNeeded() {
     if (!_isTypingEmitted) return;
 
     _isTypingEmitted = false;
     _typingStopTimer?.cancel();
-    _socketService.sendStoppedTyping(convId);
+    final receiverId = _receiverId;
+    if (receiverId != null) _socketService.sendStoppedTyping(receiverId);
   }
 
   // ── Edit mode ──────────────────────────────────────────────────────────────
@@ -441,7 +475,7 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     if (text.isEmpty && attachment == null) return;
 
     // Stop typing indicator immediately on send.
-    _stopTypingIfNeeded(widget.conversationId);
+    _stopTypingIfNeeded();
     _textController.clear();
     setState(() => _pendingAttachment = null);
 
@@ -496,9 +530,13 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
       if (!mounted) return;
       setState(() => _localMessages!.removeWhere((m) => m.id == optimisticId));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This track is private and cannot be shared.'),
-          backgroundColor: Color(0xFF3A1A1A),
+        SnackBar(
+          content: Text(
+            attachment == null
+                ? 'This person only accepts messages from people they follow.'
+                : 'This track is private and cannot be shared.',
+          ),
+          backgroundColor: const Color(0xFF3A1A1A),
         ),
       );
     } on DioException catch (e) {
@@ -579,14 +617,20 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
     _typingStopTimer?.cancel();
     _typingHideTimer?.cancel();
     // Emit stop_typing if disposed while mid-typing.
-    if (_isTypingEmitted) {
-      _socketService.sendStoppedTyping(widget.conversationId);
+    if (_isTypingEmitted && _receiverId != null) {
+      _socketService.sendStoppedTyping(_receiverId!);
     }
     _socketService.leaveChat(widget.conversationId);
     _scrollController.dispose();
     _textController.dispose();
     _textFocusNode.dispose();
     super.dispose();
+  }
+
+  bool _isNearBottom() {
+    if (!_scrollController.hasClients) return true;
+    return _scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 150;
   }
 
   void _scrollToBottom({bool force = false}) {
@@ -649,17 +693,19 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
   @override
   Widget build(BuildContext context) {
     final currentUserId = ref.watch(sessionUserIdProvider);
-    final messagesAsync = ref.watch(messagesProvider(widget.conversationId));
     final conversationsAsync = ref.watch(conversationsProvider);
+    final conversations = conversationsAsync.valueOrNull ?? const [];
+    final conversationLookupComplete = conversationsAsync.hasValue;
+    final conversationExists =
+        conversations.any((c) => c.id == widget.conversationId);
+    final messagesAsync = ref.watch(messagesProvider(widget.conversationId));
     final otherParticipant = _resolveOtherParticipant(currentUserId) ??
         _fallbackParticipantFromMessages(
           currentUserId,
           messagesAsync.valueOrNull,
         );
-    final conversations = conversationsAsync.valueOrNull ?? const [];
-    final conversationLookupComplete = conversationsAsync.hasValue;
-    final conversationExists =
-        conversations.any((c) => c.id == widget.conversationId);
+    if (otherParticipant != null) _receiverId = otherParticipant.id;
+    
 
     final isEditing = _editingMessageId != null;
 
@@ -792,8 +838,17 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
                     key: const ValueKey('message_list'),
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    itemCount: _localMessages!.length,
+                    itemCount: _localMessages!.length + 1,
                     itemBuilder: (context, i) {
+                      if (i == _localMessages!.length) {
+                        return AnimatedSize(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeOut,
+                          child: _otherUserIsTyping
+                              ? _TypingIndicator(participant: otherParticipant)
+                              : const SizedBox.shrink(),
+                        );
+                      }
                       final msg = _localMessages![i];
                       final isOwn = msg.senderId == currentUserId;
                       final isPending = msg.id.startsWith('pending_');
@@ -833,9 +888,6 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
               },
             ),
           ),
-          // Animated indicator shown while the other user is typing.
-          if (_otherUserIsTyping)
-            _TypingIndicator(participant: otherParticipant),
           // Pending attachment preview strip
           if (_pendingAttachment != null)
             _AttachmentPreviewStrip(
@@ -1044,11 +1096,10 @@ class _TypingIndicatorState extends State<_TypingIndicator>
               builder: (_, __) {
                 final dotCount = (_controller.value * 3).floor().clamp(1, 3);
                 return Text(
-                  '.' * dotCount,
+                  'typing${'.' * dotCount}',
                   style: const TextStyle(
                     color: Colors.white54,
-                    fontSize: 20,
-                    letterSpacing: 4,
+                    fontSize: 13,
                   ),
                 );
               },

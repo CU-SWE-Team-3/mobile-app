@@ -79,6 +79,7 @@ class _FeedTrackCardState extends ConsumerState<FeedTrackCard> {
         artistId: track.artistId,
         artistPermalink: track.artistPermalink,
         initialIsLiked: engState.isLiked,
+        initialIsReposted: engState.isReposted,
         initialLikeCount: engState.likeCount,
         initialRepostCount: engState.repostCount,
       ),

@@ -12,6 +12,7 @@ import 'package:soundcloud_clone/features/engagement/presentation/providers/enga
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/like_button.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/followers/presentation/widgets/suggested_row.dart';
+import 'package:soundcloud_clone/features/messaging/presentation/providers/messaging_providers.dart';
 import 'package:soundcloud_clone/features/notifications/presentation/providers/notification_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
@@ -840,6 +841,7 @@ class _HomePageState extends ConsumerState<HomePage> {
         artistPermalink: track.artistPermalink,
         trackPermalink: track.trackPermalink,
         initialIsLiked: track.isLiked,
+        initialIsReposted: track.isReposted,
         initialLikeCount: track.likeCount,
         initialRepostCount: track.repostCount,
       ),
@@ -1288,10 +1290,34 @@ class _HomePageState extends ConsumerState<HomePage> {
             onPressed: _pickUploadFromHome,
             icon: const Icon(Icons.arrow_circle_up_outlined, size: 23),
           ),
-          IconButton(
-            key: const ValueKey('home_messages_button'),
-            onPressed: () => context.push('/messages'),
-            icon: const Icon(Icons.mail_outline, size: 23),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                key: const ValueKey('home_messages_button'),
+                onPressed: () => context.push('/messages'),
+                icon: const Icon(Icons.mail_outline, size: 23),
+              ),
+              Builder(
+                builder: (context) {
+                  final unread =
+                      ref.watch(totalUnreadMessagesProvider);
+                  if (unread == 0) return const SizedBox.shrink();
+                  return Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF5500),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
           Stack(
             clipBehavior: Clip.none,

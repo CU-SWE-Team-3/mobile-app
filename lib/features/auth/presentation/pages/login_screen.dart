@@ -70,6 +70,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           'displayName', user['displayName'] as String? ?? '');
       await prefs.setString('role', user['role'] as String? ?? '');
       await prefs.setString('permalink', user['permalink'] as String? ?? '');
+      final avatarUrl =
+          (user['avatarUrl'] ?? user['avatar'] ?? user['picture'] ?? '')
+              .toString();
+      await prefs.setString('avatarUrl', avatarUrl);
       // Extract accessToken and refreshToken from Set-Cookie header
       String? refreshToken;
       final setCookie = response.headers['set-cookie'];

@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../engagement/presentation/providers/engagement_provider.dart';
@@ -8,6 +9,7 @@ import '../../../playlist/domain/entities/playlist.dart';
 import '../../../playlist/presentation/pages/playlist_details_page.dart';
 import '../../../playlist/presentation/providers/playlists_provider.dart';
 import '../../../playlist/presentation/widgets/playlist_options_sheet.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -55,7 +57,8 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
       body: SafeArea(
         child: Column(
           children: [
-            _TopBar(onAdd: () => _openCreateSheet(context)),
+            _TopBar(
+                onAdd: () => _openCreateSheet(context, ownedPlaylists.length)),
             Expanded(
               child: playlists.isEmpty &&
                       likedPlaylistsAsync.isLoading &&
@@ -65,11 +68,13 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
                     )
                   : playlists.isEmpty
                       ? _EmptyState(
-                          onCreateTap: () => _openCreateSheet(context))
+                          onCreateTap: () =>
+                              _openCreateSheet(context, ownedPlaylists.length))
                       : _PlaylistList(
                           playlists: playlists,
                           ownedIds: ownedIds,
-                          onCreateNew: () => _openCreateSheet(context),
+                          onCreateNew: () =>
+                              _openCreateSheet(context, ownedPlaylists.length),
                           onImport: () => Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -83,7 +88,13 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
     );
   }
 
-  void _openCreateSheet(BuildContext context) {
+  void _openCreateSheet(BuildContext context, int playlistCount) {
+    final subscription = ref.read(subscriptionProvider);
+    if (!subscription.canUploadUnlimited && playlistCount >= 2) {
+      _showUpgradeRequiredDialog(context);
+      return;
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -95,6 +106,42 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
       ),
       builder: (_) => _CreateSheet(
         onSave: (title, isPublic) => _addPlaylist(context, title, isPublic),
+      ),
+    );
+  }
+
+  void _showUpgradeRequiredDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _surface,
+        title: const Text(
+          'Upgrade required',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'You need to upgrade to create more than 2 playlists.',
+          style: TextStyle(color: _secondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text(
+              'Not now',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              context.go('/upgrade');
+            },
+            child: const Text(
+              'Go to upgrade',
+              style: TextStyle(color: _primary, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -117,6 +164,10 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
     } catch (e, st) {
       debugPrint('[_addPlaylist] ERROR: $e');
       debugPrint('[_addPlaylist] STACK: $st');
+      if (_isPlaylistLimitError(e)) {
+        _showUpgradeRequiredDialog(context);
+        rethrow;
+      }
       messenger.showSnackBar(SnackBar(
         content: Text('Could not create playlist: $e'),
         backgroundColor: _surface,
@@ -133,6 +184,12 @@ class _LibraryPlaylistsPageState extends ConsumerState<LibraryPlaylistsPage> {
       ownerName: ownerName,
       isPublic: isPublic,
     ));
+  }
+
+  bool _isPlaylistLimitError(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('limited to 2 playlists') ||
+        message.contains('upgrade to pro');
   }
 }
 
@@ -435,7 +492,8 @@ class _ActionButton extends StatelessWidget {
 class _PlaylistTile extends ConsumerStatefulWidget {
   final Playlist playlist;
   final bool isOwned;
-  const _PlaylistTile({super.key, required this.playlist, required this.isOwned});
+  const _PlaylistTile(
+      {super.key, required this.playlist, required this.isOwned});
 
   @override
   ConsumerState<_PlaylistTile> createState() => _PlaylistTileState();
@@ -464,17 +522,19 @@ class _PlaylistTileState extends ConsumerState<_PlaylistTile> {
       targetModel: 'Playlist',
       isLiked: true,
     );
-    final engState = widget.isOwned ? null : ref.watch(engagementProvider(engParams));
+    final engState =
+        widget.isOwned ? null : ref.watch(engagementProvider(engParams));
 
     final hasArtwork = playlist.artworkUrl != null &&
-        playlist.artworkUrl!.startsWith('https://') &&
+        playlist.artworkUrl!.startsWith('http') &&
         !playlist.artworkUrl!.contains('default');
     final hasFirstTrackArtwork = !hasArtwork &&
         playlist.firstTrackArtworkUrl != null &&
-        playlist.firstTrackArtworkUrl!.startsWith('https://') &&
+        playlist.firstTrackArtworkUrl!.startsWith('http') &&
         !playlist.firstTrackArtworkUrl!.contains('default');
-    final hasValidAvatar =
-        _avatarUrl.isNotEmpty && !_avatarUrl.contains('default-avatar');
+    final hasValidAvatar = _avatarUrl.isNotEmpty &&
+        _avatarUrl.startsWith('http') &&
+        !_avatarUrl.contains('default-avatar');
 
     Widget thumbnailChild;
     if (hasArtwork) {
@@ -626,6 +686,7 @@ class _PlaylistTileState extends ConsumerState<_PlaylistTile> {
                         BorderRadius.vertical(top: Radius.circular(16)),
                   ),
                   useSafeArea: true,
+                  isScrollControlled: true,
                   builder: (_) => PlaylistOptionsSheet(playlist: playlist),
                 ),
                 child: const Padding(

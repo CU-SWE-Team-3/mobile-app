@@ -90,10 +90,53 @@ class FcmService {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await initialize();
       final initialMessage = await _messaging.getInitialMessage();
-      if (initialMessage != null) {
-        _handleNotificationTap(initialMessage);
+      if (initialMessage == null) return;
+      // The splash page runs its own async auth check before calling
+      // context.go('/home'). If we navigate immediately, that go('/home')
+      // fires after us and overwrites our target route. Waiting until the
+      // router leaves /splash guarantees we fire after the auth redirect.
+      await _waitForRouterSettled();
+      _handleNotificationTap(initialMessage);
+    });
+  }
+
+  /// Waits until the router has navigated away from the splash screen.
+  ///
+  /// Subscribes to [appRouter.routerDelegate] (a [ChangeNotifier]) which fires
+  /// on every route change. Falls back to completing after 5 s so a failed
+  /// auth flow never leaves this suspended indefinitely.
+  static Future<void> _waitForRouterSettled() async {
+    bool hasSplashLeft() {
+      try {
+        final path =
+            appRouter.routerDelegate.currentConfiguration.uri.path;
+        return path.isNotEmpty && path != '/splash';
+      } catch (_) {
+        return false;
+      }
+    }
+
+    if (hasSplashLeft()) return;
+
+    final completer = Completer<void>();
+    late VoidCallback listener;
+    listener = () {
+      if (!completer.isCompleted && hasSplashLeft()) {
+        completer.complete();
+        appRouter.routerDelegate.removeListener(listener);
+      }
+    };
+    appRouter.routerDelegate.addListener(listener);
+
+    final timer = Timer(const Duration(seconds: 5), () {
+      if (!completer.isCompleted) {
+        appRouter.routerDelegate.removeListener(listener);
+        completer.complete();
       }
     });
+
+    await completer.future;
+    timer.cancel();
   }
 
   static Future<void> registerCurrentToken() async {
@@ -158,16 +201,16 @@ class FcmService {
     final previousToken = prefs.getString(_lastRegisteredTokenKey);
     if (previousToken != null &&
         previousToken.isNotEmpty &&
-        previousToken != token) {
+        (previousToken != token || _lastRegisteredAuth != auth)) {
       try {
         await dioClient.dio.delete(
           '/notifications/fcm-token',
           data: {'token': previousToken},
         );
-        debugPrint('[FCM] previous token unregistered: '
+        debugPrint('[FCM] previous token cleared before register: '
             '${_fingerprint(previousToken)}');
       } catch (e) {
-        debugPrint('[FCM] previous token unregister failed: $e');
+        debugPrint('[FCM] previous token pre-clear failed: $e');
       }
     }
 
@@ -208,19 +251,14 @@ class FcmService {
     if (notif == null) return;
     final type = (data['type'] ?? data['notificationType'] ?? '').toString();
     final isMessage = type.toUpperCase() == 'MESSAGE';
-    final conversationId = _messageConversationId(data);
+    if (isMessage) {
+      debugPrint('[FCM] foreground MESSAGE ignored; socket owns in-app popup');
+      return;
+    }
     final actionLink = data['actionLink']?.toString() ?? '';
-    final payload = isMessage && conversationId.isNotEmpty
-        ? '/messages/chat/$conversationId'
-        : actionLink.isNotEmpty
-            ? actionLink
-            : '/notifications';
-    final title = isMessage
-        ? 'Message from ${_messageSenderName(data)}'
-        : notif.title ?? 'BioBeats';
-    final body = isMessage
-        ? _messageBody(data, notif.body)
-        : _safeBody(notif.body, fallback: 'Tap to open BioBeats');
+    final payload = actionLink.isNotEmpty ? actionLink : '/notifications';
+    final title = notif.title ?? 'BioBeats';
+    final body = _safeBody(notif.body, fallback: 'Tap to open BioBeats');
     unawaited(LocalNotificationService.showNotification(
       title: title,
       body: body,
@@ -233,7 +271,11 @@ class FcmService {
     final type = (data['type'] ?? data['notificationType'] ?? '').toString();
     final targetModel = (data['targetModel'] ?? '').toString();
     final actionLink = (data['actionLink'] ?? '').toString();
-    final conversationId = _messageConversationId(data);
+    final payloadConversationId = _messageConversationId(data);
+    final actionLinkConversationId = _conversationIdFromActionLink(actionLink);
+    final conversationId = payloadConversationId.isNotEmpty
+        ? payloadConversationId
+        : actionLinkConversationId;
     final targetPermalink =
         (data['targetPermalink'] ?? data['permalink'] ?? '').toString();
 
@@ -241,7 +283,7 @@ class FcmService {
 
     if (type.toUpperCase() == 'MESSAGE') {
       if (conversationId.isNotEmpty) {
-        appRouter.go('/messages/chat/$conversationId');
+        _navigateToChat(conversationId);
       } else {
         debugPrint(
           '[FCM] MESSAGE tap missing conversationId. '
@@ -288,15 +330,35 @@ class FcmService {
     appRouter.go('/notifications');
   }
 
+  /// Navigates to the chat room for [conversationId].
+  ///
+  /// Uses [GoRouter.replace] when already on that route so the page
+  /// re-initializes (re-joins socket, reloads messages) instead of silently
+  /// no-op-ing. Uses [GoRouter.go] for all other navigation origins.
+  static void _navigateToChat(String conversationId) {
+    final target = '/messages/chat/$conversationId';
+    try {
+      final currentPath =
+          appRouter.routerDelegate.currentConfiguration.uri.path;
+      if (currentPath == target) {
+        appRouter.replace(target);
+        return;
+      }
+    } catch (_) {}
+    appRouter.go(target);
+  }
+
   static String _messageConversationId(Map<String, dynamic> data) {
-    for (final key in const [
-      'conversationId',
-      'targetConversationId',
-      'chatId',
-      'conversation',
-    ]) {
-      final value = _idValue(data[key]);
-      if (value.isNotEmpty) return value;
+    for (final map in _payloadMaps(data)) {
+      for (final key in const [
+        'conversationId',
+        'targetConversationId',
+        'chatId',
+        'conversation',
+      ]) {
+        final value = _idValue(map[key]);
+        if (value.isNotEmpty) return value;
+      }
     }
 
     final target = data['target'];
@@ -305,12 +367,7 @@ class FcmService {
         target['conversationId'] ?? target['conversation'] ?? target['chatId'],
       );
       if (value.isNotEmpty) return value;
-      final idValue = _idValue(target);
-      if (idValue.isNotEmpty) return idValue;
     }
-
-    final targetId = _idValue(data['targetId']);
-    if (targetId.isNotEmpty) return targetId;
 
     final targetString = target?.toString() ?? data['targetJson']?.toString();
     if (targetString != null && targetString.isNotEmpty) {
@@ -324,8 +381,6 @@ class FcmService {
                 parsedMap['chatId'],
           );
           if (value.isNotEmpty) return value;
-          final idValue = _idValue(parsedMap);
-          if (idValue.isNotEmpty) return idValue;
         }
       } catch (_) {}
     }
@@ -333,12 +388,71 @@ class FcmService {
     return '';
   }
 
+  static List<Map<String, dynamic>> _payloadMaps(Map<String, dynamic> data) {
+    final maps = <Map<String, dynamic>>[data];
+    for (final key in const ['extraData', 'target', 'targetJson', 'payload', 'data']) {
+      final map = _mapValue(data[key]);
+      if (map != null) maps.add(map);
+    }
+    return maps;
+  }
+
+  static Map<String, dynamic>? _mapValue(dynamic value) {
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      final trimmed = value.trim();
+      if (!trimmed.startsWith('{')) return null;
+      try {
+        final parsed = jsonDecode(trimmed);
+        if (parsed is Map) return Map<String, dynamic>.from(parsed);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static String _conversationIdFromActionLink(String actionLink) {
+    final uri = Uri.tryParse(actionLink);
+    final segments = uri?.pathSegments ?? const <String>[];
+    if (segments.length >= 3 &&
+        segments[0] == 'messages' &&
+        segments[1] == 'chat' &&
+        segments[2].trim().isNotEmpty) {
+      return segments[2].trim();
+    }
+    return '';
+  }
+
   static String _idValue(dynamic value) {
     if (value == null) return '';
-    if (value is String) return value;
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return '';
+      if (trimmed.startsWith('{')) {
+        try {
+          final parsed = jsonDecode(trimmed);
+          if (parsed is Map) {
+            final map = Map<String, dynamic>.from(parsed);
+            return (map['_id'] ??
+                    map['id'] ??
+                    map['conversationId'] ??
+                    map['chatId'] ??
+                    '')
+                .toString()
+                .trim();
+          }
+        } catch (_) {}
+      }
+      return trimmed;
+    }
     if (value is Map) {
       final map = Map<String, dynamic>.from(value);
-      final id = (map['_id'] ?? map['id'] ?? '').toString();
+      final id = (map['_id'] ??
+              map['id'] ??
+              map['conversationId'] ??
+              map['chatId'] ??
+              '')
+          .toString()
+          .trim();
       if (id.isNotEmpty) return id;
     }
     return '';
@@ -400,7 +514,7 @@ class FcmService {
   }
 
   static bool _looksLikeObjectId(String value) {
-    return RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(value);
+    return RegExp(r'^[a-fA-F0-9]{20,32}$').hasMatch(value);
   }
 
   static String _fingerprint(String token) {

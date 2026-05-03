@@ -16,10 +16,7 @@ class ResourceResolverService {
       case ResourceLinkKind.playlistById:
         return _resolvePlaylistById(parsed);
       case ResourceLinkKind.playlistByPermalink:
-        return const ResourceResolution.notFound(
-          message:
-              'This playlist link uses a permalink format that the 1.11 API cannot resolve.',
-        );
+        return _resolvePlaylistByPermalink(parsed);
       case ResourceLinkKind.unknown:
         return const ResourceResolution.ignored();
     }
@@ -75,16 +72,13 @@ class ResourceResolverService {
       );
     }
 
-    if (parsed.secretToken != null && parsed.secretToken!.isNotEmpty) {
-      return const ResourceResolution.notFound(
-        message:
-            'Private playlist links are not supported by the current in-app resolver.',
-      );
-    }
-
     try {
       await _dio.get(
         '/playlists/$playlistId',
+        queryParameters: {
+          if (parsed.secretToken != null && parsed.secretToken!.isNotEmpty)
+            'secretToken': parsed.secretToken,
+        },
       );
       return ResourceResolution.playlist(
         playlistId: playlistId,
@@ -95,6 +89,76 @@ class ResourceResolverService {
         message: 'We could not open that playlist link.',
       );
     }
+  }
+
+  Future<ResourceResolution> _resolvePlaylistByPermalink(
+    ParsedResourceLink parsed,
+  ) async {
+    final userPermalink = parsed.userPermalink;
+    final playlistPermalink = parsed.playlistPermalink;
+    if (userPermalink == null ||
+        userPermalink.isEmpty ||
+        playlistPermalink == null ||
+        playlistPermalink.isEmpty) {
+      return const ResourceResolution.notFound(
+        message: 'This playlist link is missing playlist details.',
+      );
+    }
+
+    try {
+      final profileResponse = await _dio.get('/profile/$userPermalink');
+      final profileBody = profileResponse.data;
+      final profileInner =
+          profileBody is Map ? (profileBody['data'] ?? profileBody) : null;
+      final profile = profileInner is Map
+          ? (profileInner['user'] ??
+              profileInner['profile'] ??
+              profileInner['publicProfile'] ??
+              profileInner)
+          : null;
+      final creatorId = profile is Map
+          ? (profile['_id'] ?? profile['id'] ?? profile['userId'])?.toString()
+          : null;
+      if (creatorId == null || creatorId.isEmpty) {
+        return const ResourceResolution.notFound(
+          message: 'We could not open that playlist link.',
+        );
+      }
+
+      final playlistsResponse = await _dio.get(
+        '/playlists',
+        queryParameters: {'creator': creatorId},
+      );
+      final playlists = _extractList(playlistsResponse.data, 'playlists');
+      for (final item in playlists) {
+        if (item is! Map) continue;
+        final playlist = Map<String, dynamic>.from(item);
+        if (playlist['permalink']?.toString() != playlistPermalink) continue;
+        final id = (playlist['_id'] ?? playlist['id'])?.toString();
+        if (id == null || id.isEmpty) break;
+        return ResourceResolution.playlist(
+          playlistId: id,
+          secretToken: parsed.secretToken,
+        );
+      }
+      return const ResourceResolution.notFound(
+        message: 'We could not open that playlist link.',
+      );
+    } catch (_) {
+      return const ResourceResolution.notFound(
+        message: 'We could not open that playlist link.',
+      );
+    }
+  }
+
+  static List<dynamic> _extractList(dynamic body, String key) {
+    if (body is List) return body;
+    if (body is! Map) return const [];
+    final data = body['data'];
+    if (data is List) return data;
+    if (data is Map && data[key] is List) return data[key] as List;
+    if (body[key] is List) return body[key] as List;
+    return const [];
   }
 
   static Map<String, dynamic> _artistMap(Map<String, dynamic> rawTrack) {
@@ -157,7 +221,8 @@ class ParsedResourceLink {
         .map((segment) => segment.trim())
         .where((segment) => segment.isNotEmpty)
         .toList();
-    final secretToken = uri.queryParameters['secret_token'];
+    final secretToken = uri.queryParameters['secretToken'] ??
+        uri.queryParameters['secret_token'];
     const reservedRoots = {
       'payment-success',
       'payment-cancel',
@@ -184,6 +249,13 @@ class ParsedResourceLink {
         kind: ResourceLinkKind.playlistById,
         playlistId: segments[1],
         secretToken: secretToken,
+      );
+    }
+
+    if (first == 'tracks' && segments.length >= 2) {
+      return ParsedResourceLink._(
+        kind: ResourceLinkKind.track,
+        trackPermalink: segments[1],
       );
     }
 

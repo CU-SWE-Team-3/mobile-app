@@ -3,18 +3,20 @@ import '../../domain/entities/playlist.dart';
 const _kBase = 'https://biobeats.duckdns.org';
 
 /// Returns the canonical share URL for [playlist].
-/// Appends `?secret_token=...` when the playlist is private and has a token.
+/// Appends `?secretToken=...` when the playlist is private and has a token.
 String buildPlaylistUrl(Playlist playlist) {
-  final op = playlist.ownerPermalink;
-  final pp = playlist.permalink;
-
-  final path = (op != null && op.isNotEmpty && pp != null && pp.isNotEmpty)
-      ? '$_kBase/$op/sets/$pp'
+  final ownerPermalink = playlist.ownerPermalink?.trim().replaceFirst('@', '');
+  final playlistPermalink = playlist.permalink?.trim();
+  final path = ownerPermalink != null &&
+          ownerPermalink.isNotEmpty &&
+          playlistPermalink != null &&
+          playlistPermalink.isNotEmpty
+      ? '$_kBase/$ownerPermalink/sets/$playlistPermalink'
       : '$_kBase/playlists/${playlist.id}';
 
   final st = playlist.secretToken;
   if (!playlist.isPublic && st != null && st.isNotEmpty) {
-    return '$path?secret_token=$st';
+    return '$path?secretToken=$st';
   }
   return path;
 }

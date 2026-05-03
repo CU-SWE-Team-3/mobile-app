@@ -1,10 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/playlists_provider.dart';
 import '../../../../features/playlist/domain/entities/playlist.dart';
+import '../../../../features/premium/presentation/providers/subscription_provider.dart';
 
 final _avatarUrlProvider = FutureProvider<String>((ref) async {
   final prefs = await SharedPreferences.getInstance();
@@ -51,6 +53,13 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
 
   Future<void> _save() async {
     if (_saving) return;
+    final subscription = ref.read(subscriptionProvider);
+    final ownedPlaylistCount = ref.read(playlistsProvider).length;
+    if (!subscription.canUploadUnlimited && ownedPlaylistCount >= 2) {
+      _showUpgradeRequiredDialog();
+      return;
+    }
+
     final title =
         _ctrl.text.trim().isEmpty ? 'Untitled Playlist' : _ctrl.text.trim();
 
@@ -64,8 +73,9 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
       final notifier = ref.read(playlistsProvider.notifier);
 
       final prefs = await SharedPreferences.getInstance();
-      final ownerName =
-          prefs.getString('displayName') ?? prefs.getString('username') ?? 'You';
+      final ownerName = prefs.getString('displayName') ??
+          prefs.getString('username') ??
+          'You';
 
       // POST to backend first — get a real server-issued ID.
       final id = await repository.create(title, _isPublic);
@@ -81,12 +91,62 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
+        if (_isPlaylistLimitError(e)) {
+          setState(() {
+            _saving = false;
+            _error = null;
+          });
+          _showUpgradeRequiredDialog();
+          return;
+        }
         setState(() {
           _saving = false;
           _error = 'Could not create playlist. Please try again.';
         });
       }
     }
+  }
+
+  bool _isPlaylistLimitError(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('limited to 2 playlists') ||
+        message.contains('upgrade to pro');
+  }
+
+  void _showUpgradeRequiredDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _surface,
+        title: const Text(
+          'Upgrade required',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        content: const Text(
+          'You need to upgrade to create more than 2 playlists.',
+          style: TextStyle(color: _secondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text(
+              'Not now',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              context.go('/upgrade');
+            },
+            child: const Text(
+              'Go to upgrade',
+              style: TextStyle(color: _primary, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -125,8 +185,8 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
                     onTap: _save,
                     child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 10),
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -156,19 +216,19 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
                   width: 140,
                   height: 140,
                   child: ref.watch(_avatarUrlProvider).maybeWhen(
-                    data: (url) {
-                      final isValid =
-                          url.isNotEmpty && !url.contains('default-avatar');
-                      return isValid
-                          ? CachedNetworkImage(
-                              imageUrl: url,
-                              fit: BoxFit.cover,
-                              errorWidget: (_, __, ___) => _placeholder(),
-                            )
-                          : _placeholder();
-                    },
-                    orElse: _placeholder,
-                  ),
+                        data: (url) {
+                          final isValid =
+                              url.isNotEmpty && !url.contains('default-avatar');
+                          return isValid
+                              ? CachedNetworkImage(
+                                  imageUrl: url,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) => _placeholder(),
+                                )
+                              : _placeholder();
+                        },
+                        orElse: _placeholder,
+                      ),
                 ),
               ),
             ),
@@ -210,7 +270,8 @@ class _CreatePlaylistPageState extends ConsumerState<CreatePlaylistPage> {
                 Switch(
                   key: const ValueKey('playlist_privacy_toggle'),
                   value: _isPublic,
-                  onChanged: _saving ? null : (v) => setState(() => _isPublic = v),
+                  onChanged:
+                      _saving ? null : (v) => setState(() => _isPublic = v),
                   activeThumbColor: _primary,
                   activeTrackColor: _primary.withValues(alpha: 0.5),
                   inactiveThumbColor: Colors.white,

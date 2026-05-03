@@ -755,7 +755,7 @@ class _TopTrackTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${track.playCount} plays · ${track.likeCount} likes · ${track.commentCount} comments',
+                  '${track.playCount} plays ?? ${track.likeCount} likes ?? ${track.commentCount} comments',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white54, fontSize: 12),

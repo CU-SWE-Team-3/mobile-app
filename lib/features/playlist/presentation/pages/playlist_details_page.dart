@@ -33,6 +33,12 @@ String _formatDuration(int? seconds) {
   return '$m:${s.toString().padLeft(2, '0')}';
 }
 
+bool _isUsableArtworkUrl(String? url) =>
+    url != null &&
+    url.isNotEmpty &&
+    url.startsWith('http') &&
+    !url.contains('default');
+
 class PlaylistDetailsPage extends ConsumerStatefulWidget {
   final Playlist? playlist;
   final String? playlistId;
@@ -106,7 +112,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
       }
 
       final rawTracks = (playlistData['tracks'] as List<dynamic>?) ?? [];
-      // Entries can be populated objects or bare String IDs — keep only Maps.
+      // Entries can be populated objects or bare String IDs ΓÇö keep only Maps.
       final tracks = rawTracks
           .whereType<Map<String, dynamic>>()
           .map(_PlaylistTrack.fromJson)
@@ -127,7 +133,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     }
   }
 
-  // ── Reorder ────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Reorder ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   void _onReorder(int oldIndex, int newIndex) {
     if (_isOperationInFlight) return;
@@ -178,7 +184,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     }
   }
 
-  // ── Remove ─────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Remove ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   void _showTrackActions(_PlaylistTrack track) {
     if (!_isCurrentPlaylistOwned()) return;
@@ -233,6 +239,8 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     final prevTracks = List<_PlaylistTrack>.from(_tracks);
     setState(() {
       _tracks.removeWhere((t) => t.id == track.id);
+      _firstTrackArtworkUrl =
+          _tracks.isNotEmpty ? _tracks.first.artworkUrl : null;
       _isOperationInFlight = true;
     });
 
@@ -241,13 +249,22 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
           .read(playlistRepositoryProvider)
           .removeTrack(playlistId, track.id);
       if (mounted) {
-        ref
-            .read(playlistsProvider.notifier)
-            .updateTrackCount(playlistId, newCount);
+        ref.read(playlistsProvider.notifier).updateTrackPreview(
+              playlistId,
+              newCount,
+              firstTrackArtworkUrl: _isUsableArtworkUrl(_firstTrackArtworkUrl)
+                  ? _firstTrackArtworkUrl
+                  : null,
+              replaceArtwork: true,
+            );
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _tracks = prevTracks);
+        setState(() {
+          _tracks = prevTracks;
+          _firstTrackArtworkUrl =
+              prevTracks.isNotEmpty ? prevTracks.first.artworkUrl : null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Failed to remove track. Please try again.'),
           backgroundColor: Color(0xFF3A1A1A),
@@ -259,7 +276,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     }
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Build ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   @override
   Widget build(BuildContext context) {
@@ -339,12 +356,12 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
     );
     final resolvedAvatarUrl = isOwner ? currentUserAvatarUrl : _ownerAvatarUrl;
 
-    // Resolve artwork image: playlist artwork → first track artwork → user avatar
+    // Resolve artwork image: playlist artwork ΓåÆ first track artwork ΓåÆ user avatar
     // Only treat a URL as valid if it's a real HTTPS URL (not a default/relative path).
-    bool isValidArtwork(String? url) =>
-        url != null && url.startsWith('https://') && !url.contains('default');
-    final hasArtwork = isValidArtwork(p.artworkUrl);
-    final hasFirstTrack = isValidArtwork(_firstTrackArtworkUrl);
+    final effectiveTrackCount =
+        _isLoadingTracks ? p.trackCount : _tracks.length;
+    final hasArtwork = _isUsableArtworkUrl(p.artworkUrl);
+    final hasFirstTrack = _isUsableArtworkUrl(_firstTrackArtworkUrl);
     final hasValidAvatar = resolvedAvatarUrl.isNotEmpty &&
         !resolvedAvatarUrl.contains('default-avatar');
 
@@ -367,7 +384,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
         placeholder: (_, __) => const _ArtworkPlaceholder(),
         errorWidget: (_, __, ___) => const _ArtworkPlaceholder(),
       );
-    } else if (p.trackCount == 0 && hasValidAvatar) {
+    } else if (effectiveTrackCount == 0 && hasValidAvatar) {
       artworkWidget = CachedNetworkImage(
         imageUrl: resolvedAvatarUrl,
         fit: BoxFit.cover,
@@ -380,7 +397,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
       artworkWidget = const _ArtworkPlaceholder();
     }
 
-    // A track is playable as long as it has a valid ID — the player resolves the
+    // A track is playable as long as it has a valid ID ΓÇö the player resolves the
     // actual stream URL via getStreamUrl(id), so a missing pre-known hlsUrl
     // does NOT mean the track cannot be played.
     final canPlay = !_isLoadingTracks && _tracks.any((t) => t.id.isNotEmpty);
@@ -403,16 +420,16 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
       // reorderable track list (SliverReorderableList) share one scroll axis.
       body: CustomScrollView(
         slivers: [
-          // ── Header: artwork + creator row + action row ──────────────────
+          // ΓöÇΓöÇ Header: artwork + creator row + action row ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
           SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Hero artwork with title overlaid ──────────────────────
+                // ΓöÇΓöÇ Hero artwork with title overlaid ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
                 Stack(
                   children: [
                     artworkWidget,
-                    // Gradient: dark at top (back button legibility) → clear → dark at bottom (title)
+                    // Gradient: dark at top (back button legibility) ΓåÆ clear ΓåÆ dark at bottom (title)
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -464,7 +481,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                     ),
                   ],
                 ),
-                // ── Creator row ───────────────────────────────────────────
+                // ΓöÇΓöÇ Creator row ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                   child: Row(
@@ -486,7 +503,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                     ],
                   ),
                 ),
-                // ── Action row (three-dot · like · shuffle · play) ────────
+                // ΓöÇΓöÇ Action row (three-dot ┬╖ like ┬╖ shuffle ┬╖ play) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: Row(
@@ -499,6 +516,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                             borderRadius:
                                 BorderRadius.vertical(top: Radius.circular(16)),
                           ),
+                          isScrollControlled: true,
                           builder: (_) => PlaylistOptionsSheet(
                             playlist: p,
                             showCopyOption: true,
@@ -624,7 +642,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
             ),
           ),
 
-          // ── Track list ──────────────────────────────────────────────────
+          // ΓöÇΓöÇ Track list ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
           if (_isLoadingTracks)
             const SliverToBoxAdapter(
               child: Padding(
@@ -724,7 +742,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
 
   void _playFrom(int tappedIndex) {
     final tappedId = _tracks[tappedIndex].id;
-    // Include all tracks with a valid ID. audioUrl may be empty — the player
+    // Include all tracks with a valid ID. audioUrl may be empty ΓÇö the player
     // resolves the actual HLS URL via getStreamUrl(id) before playback starts.
     final queue = _tracks
         .where((t) => t.id.isNotEmpty)
@@ -780,7 +798,7 @@ String _formatPlayCount(int count) {
   return count.toString();
 }
 
-// ── Track tile ────────────────────────────────────────────────────��───────────
+// ΓöÇΓöÇ Track tile ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ∩┐╜∩┐╜ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class _TrackTile extends StatelessWidget {
   final String title;
@@ -876,14 +894,14 @@ class _TrackTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '▶ ${playCount ?? '0'} · ${duration ?? '0:00'}',
+                      'Γû╢ ${playCount ?? '0'} ┬╖ ${duration ?? '0:00'}',
                       style: const TextStyle(color: _secondary, fontSize: 12),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 4),
-              // More icon — tap to open per-track action sheet
+              // More icon ΓÇö tap to open per-track action sheet
               GestureDetector(
                 onTap: onMoreTap,
                 behavior: HitTestBehavior.opaque,
@@ -896,7 +914,7 @@ class _TrackTile extends StatelessWidget {
                   ),
                 ),
               ),
-              // Drag handle — null when list has ≤1 item
+              // Drag handle ΓÇö null when list has Γëñ1 item
               if (dragHandle != null) dragHandle!,
             ],
           ),
@@ -906,7 +924,7 @@ class _TrackTile extends StatelessWidget {
   }
 }
 
-// ── Artwork placeholder ───────────────────────────────────────────────────────
+// ΓöÇΓöÇ Artwork placeholder ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class _ArtworkPlaceholder extends StatelessWidget {
   const _ArtworkPlaceholder();
@@ -924,7 +942,7 @@ class _ArtworkPlaceholder extends StatelessWidget {
       );
 }
 
-// ── UI-only track model ───────────────────────────────────────────────────────
+// ΓöÇΓöÇ UI-only track model ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class _PlaylistTrack {
   final String id;

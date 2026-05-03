@@ -51,17 +51,35 @@ class MessagingRemoteDataSource {
     int page = 1,
     int limit = 50,
   }) async {
-    final response = await _dio.get(
-      '/messages/$conversationId/messages',
-      queryParameters: {'page': page, 'limit': limit},
-    );
-    final data = response.data['data'] as Map<String, dynamic>;
-    final raw = data['messages'] as List<dynamic>? ?? [];
-    return raw.map((m) => Message.fromJson(m as Map<String, dynamic>)).toList();
+    try {
+      final response = await _dio.get(
+        '/messages/$conversationId/messages',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      final body = response.data;
+      final data = body is Map ? body['data'] : null;
+      final dataMap = data is Map ? Map<String, dynamic>.from(data) : body;
+      final raw = dataMap is Map ? dataMap['messages'] as List<dynamic>? : null;
+      return (raw ?? const [])
+          .map((m) => Message.fromJson(m as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      debugPrint(
+        '[Messaging] getMessages failed: conversationId=$conversationId '
+        'status=${e.response?.statusCode} data=${e.response?.data}',
+      );
+      rethrow;
+    } catch (e) {
+      debugPrint(
+        '[Messaging] getMessages parse failed: conversationId=$conversationId '
+        'error=$e',
+      );
+      rethrow;
+    }
   }
 
   // Monotonically increasing counter so concurrent sendMessage calls are
-  // distinguishable in logs (req #1, req #2, …).
+  // distinguishable in logs (req #1, req #2, GǪ).
   static int _reqSeq = 0;
 
   Future<Message> sendMessage({

@@ -124,16 +124,19 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
       final myDisplayName = prefs.getString('displayName') ?? '';
       final myAvatarUrl = prefs.getString('avatarUrl') ?? '';
 
-      // Fetch followed-users feed.
+      // Fetch followed-users feed. Only their uploads are shown; their
+      // likes/reposts/promoted cards are filtered out in _extractFeedItems.
       final feedResponse = await dioClient.dio.get(
         '/feed',
         queryParameters: {'limit': 40},
       );
       final feedItems = _extractFeedItems(feedResponse.data);
       final pagination = _extractPagination(feedResponse.data);
+      final fallbackItems =
+          feedItems.isEmpty ? await _fetchFollowedUserUploads(userId) : [];
 
       // Fetch current user's own reposts; keep them before followed users'
-      // reposts.
+      // uploaded tracks.
       var myRepostItems = <Map<String, dynamic>>[];
       if (userId.isNotEmpty) {
         try {
@@ -147,7 +150,11 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
         } catch (_) {}
       }
 
-      final combined = [...myRepostItems, ...feedItems];
+      final combined = <Map<String, dynamic>>[
+        ...myRepostItems,
+        ...feedItems,
+        ...fallbackItems,
+      ];
       final tracks = combined
           .map(FeedTrack.fromJson)
           .where((t) => t.id.isNotEmpty)
@@ -171,6 +178,115 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
         error: 'Something went wrong. Please try again.',
       );
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchFollowedUserUploads(
+      String userId) async {
+    if (userId.isEmpty) return [];
+    final response = await dioClient.dio.get(
+      '/network/$userId/following',
+      queryParameters: {'page': 1, 'limit': 50},
+    );
+    final followedUsers = (response.data['data'] as List?) ?? [];
+    final uploads = <Map<String, dynamic>>[];
+
+    for (final rawUser in followedUsers) {
+      final user = _asStringMap(rawUser);
+      final followedUserId = user?['_id']?.toString();
+      if (user == null || followedUserId == null || followedUserId.isEmpty) {
+        continue;
+      }
+      final tracks = await _fetchUserTracks(followedUserId);
+      for (final track in tracks) {
+        uploads.add(<String, dynamic>{
+          ...track,
+          if (_asStringMap(track['artist']) == null &&
+              _asStringMap(track['user']) == null)
+            'artist': user,
+          '_activityType': 'post',
+          '_actor': user,
+          if (_trackTimestamp(track) != null)
+            '_activityTimestamp': _trackTimestamp(track),
+        });
+      }
+    }
+
+    uploads.sort((a, b) {
+      final aTime =
+          DateTime.tryParse(a['_activityTimestamp']?.toString() ?? '');
+      final bTime =
+          DateTime.tryParse(b['_activityTimestamp']?.toString() ?? '');
+      if (aTime == null && bTime == null) return 0;
+      if (aTime == null) return 1;
+      if (bTime == null) return -1;
+      return bTime.compareTo(aTime);
+    });
+    return uploads;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchUserTracks(String userId) async {
+    const listKeys = ['uploadedTracks', 'tracks', 'topTracks'];
+    for (final endpoint in [
+      '/profile/$userId/tracks',
+      '/users/$userId/tracks',
+    ]) {
+      try {
+        final response = await dioClient.dio.get(
+          endpoint,
+          queryParameters: const {'page': 1, 'limit': 20},
+        );
+        final tracks = _extractTrackList(response.data, listKeys);
+        if (tracks.isNotEmpty) return tracks;
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 404 || e.response?.statusCode == 405) {
+          continue;
+        }
+        rethrow;
+      }
+    }
+    return [];
+  }
+
+  List<Map<String, dynamic>> _extractTrackList(
+    dynamic data,
+    List<String> listKeys,
+  ) {
+    if (data is List) return data.map(_asStringMap).nonNulls.toList();
+    final root = _asStringMap(data);
+    if (root == null) return [];
+    for (final key in listKeys) {
+      final list = root[key];
+      if (list is List) return list.map(_asStringMap).nonNulls.toList();
+    }
+    final inner = _asStringMap(root['data']);
+    if (inner != null) {
+      for (final key in listKeys) {
+        final list = inner[key];
+        if (list is List) return list.map(_asStringMap).nonNulls.toList();
+      }
+      final user = _asStringMap(inner['user']);
+      if (user != null) {
+        for (final key in listKeys) {
+          final list = user[key];
+          if (list is List) return list.map(_asStringMap).nonNulls.toList();
+        }
+      }
+    }
+    return [];
+  }
+
+  String? _trackTimestamp(Map<String, dynamic> track) {
+    for (final key in const [
+      'createdAt',
+      'updatedAt',
+      'releaseDate',
+      'uploadedAt',
+      'publishedAt',
+    ]) {
+      final value = track[key]?.toString();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return null;
   }
 
   Future<void> loadNextPage() async {
@@ -213,7 +329,7 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     }
   }
 
-  // Extracts only reposted tracks from /feed response.
+  // Extracts only uploaded tracks from /feed response.
   List<Map<String, dynamic>> _extractFeedItems(dynamic data) {
     final dataMap = data['data'];
     if (dataMap is! Map<String, dynamic>) return [];
@@ -222,7 +338,9 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     for (final raw in items) {
       if (raw is! Map<String, dynamic>) continue;
       final activityType = raw['activityType'] as String? ?? '';
-      if (activityType != 'REPOST') continue;
+      final targetModel = raw['targetModel']?.toString().toLowerCase();
+      if (activityType != 'TRACK_UPLOAD') continue;
+      if (targetModel != null && targetModel != 'track') continue;
       final trackData = _asStringMap(raw['target']);
       if (trackData == null) continue;
       final actorsList = raw['actors'] as List?;
@@ -232,7 +350,7 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
       final timestamp = raw['activityDate'] as String?;
       result.add(<String, dynamic>{
         ...trackData,
-        '_activityType': 'repost',
+        '_activityType': 'post',
         if (actor != null) '_actor': actor,
         if (timestamp != null) '_activityTimestamp': timestamp,
       });
@@ -283,9 +401,8 @@ class FollowingFeedNotifier extends StateNotifier<FeedState> {
     final nextCursor = pagination['nextCursor']?.toString();
     final hasMore = pagination['hasMore'] == true;
     return _FeedPagination(
-      nextCursor: nextCursor != null && nextCursor.isNotEmpty
-          ? nextCursor
-          : null,
+      nextCursor:
+          nextCursor != null && nextCursor.isNotEmpty ? nextCursor : null,
       hasMore: hasMore,
     );
   }
