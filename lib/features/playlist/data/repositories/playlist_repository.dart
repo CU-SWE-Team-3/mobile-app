@@ -80,35 +80,46 @@ class PlaylistRepository {
   }) async {
     final body = <String, dynamic>{};
     if (title != null) body['title'] = title;
-    if (isPublic != null) body['isPublic'] = isPublic;
+    if (isPublic != null) body['isPrivate'] = !isPublic;
     if (description != null) body['description'] = description;
     if (body.isEmpty) return;
     try {
+      debugPrint(
+        '[PlaylistRepository.updateMetadata] PATCH /playlists/$id $body',
+      );
       await _dio.patch('/playlists/$id', data: body);
     } on DioException catch (e) {
-      if (isPublic == null || !_shouldRetryVisibilityPatch(e)) rethrow;
-      final fallback = Map<String, dynamic>.from(body)
-        ..remove('isPublic')
-        ..['isPrivate'] = !isPublic;
-      await _dio.patch('/playlists/$id', data: fallback);
+      final raw = e.response?.data ?? e.message;
+      debugPrint(
+        '[PlaylistRepository.updateMetadata] failed '
+        'status=${e.response?.statusCode} raw=$raw',
+      );
+      throw Exception(
+        'Update playlist failed (${e.response?.statusCode}): $raw',
+      );
     }
   }
 
   /// PATCH /playlists/{id} — toggle public/private visibility.
   Future<Playlist?> updatePrivacy(String id, bool isPublic) async {
+    final body = {'isPrivate': !isPublic};
     late final Response<dynamic> response;
     try {
-      response = await _dio.patch(
-        '/playlists/$id',
-        data: {'isPublic': isPublic},
+      debugPrint(
+        '[PlaylistRepository.updatePrivacy] PATCH /playlists/$id $body',
       );
+      response = await _dio.patch('/playlists/$id', data: body);
     } on DioException catch (e) {
-      if (!_shouldRetryVisibilityPatch(e)) rethrow;
-      response = await _dio.patch(
-        '/playlists/$id',
-        data: {'isPrivate': !isPublic},
+      final raw = e.response?.data ?? e.message;
+      debugPrint(
+        '[PlaylistRepository.updatePrivacy] failed '
+        'status=${e.response?.statusCode} raw=$raw',
+      );
+      throw Exception(
+        'Update playlist privacy failed (${e.response?.statusCode}): $raw',
       );
     }
+    debugPrint('[PlaylistRepository.updatePrivacy] raw: ${response.data}');
     final data = response.data is Map ? response.data['data'] : null;
     final raw = data is Map ? data['playlist'] : null;
     if (raw is Map) {
@@ -272,9 +283,4 @@ class PlaylistRepository {
       url.isNotEmpty &&
       url.startsWith('http') &&
       !url.contains('default');
-
-  bool _shouldRetryVisibilityPatch(DioException e) {
-    final status = e.response?.statusCode;
-    return status == 400 || status == 404 || status == 422;
-  }
 }

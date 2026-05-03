@@ -21,6 +21,16 @@ import 'package:soundcloud_clone/features/playlist/presentation/providers/playli
 
 class MockPlaylistRepository extends Mock implements PlaylistRepository {}
 
+_whenUpdateMetadata(MockPlaylistRepository mockRepo) =>
+    when(
+      () => mockRepo.updateMetadata(
+        any(),
+        title: any(named: 'title'),
+        isPublic: any(named: 'isPublic'),
+        description: any(named: 'description'),
+      ),
+    );
+
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
 final _publicPlaylist = Playlist(
@@ -109,7 +119,9 @@ void main() {
     testWidgets('title field is prefilled with playlist title', (tester) async {
       await _pumpEditPage(tester, mockRepo);
 
-      final titleField = tester.widget<TextField>(find.byKey(const Key('titleField')));
+      final titleField = tester.widget<TextField>(
+        find.byKey(const Key('playlist_name_field')),
+      );
       expect(titleField.controller!.text, 'My Playlist');
     });
 
@@ -130,7 +142,9 @@ void main() {
       await _pumpEditPage(tester, mockRepo);
 
       final descField =
-          tester.widget<TextField>(find.byKey(const Key('descField')));
+          tester.widget<TextField>(
+        find.byKey(const Key('playlist_description_field')),
+      );
       expect(descField.controller!.text, '');
     });
 
@@ -156,27 +170,36 @@ void main() {
     testWidgets('Save is enabled when title is non-empty', (tester) async {
       await _pumpEditPage(tester, mockRepo);
 
-      final btn = tester.widget<TextButton>(find.byKey(const Key('saveButton')));
+      final btn = tester.widget<TextButton>(
+        find.byKey(const Key('playlist_save_button')),
+      );
       expect(btn.onPressed, isNotNull);
     });
 
     testWidgets('Save is disabled when title is cleared', (tester) async {
       await _pumpEditPage(tester, mockRepo);
 
-      await tester.enterText(find.byKey(const Key('titleField')), '');
+      await tester.enterText(find.byKey(const Key('playlist_name_field')), '');
       await tester.pump();
 
-      final btn = tester.widget<TextButton>(find.byKey(const Key('saveButton')));
+      final btn = tester.widget<TextButton>(
+        find.byKey(const Key('playlist_save_button')),
+      );
       expect(btn.onPressed, isNull);
     });
 
     testWidgets('Save is disabled when title exceeds 100 characters', (tester) async {
       await _pumpEditPage(tester, mockRepo);
 
-      await tester.enterText(find.byKey(const Key('titleField')), 'a' * 101);
+      await tester.enterText(
+        find.byKey(const Key('playlist_name_field')),
+        'a' * 101,
+      );
       await tester.pump();
 
-      final btn = tester.widget<TextButton>(find.byKey(const Key('saveButton')));
+      final btn = tester.widget<TextButton>(
+        find.byKey(const Key('playlist_save_button')),
+      );
       expect(btn.onPressed, isNull);
     });
 
@@ -184,10 +207,15 @@ void main() {
         (tester) async {
       await _pumpEditPage(tester, mockRepo);
 
-      await tester.enterText(find.byKey(const Key('descField')), 'x' * 1001);
+      await tester.enterText(
+        find.byKey(const Key('playlist_description_field')),
+        'x' * 1001,
+      );
       await tester.pump();
 
-      final btn = tester.widget<TextButton>(find.byKey(const Key('saveButton')));
+      final btn = tester.widget<TextButton>(
+        find.byKey(const Key('playlist_save_button')),
+      );
       expect(btn.onPressed, isNull);
     });
   });
@@ -197,32 +225,32 @@ void main() {
   group('EditPlaylistPage — Save repository calls', () {
     testWidgets('calls updateMetadata with the updated title on save',
         (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
-        return null;
-      });
+      _whenUpdateMetadata(mockRepo).thenAnswer((_) async {});
 
       await _pumpEditPage(tester, mockRepo);
 
       await tester.enterText(
-          find.byKey(const Key('titleField')), 'Renamed Playlist');
+        find.byKey(const Key('playlist_name_field')),
+        'Renamed Playlist',
+      );
       await tester.pump();
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
-      verify(() => mockRepo.updateMetadata('p1', title: 'Renamed Playlist'))
-          .called(1);
+      verify(
+        () => mockRepo.updateMetadata(
+          'p1',
+          title: 'Renamed Playlist',
+          isPublic: true,
+          description: null,
+        ),
+      ).called(1);
     });
 
-    testWidgets('calls updatePrivacy with false when playlist is made private',
+    testWidgets('calls updateMetadata with false when playlist is made private',
         (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
-        return null;
-      });
+      _whenUpdateMetadata(mockRepo).thenAnswer((_) async {});
 
       await _pumpEditPage(tester, mockRepo); // isPublic: true
 
@@ -230,29 +258,39 @@ void main() {
       await tester.tap(find.byType(Switch));
       await tester.pump();
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
-      verify(() => mockRepo.updatePrivacy('p1', false)).called(1);
+      verify(
+        () => mockRepo.updateMetadata(
+          'p1',
+          title: 'My Playlist',
+          isPublic: false,
+          description: null,
+        ),
+      ).called(1);
     });
 
-    testWidgets('calls updatePrivacy with true when playlist is made public',
+    testWidgets('calls updateMetadata with true when playlist is made public',
         (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
-        return null;
-      });
+      _whenUpdateMetadata(mockRepo).thenAnswer((_) async {});
 
       await _pumpEditPage(tester, mockRepo, playlist: _privatePlaylist);
 
       await tester.tap(find.byType(Switch));
       await tester.pump();
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
-      verify(() => mockRepo.updatePrivacy('p2', true)).called(1);
+      verify(
+        () => mockRepo.updateMetadata(
+          'p2',
+          title: 'Secret Set',
+          isPublic: true,
+          description: null,
+        ),
+      ).called(1);
     });
   });
 
@@ -261,15 +299,11 @@ void main() {
   group('EditPlaylistPage — Save success', () {
     testWidgets('pops back to the parent route after successful save',
         (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
-        return null;
-      });
+      _whenUpdateMetadata(mockRepo).thenAnswer((_) async {});
 
       await _pumpEditPage(tester, mockRepo, withParentRoute: true);
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
       // Back on the parent route — Edit Playlist AppBar is gone
@@ -279,11 +313,7 @@ void main() {
 
     testWidgets('updates provider title in local state after successful save',
         (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenAnswer((_) async {});
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
-        return null;
-      });
+      _whenUpdateMetadata(mockRepo).thenAnswer((_) async {});
       SharedPreferences.setMockInitialValues({});
       when(() => mockRepo.fetchById(any())).thenAnswer((_) async => {});
 
@@ -308,10 +338,12 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-          find.byKey(const Key('titleField')), 'Saved Title');
+        find.byKey(const Key('playlist_name_field')),
+        'Saved Title',
+      );
       await tester.pump();
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
       // Container is still alive — read provider state after the page popped.
@@ -325,12 +357,11 @@ void main() {
 
   group('EditPlaylistPage — Save failure', () {
     testWidgets('shows error banner when repository throws', (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenThrow(Exception('network error'));
+      _whenUpdateMetadata(mockRepo).thenThrow(Exception('network error'));
 
       await _pumpEditPage(tester, mockRepo, withParentRoute: true);
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
       expect(find.text('Failed to save changes. Please try again.'),
@@ -338,12 +369,11 @@ void main() {
     });
 
     testWidgets('does not pop when repository throws', (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenThrow(Exception('network error'));
+      _whenUpdateMetadata(mockRepo).thenThrow(Exception('network error'));
 
       await _pumpEditPage(tester, mockRepo, withParentRoute: true);
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
       // Still on the edit page
@@ -352,26 +382,24 @@ void main() {
 
     testWidgets('re-enables Save button after failure so user can retry',
         (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenThrow(Exception('network error'));
+      _whenUpdateMetadata(mockRepo).thenThrow(Exception('network error'));
 
       await _pumpEditPage(tester, mockRepo);
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
       final btn =
-          tester.widget<TextButton>(find.byKey(const Key('saveButton')));
+          tester.widget<TextButton>(find.byKey(const Key('playlist_save_button')));
       expect(btn.onPressed, isNotNull);
     });
 
     testWidgets('error banner can be dismissed', (tester) async {
-      when(() => mockRepo.updateMetadata(any(), title: any(named: 'title')))
-          .thenThrow(Exception('network error'));
+      _whenUpdateMetadata(mockRepo).thenThrow(Exception('network error'));
 
       await _pumpEditPage(tester, mockRepo);
 
-      await tester.tap(find.byKey(const Key('saveButton')));
+      await tester.tap(find.byKey(const Key('playlist_save_button')));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Dismiss'));
