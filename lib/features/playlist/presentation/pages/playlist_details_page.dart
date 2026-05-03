@@ -11,6 +11,7 @@ import '../providers/playlists_provider.dart';
 import '../widgets/playlist_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../../core/network/dio_client.dart';
 
 final _avatarUrlProvider = FutureProvider<String>((ref) async {
@@ -187,44 +188,22 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
   // ΓöÇΓöÇ Remove ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   void _showTrackActions(_PlaylistTrack track) {
-    if (!_isCurrentPlaylistOwned()) return;
+    final canRemoveFromPlaylist = _isCurrentPlaylistOwned();
     showModalBottomSheet(
       context: context,
-      backgroundColor: _surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (sheetCtx) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              ListTile(
-                key: const ValueKey('playlist_remove_track_button'),
-                leading: const Icon(Icons.remove_circle_outline,
-                    color: Colors.white),
-                title: const Text('Remove from playlist',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(sheetCtx);
-                  _removeTrack(track);
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TrackOptionsSheet(
+        trackId: track.id,
+        title: track.title,
+        artistName: track.artistName,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.hlsUrl,
+        waveform: track.waveform,
+        trackPermalink: track.permalink,
+        isInPlaylist: true,
+        onRemoveFromPlaylist:
+            canRemoveFromPlaylist ? () => _removeTrack(track) : null,
       ),
     );
   }
@@ -673,7 +652,7 @@ class _PlaylistDetailsPageState extends ConsumerState<PlaylistDetailsPage> {
                     onTap: t.id.isNotEmpty && !_isOperationInFlight
                         ? () => _playFrom(index)
                         : null,
-                    onMoreTap: !isOwner || _isOperationInFlight
+                    onMoreTap: _isOperationInFlight
                         ? null
                         : () => _showTrackActions(t),
                     // Show drag handle only when list has >1 item.

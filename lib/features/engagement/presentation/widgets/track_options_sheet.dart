@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -44,6 +45,8 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
   final VoidCallback? onEditTrack;
   final VoidCallback? onChangeVisibility;
   final VoidCallback? onDeleteTrack;
+  final bool isInPlaylist;
+  final FutureOr<void> Function()? onRemoveFromPlaylist;
 
   const TrackOptionsSheet({
     super.key,
@@ -68,6 +71,8 @@ class TrackOptionsSheet extends ConsumerStatefulWidget {
     this.onEditTrack,
     this.onChangeVisibility,
     this.onDeleteTrack,
+    this.isInPlaylist = false,
+    this.onRemoveFromPlaylist,
   });
 
   @override
@@ -307,10 +312,22 @@ class _TrackOptionsSheetState extends ConsumerState<TrackOptionsSheet> {
                       label: 'Play Last',
                       onTap: _playLast),
                   _OptionTile(
-                    icon: Icons.playlist_add_outlined,
-                    label: 'Add to playlist',
+                    key: const ValueKey('track_playlist_action_button'),
+                    icon: widget.isInPlaylist &&
+                            widget.onRemoveFromPlaylist != null
+                        ? Icons.remove_circle_outline
+                        : Icons.playlist_add_outlined,
+                    label: widget.isInPlaylist &&
+                            widget.onRemoveFromPlaylist != null
+                        ? 'Remove from playlist'
+                        : 'Add to playlist',
                     onTap: () {
                       Navigator.pop(context);
+                      if (widget.isInPlaylist &&
+                          widget.onRemoveFromPlaylist != null) {
+                        widget.onRemoveFromPlaylist?.call();
+                        return;
+                      }
                       Navigator.push(
                         context,
                         MaterialPageRoute(
