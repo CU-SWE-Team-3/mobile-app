@@ -705,10 +705,6 @@ class _ChatRoomPageState extends ConsumerState<ChatRoomPage> {
           messagesAsync.valueOrNull,
         );
     if (otherParticipant != null) _receiverId = otherParticipant.id;
-    final conversations = conversationsAsync.valueOrNull ?? const [];
-    final conversationLookupComplete = conversationsAsync.hasValue;
-    final conversationExists =
-        conversations.any((c) => c.id == widget.conversationId);
 
     final isEditing = _editingMessageId != null;
 
