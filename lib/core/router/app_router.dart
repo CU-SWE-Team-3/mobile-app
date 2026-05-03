@@ -88,6 +88,7 @@ import '../../features/playlist/presentation/pages/playlist_privacy_page.dart';
 import '../../features/playlist/presentation/pages/share_playlist_page.dart';
 import '../../features/playlist/presentation/pages/add_to_playlist_page.dart';
 
+import '../../features/messaging/domain/entities/participant.dart';
 import '../../features/messaging/presentation/pages/chat_inbox_page.dart';
 import '../../features/messaging/presentation/pages/chat_room_page.dart';
 import '../../features/messaging/presentation/pages/new_message_page.dart';
@@ -102,19 +103,17 @@ import '../../features/premium/presentation/pages/offline_download_page.dart';
 import '../../features/premium/presentation/pages/payment_success_page.dart';
 import '../../features/premium/presentation/pages/explore_features_page.dart';
 
+import '../../features/station/presentation/pages/station_page.dart';
+
 import '../../features/settings/presentation/pages/settings_main_page.dart';
 import '../../features/settings/presentation/pages/account_settings_page.dart';
 import '../../features/settings/presentation/pages/basic_settings_page.dart';
 import '../../features/settings/presentation/pages/social_settings_page.dart';
 import '../../features/settings/presentation/pages/notifications_settings_page.dart';
 import '../../features/settings/presentation/pages/privacy_settings_page.dart';
-import '../../features/settings/presentation/pages/communications_settings_page.dart';
-import '../../features/settings/presentation/pages/advertising_settings_page.dart';
-import '../../features/settings/presentation/pages/import_music_page.dart';
 import '../../features/settings/presentation/pages/inbox_settings_page.dart';
 import '../../features/settings/presentation/pages/legal_page.dart';
 import '../../features/settings/presentation/pages/add_widget_page.dart';
-import '../../features/settings/presentation/pages/analytics_page.dart';
 import '../../features/settings/presentation/pages/upload_settings_page.dart';
 import '../../features/settings/presentation/pages/sign_out_page.dart';
 
@@ -381,6 +380,14 @@ final appRouter = GoRouter(
       path: '/payment-success',
       builder: (_, __) => const PaymentSuccessPage(),
     ),
+    GoRoute(
+      path: '/payment-cancel',
+      builder: (_, __) => const PremiumPaywallPage(),
+    ),
+    GoRoute(
+      path: '/payment-cancelled',
+      builder: (_, __) => const PremiumPaywallPage(),
+    ),
 
     // ── UPLOAD (global, outside shell — no bottom nav while uploading) ─
     GoRoute(
@@ -404,7 +411,9 @@ final appRouter = GoRouter(
         GoRoute(path: 'tracks', builder: (_, __) => const ProfileTracksPage()),
         GoRoute(
             path: 'reposts', builder: (_, __) => const ProfileRepostsPage()),
-        GoRoute(path: 'likes', builder: (_, __) => const LibraryLikesPage()),
+        GoRoute(
+            path: 'likes',
+            builder: (_, __) => const LibraryLikesPage(showMiniPlayer: true)),
         GoRoute(
             path: 'insights', builder: (_, __) => const ProfileInsightsPage()),
         GoRoute(path: 'avatar', builder: (_, __) => const AvatarUploadPage()),
@@ -550,7 +559,20 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(
           path: 'new',
-          builder: (_, __) => const NewMessagePage(),
+          builder: (_, state) {
+            final extras = state.extra as Map<String, dynamic>?;
+            Participant? preselected;
+            final uid = extras?['userId']?.toString() ?? '';
+            if (uid.isNotEmpty) {
+              preselected = Participant(
+                id: uid,
+                displayName: extras?['displayName']?.toString() ?? '',
+                avatarUrl: extras?['avatarUrl']?.toString(),
+                permalink: extras?['permalink']?.toString() ?? '',
+              );
+            }
+            return NewMessagePage(preselectedUser: preselected);
+          },
         ),
         GoRoute(
           path: 'chat/:conversationId',
@@ -572,6 +594,20 @@ final appRouter = GoRouter(
       ],
     ),
 
+    // ── STATION ───────────────────────────────────────────────────────
+    GoRoute(
+      path: '/station',
+      builder: (_, state) {
+        final extra = state.extra as Map<String, dynamic>? ?? {};
+        return StationPage(
+          trackId: extra['trackId'] as String? ?? '',
+          title: extra['title'] as String?,
+          artistName: extra['artistName'] as String?,
+          artworkUrl: extra['artworkUrl'] as String?,
+        );
+      },
+    ),
+
     // ── SETTINGS ──────────────────────────────────────────────────────
     GoRoute(
       path: '/settings',
@@ -586,27 +622,9 @@ final appRouter = GoRouter(
             builder: (_, __) => const NotificationsSettingsPage()),
         GoRoute(
             path: 'privacy', builder: (_, __) => const PrivacySettingsPage()),
-        GoRoute(
-            path: 'communications',
-            builder: (_, __) => const CommunicationsSettingsPage()),
-        GoRoute(
-            path: 'advertising',
-            builder: (_, __) => const AdvertisingSettingsPage()),
-        GoRoute(
-            path: 'import-music',
-            builder: (_, __) => const ImportMusicPage(),
-            routes: [
-              GoRoute(
-                  path: 'import',
-                  builder: (_, __) => const ImportFromAppPage()),
-              GoRoute(
-                  path: 'manage',
-                  builder: (_, __) => const ManageImportedLikesPage()),
-            ]),
         GoRoute(path: 'inbox', builder: (_, __) => const InboxSettingsPage()),
         GoRoute(path: 'legal', builder: (_, __) => const LegalPage()),
         GoRoute(path: 'add-widget', builder: (_, __) => const AddWidgetPage()),
-        GoRoute(path: 'analytics', builder: (_, __) => const AnalyticsPage()),
         GoRoute(path: 'upload', builder: (_, __) => const UploadSettingsPage()),
         GoRoute(path: 'sign-out', builder: (_, __) => const SignOutPage()),
       ],

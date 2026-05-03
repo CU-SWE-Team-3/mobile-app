@@ -184,18 +184,6 @@ class _AddWidgetPageState extends ConsumerState<AddWidgetPage> {
           ),
         ),
         centerTitle: true,
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: Center(
-              child: Icon(
-                Icons.cast_outlined,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),

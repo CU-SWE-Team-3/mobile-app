@@ -48,11 +48,13 @@ void main() {
     bool isReposted = false,
     int likeCount = 0,
     int repostCount = 0,
+    String targetModel = 'Track',
   }) {
     return EngagementNotifier(
       FakeRef(),
       mockDataSource,
       trackId,
+      targetModel: targetModel,
       initialIsLiked: isLiked,
       initialIsReposted: isReposted,
       initialLikeCount: likeCount,
@@ -144,6 +146,24 @@ void main() {
       final unlikeNotifier = buildNotifier(trackId: 't2', isLiked: true);
       await unlikeNotifier.toggleLike();
       verify(() => mockDataSource.unlikeTrack('t2')).called(1);
+    });
+
+    test('passes Playlist target model for playlist likes', () async {
+      when(() => mockDataSource.likeTrack(
+            any(),
+            targetModel: 'Playlist',
+          )).thenAnswer((_) async {});
+
+      final notifier = buildNotifier(
+        trackId: 'playlist-1',
+        targetModel: 'Playlist',
+      );
+      await notifier.toggleLike();
+
+      verify(() => mockDataSource.likeTrack(
+            'playlist-1',
+            targetModel: 'Playlist',
+          )).called(1);
     });
   });
 

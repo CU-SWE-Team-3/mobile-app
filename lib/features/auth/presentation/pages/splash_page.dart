@@ -65,12 +65,19 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
-      backgroundColor: Colors.black12,
+      backgroundColor: const Color(0xFF111111),
       body: Center(
-        child: Image.asset(
-          'assets/images/soundcloud_logo.png',
-          width: 180,
+        child: ClipRect(
+          child: Align(
+            alignment: Alignment.topCenter,
+            heightFactor: 0.58,
+            child: Image.asset(
+              'assets/icons/logo.png',
+              width: screenWidth * 0.72,
+            ),
+          ),
         ),
       ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
+import '../../../../core/utils/waveform_parser.dart';
 import '../../domain/entities/player_track.dart';
 import '../repositories/history_repository.dart';
 
@@ -95,9 +96,7 @@ class PlayerApiService {
         duration: durationRaw is num
             ? Duration(seconds: durationRaw.toInt())
             : null,
-        waveform: (rawTrack['waveform'] as List<dynamic>?)
-            ?.map((e) => (e as num).toInt())
-            .toList(),
+        waveform: parseWaveformFromMap(rawTrack),
         artistId: artistId,
         artistPermalink: artist['permalink'] as String?,
         trackPermalink: rawTrack['permalink'] as String?,
@@ -224,7 +223,9 @@ class PlayerApiService {
         audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
         coverUrl: (t['artworkUrl'] ?? t['coverUrl']) as String?,
         duration: duration,
+        waveform: parseWaveformFromMap(t),
         artistPermalink: artistPermalink,
+        trackPermalink: t['permalink'] as String?,
       ),
       playedAt: playedAt,
     );

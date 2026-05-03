@@ -9,7 +9,9 @@ import '../../domain/entities/participant.dart';
 import '../providers/messaging_providers.dart';
 
 class NewMessagePage extends ConsumerStatefulWidget {
-  const NewMessagePage({super.key});
+  final Participant? preselectedUser;
+
+  const NewMessagePage({super.key, this.preselectedUser});
 
   @override
   ConsumerState<NewMessagePage> createState() => _NewMessagePageState();
@@ -31,6 +33,10 @@ class _NewMessagePageState extends ConsumerState<NewMessagePage> {
   @override
   void initState() {
     super.initState();
+    // Pre-select a user when navigating from a profile page's message button.
+    if (widget.preselectedUser != null) {
+      _selectedUser = widget.preselectedUser;
+    }
     _fetchSuggestions();
   }
 

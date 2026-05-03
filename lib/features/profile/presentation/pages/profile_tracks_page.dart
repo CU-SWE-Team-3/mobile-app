@@ -4,9 +4,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
 import 'package:soundcloud_clone/features/library/presentation/providers/my_tracks_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
+import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
 
 class ProfileTracksPage extends ConsumerWidget {
   const ProfileTracksPage({super.key});
@@ -23,8 +25,9 @@ class ProfileTracksPage extends ConsumerWidget {
           audioUrl: track.hlsUrl!,
           coverUrl: track.artworkUrl,
           waveform: track.waveform,
-          duration:
-              track.duration != null ? Duration(seconds: track.duration!) : null,
+          duration: track.duration != null
+              ? Duration(seconds: track.duration!)
+              : null,
         ),
       )
       .toList();
@@ -58,11 +61,40 @@ class ProfileTracksPage extends ConsumerWidget {
         );
   }
 
-  void _playAll(WidgetRef ref, List<UploadTrack> tracks, {bool shuffle = false}) {
+  void _playAll(WidgetRef ref, List<UploadTrack> tracks,
+      {bool shuffle = false}) {
     final queue = _playableQueue(tracks);
     if (queue.isEmpty) return;
     if (shuffle) queue.shuffle(Random());
     ref.read(playerProvider.notifier).playQueue(queue);
+  }
+
+  void _openTrackOptions(BuildContext context, UploadTrack track) {
+    final trackId = track.id;
+    if (trackId == null || trackId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track options are not available yet.')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: trackId,
+        title: track.title,
+        artistName: track.artist,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.hlsUrl,
+        waveform: track.waveform,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
+      ),
+    );
   }
 
   @override
@@ -71,155 +103,152 @@ class ProfileTracksPage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: _bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      if (context.canPop()) context.pop();
-                    },
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Tracks',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    key: const ValueKey('profile_tracks_cast_button'),
-                    onTap: () {},
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.cast_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            tracksAsync.maybeWhen(
-              data: (tracks) => Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                child: Row(
-                  children: [
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => _playAll(ref, tracks, shuffle: true),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.shuffle_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    GestureDetector(
-                      onTap: () => _playAll(ref, tracks),
-                      child: Container(
-                        width: 52,
-                        height: 52,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.black,
-                          size: 28,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              orElse: () => const SizedBox(height: 76),
-            ),
-            Expanded(
-              child: tracksAsync.when(
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
-                error: (_, __) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
                     children: [
-                      const Text(
-                        'Failed to load tracks',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        onPressed: () => ref.invalidate(myTracksProvider),
-                        child: const Text(
-                          'Retry',
-                          style: TextStyle(color: Colors.white),
+                      GestureDetector(
+                        onTap: () {
+                          if (context.canPop()) context.pop();
+                        },
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Tracks',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
                     ],
                   ),
                 ),
-                data: (tracks) {
-                  if (tracks.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'No tracks yet',
-                        style: TextStyle(color: Colors.white54),
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    itemCount: tracks.length,
-                    itemBuilder: (_, index) => _TrackTile(
-                      key: ValueKey(
-                        'profile_tracks_tile_${tracks[index].id ?? index}_$index',
-                      ),
-                      track: tracks[index],
-                      onTap: () => _playFrom(context, ref, tracks, index),
+                tracksAsync.maybeWhen(
+                  data: (tracks) => Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: () => _playAll(ref, tracks, shuffle: true),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.shuffle_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        GestureDetector(
+                          onTap: () => _playAll(ref, tracks),
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.black,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                  orElse: () => const SizedBox(height: 76),
+                ),
+                Expanded(
+                  child: tracksAsync.when(
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                    error: (_, __) => Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Failed to load tracks',
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: () => ref.invalidate(myTracksProvider),
+                            child: const Text(
+                              'Retry',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    data: (tracks) {
+                      if (tracks.isEmpty) {
+                        return const Center(
+                          child: Text(
+                            'No tracks yet',
+                            style: TextStyle(color: Colors.white54),
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        padding: const EdgeInsets.only(bottom: 132),
+                        itemCount: tracks.length,
+                        itemBuilder: (_, index) => _TrackTile(
+                          key: ValueKey(
+                            'profile_tracks_tile_${tracks[index].id ?? index}_$index',
+                          ),
+                          track: tracks[index],
+                          onTap: () => _playFrom(context, ref, tracks, index),
+                          onMore: () =>
+                              _openTrackOptions(context, tracks[index]),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: MiniPlayerWidget(),
+          ),
+        ],
       ),
     );
   }
@@ -228,11 +257,13 @@ class ProfileTracksPage extends ConsumerWidget {
 class _TrackTile extends StatelessWidget {
   final UploadTrack track;
   final VoidCallback onTap;
+  final VoidCallback onMore;
 
   const _TrackTile({
     super.key,
     required this.track,
     required this.onTap,
+    required this.onMore,
   });
 
   @override
@@ -307,7 +338,14 @@ class _TrackTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.more_vert_rounded, color: sub, size: 20),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onMore,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
+              ),
+            ),
           ],
         ),
       ),

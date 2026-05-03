@@ -1,10 +1,16 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/network/dio_client.dart';
+import '../../../feed/presentation/providers/feed_provider.dart';
+import '../../../engagement/presentation/widgets/track_options_sheet.dart';
+import '../../../messaging/presentation/providers/messaging_providers.dart';
+import '../../../player/presentation/providers/follow_provider.dart';
 import '../../../player/presentation/providers/player_provider.dart';
 import '../../../player/presentation/widgets/mini_player_widget.dart';
 
@@ -52,6 +58,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   List<Map<String, dynamic>>? _likedTracks;
   bool _isLoadingLikes = false;
   bool _hasLikesError = false;
+  String _notifPref =
+      'none'; // 'all' | 'personalized' | 'none', stored locally per user
 
   String get _permalink => widget.permalink;
 
@@ -60,7 +68,9 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
     super.initState();
     _targetUserId = widget.initialUserId;
     _username = widget.initialDisplayName;
-    _fetchProfile();
+    _fetchProfile().then((_) {
+      if (mounted) _loadNotifPref();
+    });
   }
 
   Future<void> _fetchLikes() async {
@@ -225,8 +235,9 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       final res = await dioClient.dio.get('/network/$myId/following/$targetId');
       final d = res.data;
       if (d is Map) {
-        if (d.containsKey('isFollowing')) return d['isFollowing'] as bool? ?? false;
-        if (d.containsKey('following'))   return d['following']   as bool? ?? false;
+        if (d.containsKey('isFollowing'))
+          return d['isFollowing'] as bool? ?? false;
+        if (d.containsKey('following')) return d['following'] as bool? ?? false;
       }
     } catch (_) {}
 
@@ -255,7 +266,10 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
   }
 
   Future<void> _fetchProfile() async {
-    setState(() { _isLoading = true; _hasError = false; });
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
     try {
       final profileRes = await dioClient.dio.get('/profile/$_permalink');
       final data = profileRes.data['data']['user'] as Map<String, dynamic>;
@@ -280,7 +294,9 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
 
       // ── Follow status ──────────────────────────────────────────────
       bool alreadyFollowing = false;
-      if (myId.isNotEmpty && _targetUserId.isNotEmpty && myId != _targetUserId) {
+      if (myId.isNotEmpty &&
+          _targetUserId.isNotEmpty &&
+          myId != _targetUserId) {
         // Best case: backend already returns isFollowing in profile data
         if (data.containsKey('isFollowing')) {
           alreadyFollowing = data['isFollowing'] as bool? ?? false;
@@ -293,16 +309,16 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
 
       if (mounted) {
         setState(() {
-          _username       = data['displayName'] as String? ?? '';
-          _bio            = data['bio']         as String? ?? '';
-          _city           = data['city']        as String? ?? '';
-          _country        = data['country']     as String? ?? '';
-          _avatarUrl      = data['avatarUrl']   as String? ?? '';
-          _coverUrl       = data['coverUrl']    as String? ?? '';
-          _followerCount  = _parseInt(data['followerCount']);
+          _username = data['displayName'] as String? ?? '';
+          _bio = data['bio'] as String? ?? '';
+          _city = data['city'] as String? ?? '';
+          _country = data['country'] as String? ?? '';
+          _avatarUrl = data['avatarUrl'] as String? ?? '';
+          _coverUrl = data['coverUrl'] as String? ?? '';
+          _followerCount = _parseInt(data['followerCount']);
           _followingCount = _parseInt(data['followingCount']);
-          _isPrivate      = data['isPrivate']   as bool? ?? false;
-          _isFollowing    = alreadyFollowing;
+          _isPrivate = data['isPrivate'] as bool? ?? false;
+          _isFollowing = alreadyFollowing;
           _tracks = _dedupeTracks(_extractTracksFromProfile(data));
           _isLoading = false;
         });
@@ -312,36 +328,45 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       }
     } catch (e) {
       debugPrint('=== PROFILE FETCH ERROR: $e');
-      if (mounted) setState(() { _isLoading = false; _hasError = true; });
+      if (mounted)
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
     }
   }
 
   // ── Playback ──────────────────────────────────────────────────────
   void _playFrom(List<Map<String, dynamic>> tracks, int index) {
-    final queue = tracks.map((t) {
-      final artist = _readArtist(t);
-      final artistId = artist['_id']?.toString() ??
-          artist['id']?.toString() ??
-          t['artistId']?.toString();
-      final artistPermalink =
-          artist['permalink']?.toString() ?? t['artistPermalink']?.toString();
-      final artistName = _readArtistName(t);
-      return PlayerTrack(
-        id: (t['_id'] ?? t['id'] ?? '').toString(),
-        title: (t['title'] ?? '').toString(),
-        artist: artistName,
-        artistId: artistId,
-        artistPermalink: artistPermalink,
-        audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
-        coverUrl: t['artworkUrl'] as String? ?? t['coverUrl'] as String?,
-        waveform: (t['waveform'] as List<dynamic>?)
-            ?.map((e) => (e as num).toInt())
-            .toList(),
-      );
-    }).where((t) => t.audioUrl.isNotEmpty).toList();
+    final queue = tracks
+        .map((t) {
+          final artist = _readArtist(t);
+          final artistId = artist['_id']?.toString() ??
+              artist['id']?.toString() ??
+              t['artistId']?.toString();
+          final artistPermalink = artist['permalink']?.toString() ??
+              t['artistPermalink']?.toString();
+          final artistName = _readArtistName(t);
+          return PlayerTrack(
+            id: (t['_id'] ?? t['id'] ?? '').toString(),
+            title: (t['title'] ?? '').toString(),
+            artist: artistName,
+            artistId: artistId,
+            artistPermalink: artistPermalink,
+            audioUrl: (t['hlsUrl'] ?? t['audioUrl'] ?? '').toString(),
+            coverUrl: t['artworkUrl'] as String? ?? t['coverUrl'] as String?,
+            waveform: (t['waveform'] as List<dynamic>?)
+                ?.map((e) => (e as num).toInt())
+                .toList(),
+          );
+        })
+        .where((t) => t.audioUrl.isNotEmpty)
+        .toList();
     if (queue.isEmpty) return;
     final clampedIndex = index.clamp(0, queue.length - 1);
-    ref.read(playerProvider.notifier).playQueue(queue, startIndex: clampedIndex);
+    ref
+        .read(playerProvider.notifier)
+        .playQueue(queue, startIndex: clampedIndex);
   }
 
   // ── Optimistic toggle with revert on failure ───────────────────────
@@ -361,12 +386,23 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
       } else {
         await dioClient.dio.post('/network/$_targetUserId/follow');
       }
+      // Sync shared followProvider so genre pages, feed cards, full player
+      // and any FollowUnfollowButton watching this userId update immediately.
+      ref
+          .read(followProvider(_targetUserId).notifier)
+          .setFollowState(!wasFollowing);
+      ref.invalidate(followingFeedProvider);
+      await ref.read(followingFeedProvider.notifier).load();
     } on DioException catch (e) {
       if (mounted) {
         setState(() {
           _isFollowing = wasFollowing;
           _followerCount += wasFollowing ? 1 : -1;
         });
+        // Revert shared state as well.
+        ref
+            .read(followProvider(_targetUserId).notifier)
+            .setFollowState(wasFollowing);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -407,8 +443,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
-          title: const Text('Block user?',
-              style: TextStyle(color: Colors.white)),
+          title:
+              const Text('Block user?', style: TextStyle(color: Colors.white)),
           content: const Text(
             'They won\'t be able to see your profile or tracks. You won\'t see their content either.',
             style: TextStyle(color: Colors.white70),
@@ -417,8 +453,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             TextButton(
               key: const ValueKey('other_profile_block_cancel_button'),
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel',
-                  style: TextStyle(color: Colors.white54)),
+              child:
+                  const Text('Cancel', style: TextStyle(color: Colors.white54)),
             ),
             TextButton(
               key: const ValueKey('other_profile_block_confirm_button'),
@@ -461,29 +497,456 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
     }
   }
 
+  // ── Notification preference (stored locally per target user) ─────────────
+
+  Future<void> _loadNotifPref() async {
+    if (_targetUserId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final pref = prefs.getString('notif_pref_$_targetUserId') ?? 'none';
+    if (mounted) setState(() => _notifPref = pref);
+  }
+
+  Future<void> _saveNotifPref(String pref) async {
+    if (_targetUserId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('notif_pref_$_targetUserId', pref);
+    if (mounted) setState(() => _notifPref = pref);
+  }
+
+  // ── Profile link helpers ──────────────────────────────────────────────────
+
+  String get _profileLink => 'https://biobeats.app/users/$_targetUserId';
+
+  void _copyLink() {
+    Clipboard.setData(ClipboardData(text: _profileLink));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Profile link copied')),
+    );
+  }
+
+  void _shareProfile() {
+    Share.share(
+      _profileLink,
+      subject: '$_username on BioBeats',
+    );
+  }
+
+  // ── Station ───────────────────────────────────────────────────────────────
+
+  void _startStation() {
+    if (_tracks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No tracks available to start station.')),
+      );
+      return;
+    }
+    _playFrom(_tracks, 0);
+  }
+
+  // ── DM ────────────────────────────────────────────────────────────────────
+
+  Future<void> _openDm() async {
+    if (_targetUserId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final myId = prefs.getString('userId') ?? '';
+    if (myId.isEmpty || myId == _targetUserId) return;
+
+    // Check for an existing conversation with this user first.
+    final convos = ref.read(conversationsProvider).valueOrNull ?? [];
+    for (final convo in convos) {
+      if (convo.participants.any((p) => p.id == _targetUserId)) {
+        if (mounted) context.push('/messages/chat/${convo.id}');
+        return;
+      }
+    }
+
+    // No existing conversation — open the compose screen with this user
+    // pre-selected so the people picker is bypassed.
+    if (mounted) {
+      context.push('/messages/new', extra: {
+        'userId': _targetUserId,
+        'displayName': _username,
+        'avatarUrl': _avatarUrl.isNotEmpty ? _avatarUrl : null,
+        'permalink': _permalink,
+      });
+    }
+  }
+
+  // ── Notification sheets ───────────────────────────────────────────────────
+
+  void _showNotifSheet() {
+    if (_notifPref == 'none') {
+      _showNotifEnableSheet();
+    } else {
+      _showNotifPrefsSheet();
+    }
+  }
+
+  void _showNotifEnableSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Icon(Icons.notifications_outlined,
+                  color: Colors.white, size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                'Turn on notifications',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Never miss an update from your favorite artists.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: Colors.white.withOpacity(0.6), fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  key: const ValueKey('notifications_enable_button'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF5500),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _saveNotifPref('all');
+                    Future.microtask(_showNotifPrefsSheet);
+                  },
+                  child: const Text('Enable notifications',
+                      style: TextStyle(fontSize: 16)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  key: const ValueKey('notifications_maybe_later_button'),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Maybe later',
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.6), fontSize: 15),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showNotifPrefsSheet() {
+    const options = [
+      ('all', 'All New Releases'),
+      ('personalized', 'Personalized'),
+      ('none', 'None'),
+    ];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(top: 10, bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 8, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Notifications',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              for (final (value, label) in options)
+                InkWell(
+                  onTap: () {
+                    setSheetState(() {});
+                    Navigator.pop(ctx);
+                    _saveNotifPref(value);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
+                    child: Row(
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            color: _notifPref == value
+                                ? const Color(0xFFFF5500)
+                                : Colors.white,
+                            fontSize: 15,
+                            fontWeight: _notifPref == value
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (_notifPref == value)
+                          const Icon(Icons.check,
+                              color: Color(0xFFFF5500), size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Info / Request / Report dialogs ───────────────────────────────────────
+
+  void _showInfoDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title:
+            const Text('Profile info', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_username.isNotEmpty) _infoRow('Name', _username),
+            _infoRow('Username', '@$_permalink'),
+            _infoRow('Followers', _formatCount(_followerCount)),
+            _infoRow('Following', _formatCount(_followingCount)),
+            if (_bio.isNotEmpty) _infoRow('Bio', _bio),
+            if (_city.isNotEmpty || _country.isNotEmpty)
+              _infoRow(
+                'Location',
+                [_city, _country].where((s) => s.isNotEmpty).join(', '),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child:
+                const Text('Close', style: TextStyle(color: Color(0xFFFF5500))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: '$label: ',
+                style: const TextStyle(color: Colors.white54, fontSize: 14),
+              ),
+              TextSpan(
+                text: value,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  // ── More sheet ────────────────────────────────────────────────────────────
+
+  Widget _sheetHeader() {
+    final initial = _username.isNotEmpty ? _username[0].toUpperCase() : '?';
+    final isDefault =
+        _avatarUrl.isEmpty || _avatarUrl.contains('default-avatar');
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Row(
+        children: [
+          _buildAvatarRing(
+              initial: initial, isDefaultAvatar: isDefault, radius: 28),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _username,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${_formatCount(_followerCount)} followers'
+                  '${_tracks.isNotEmpty ? ' · ${_tracks.length} tracks' : ''}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sheetTile({
+    Key? key,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? iconColor,
+  }) =>
+      InkWell(
+        key: key,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: iconColor ?? Colors.white70, size: 22),
+              const SizedBox(width: 16),
+              Text(label,
+                  style: const TextStyle(color: Colors.white, fontSize: 15)),
+            ],
+          ),
+        ),
+      );
+
   void _showMoreSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1A1A),
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            key: const ValueKey('other_profile_block_tile'),
-            leading: const Icon(Icons.block, color: Colors.white70),
-            title: Text(_isBlocked ? 'Unblock user' : 'Block user',
-                style: const TextStyle(color: Colors.white)),
-            onTap: _targetUserId.isNotEmpty
-                ? () {
-                    Navigator.of(context).pop();
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 10, bottom: 8),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              _sheetHeader(),
+              const Divider(color: Colors.white12, height: 1),
+              _sheetTile(
+                icon: Icons.share_outlined,
+                label: 'Share profile',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _shareProfile();
+                },
+              ),
+              _sheetTile(
+                key: const ValueKey('other_profile_copy_link_button'),
+                icon: Icons.link,
+                label: 'Copy link',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _copyLink();
+                },
+              ),
+              _sheetTile(
+                key: const ValueKey('other_profile_follow_button'),
+                icon: _isFollowing
+                    ? Icons.person_remove_outlined
+                    : Icons.person_add_outlined,
+                label: _isFollowing ? 'Following' : 'Follow',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _toggleFollow();
+                },
+              ),
+              _sheetTile(
+                key: const ValueKey('other_profile_start_station_button'),
+                icon: Icons.radio,
+                label: 'Start station',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _startStation();
+                },
+              ),
+              _sheetTile(
+                icon: Icons.info_outline,
+                label: 'View info',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _showInfoDialog();
+                },
+              ),
+              _sheetTile(
+                key: const ValueKey('other_profile_block_button'),
+                icon: _isBlocked ? Icons.lock_open_outlined : Icons.block,
+                label: _isBlocked ? 'Unblock user' : 'Block user',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  if (_targetUserId.isNotEmpty) {
                     _toggleBlock(_targetUserId);
                   }
-                : null,
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
           ),
-          const SizedBox(height: 8),
-        ],
+        ),
       ),
     );
   }
@@ -502,8 +965,7 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             margin: const EdgeInsets.all(8),
             decoration:
                 BoxDecoration(color: Colors.grey[900], shape: BoxShape.circle),
-            child:
-                const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+            child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
           ),
         ),
         actions: [
@@ -542,19 +1004,17 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
               onPressed: _fetchProfile,
               style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFF5500)),
-              child: const Text('Retry',
-                  style: TextStyle(color: Colors.white)),
+              child: const Text('Retry', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
       );
 
-  Widget _buildBody() =>
-      _isBlocked
-          ? _buildBlockedProfile()
-          : _isPrivate && !_isFollowing
-              ? _buildPrivateProfile()
-              : _buildPublicProfile();
+  Widget _buildBody() => _isBlocked
+      ? _buildBlockedProfile()
+      : _isPrivate && !_isFollowing
+          ? _buildPrivateProfile()
+          : _buildPublicProfile();
 
   Widget _buildBlockedProfile() {
     final initial = _username.isNotEmpty ? _username[0].toUpperCase() : '?';
@@ -618,11 +1078,14 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
     return SingleChildScrollView(
       child: Column(children: [
         const SizedBox(height: 24),
-        _buildAvatarRing(initial: initial, isDefaultAvatar: isDefault, radius: 50),
+        _buildAvatarRing(
+            initial: initial, isDefaultAvatar: isDefault, radius: 50),
         const SizedBox(height: 16),
         Text(_username,
             style: const TextStyle(
-                color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold)),
         Text(widget.permalink,
             style: TextStyle(color: Colors.grey[500], fontSize: 14)),
         const SizedBox(height: 20),
@@ -715,13 +1178,37 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
               child: Row(children: [
                 Expanded(child: _followButton()),
                 const SizedBox(width: 10),
-                const _CircleIconBtn(icon: Icons.notifications_none),
+                _CircleIconBtn(
+                  key: const ValueKey('other_profile_notifications_button'),
+                  icon: _notifPref != 'none'
+                      ? Icons.notifications
+                      : Icons.notifications_none,
+                  onTap: _showNotifSheet,
+                ),
                 const SizedBox(width: 10),
-                const _CircleIconBtn(icon: Icons.message_outlined),
+                _CircleIconBtn(
+                  key: const ValueKey('other_profile_message_button'),
+                  icon: Icons.message_outlined,
+                  onTap: _openDm,
+                ),
                 const SizedBox(width: 10),
-                const _CircleIconBtn(icon: Icons.shuffle),
+                _CircleIconBtn(
+                  icon: Icons.shuffle,
+                  onTap: _tracks.isNotEmpty
+                      ? () => _playFrom(
+                            _tracks,
+                            DateTime.now().millisecondsSinceEpoch %
+                                _tracks.length,
+                          )
+                      : null,
+                ),
                 const SizedBox(width: 10),
-                const _CircleIconBtn(icon: Icons.play_circle_outline, size: 34),
+                _CircleIconBtn(
+                  icon: Icons.play_circle_outline,
+                  size: 34,
+                  onTap:
+                      _tracks.isNotEmpty ? () => _playFrom(_tracks, 0) : null,
+                ),
               ]),
             ),
 
@@ -730,25 +1217,29 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             const SizedBox(height: 24),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(_bio,
-                    maxLines: _bioExpanded ? null : 3,
-                    overflow: _bioExpanded
-                        ? TextOverflow.visible
-                        : TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white70, fontSize: 14)),
-                if (_bio.length > 120)
-                  GestureDetector(
-                    key: const ValueKey('other_profile_bio_toggle_button'),
-                    onTap: () => setState(() => _bioExpanded = !_bioExpanded),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(_bioExpanded ? 'Show less' : 'Show more',
-                          style: const TextStyle(
-                              color: Color(0xFFFF5500), fontSize: 13)),
-                    ),
-                  ),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_bio,
+                        maxLines: _bioExpanded ? null : 3,
+                        overflow: _bioExpanded
+                            ? TextOverflow.visible
+                            : TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 14)),
+                    if (_bio.length > 120)
+                      GestureDetector(
+                        key: const ValueKey('other_profile_bio_toggle_button'),
+                        onTap: () =>
+                            setState(() => _bioExpanded = !_bioExpanded),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(_bioExpanded ? 'Show less' : 'Show more',
+                              style: const TextStyle(
+                                  color: Color(0xFFFF5500), fontSize: 13)),
+                        ),
+                      ),
+                  ]),
             ),
           ],
 
@@ -758,7 +1249,8 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(children: [
-                const Icon(Icons.location_on_outlined, color: Colors.grey, size: 16),
+                const Icon(Icons.location_on_outlined,
+                    color: Colors.grey, size: 16),
                 const SizedBox(width: 4),
                 Text([_city, _country].where((s) => s.isNotEmpty).join(', '),
                     style: const TextStyle(color: Colors.grey, fontSize: 13)),
@@ -877,11 +1369,16 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
                 ),
               )
             else
-              ..._repostedTracks!.take(10).toList().asMap().entries.map((e) =>
-                  _TrackRow(
-                    track: e.value,
-                    onTap: () => _playFrom(_repostedTracks!.take(10).toList(), e.key),
-                  )),
+              ..._repostedTracks!
+                  .take(10)
+                  .toList()
+                  .asMap()
+                  .entries
+                  .map((e) => _TrackRow(
+                        track: e.value,
+                        onTap: () => _playFrom(
+                            _repostedTracks!.take(10).toList(), e.key),
+                      )),
           ],
           if (_selectedTabIndex == 2) ...[
             if (_isLoadingLikes)
@@ -919,11 +1416,16 @@ class _OtherUserProfilePageState extends ConsumerState<OtherUserProfilePage> {
                 ),
               )
             else
-              ..._likedTracks!.take(10).toList().asMap().entries.map((e) =>
-                  _TrackRow(
-                    track: e.value,
-                    onTap: () => _playFrom(_likedTracks!.take(10).toList(), e.key),
-                  )),
+              ..._likedTracks!
+                  .take(10)
+                  .toList()
+                  .asMap()
+                  .entries
+                  .map((e) => _TrackRow(
+                        track: e.value,
+                        onTap: () =>
+                            _playFrom(_likedTracks!.take(10).toList(), e.key),
+                      )),
           ],
 
           const SizedBox(height: 32),
@@ -1040,14 +1542,25 @@ class _TabChip extends StatelessWidget {
 class _CircleIconBtn extends StatelessWidget {
   final IconData icon;
   final double size;
-  const _CircleIconBtn({required this.icon, this.size = 24});
+  final VoidCallback? onTap;
+
+  const _CircleIconBtn(
+      {super.key, required this.icon, this.size = 24, this.onTap});
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(color: Colors.grey[900], shape: BoxShape.circle),
-        child: Icon(icon, color: Colors.white70, size: size),
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration:
+              BoxDecoration(color: Colors.grey[900], shape: BoxShape.circle),
+          child: Icon(
+            icon,
+            color: onTap != null ? Colors.white70 : Colors.white30,
+            size: size,
+          ),
+        ),
       );
 }
 
@@ -1055,6 +1568,35 @@ class _TrackRow extends StatelessWidget {
   final Map<String, dynamic> track;
   final VoidCallback? onTap;
   const _TrackRow({required this.track, this.onTap});
+
+  void _openOptions(BuildContext context) {
+    final trackId = (track['_id'] ?? track['id'] ?? '').toString();
+    if (trackId.isEmpty) return;
+    final artist = _readArtist(track);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: trackId,
+        title: track['title']?.toString(),
+        artistName: _readArtistName(track),
+        artworkUrl: (track['artworkUrl'] ?? track['coverUrl']) as String?,
+        audioUrl: (track['hlsUrl'] ?? track['audioUrl'])?.toString(),
+        waveform: (track['waveform'] as List?)
+            ?.whereType<num>()
+            .map((value) => value.toInt())
+            .toList(),
+        artistId: (artist['_id'] ?? artist['id'])?.toString(),
+        artistPermalink: artist['permalink']?.toString(),
+        initialLikeCount: _safeInt(track['likeCount']),
+        initialRepostCount: _safeInt(track['repostCount']),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1131,7 +1673,14 @@ class _TrackRow extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          const Icon(Icons.more_vert, color: Colors.grey, size: 20),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _openOptions(context),
+            child: const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(Icons.more_vert, color: Colors.grey, size: 20),
+            ),
+          ),
         ]),
       ),
     );
@@ -1204,8 +1753,8 @@ List<Map<String, dynamic>> _dedupeTracks(List<Map<String, dynamic>> tracks) {
   final seen = <String>{};
   final result = <Map<String, dynamic>>[];
   for (final track in tracks) {
-    final id = (track['_id'] ?? track['id'] ?? track['permalink'] ?? '')
-        .toString();
+    final id =
+        (track['_id'] ?? track['id'] ?? track['permalink'] ?? '').toString();
     if (id.isEmpty || seen.add(id)) {
       result.add(track);
     }
@@ -1213,7 +1762,8 @@ List<Map<String, dynamic>> _dedupeTracks(List<Map<String, dynamic>> tracks) {
   return result;
 }
 
-List<Map<String, dynamic>> _extractTracksFromProfile(Map<String, dynamic> user) {
+List<Map<String, dynamic>> _extractTracksFromProfile(
+    Map<String, dynamic> user) {
   final tracks = <Map<String, dynamic>>[];
   for (final key in const ['uploadedTracks', 'tracks', 'topTracks']) {
     final raw = user[key];

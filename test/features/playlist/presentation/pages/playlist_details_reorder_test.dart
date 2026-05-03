@@ -27,14 +27,25 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:soundcloud_clone/core/network/dio_client.dart';
+import 'package:soundcloud_clone/core/services/audio_handler_service.dart';
+import 'package:soundcloud_clone/core/providers/session_provider.dart';
+import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/playlist/data/repositories/playlist_repository.dart';
 import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
 import 'package:soundcloud_clone/features/playlist/presentation/pages/playlist_details_page.dart';
 import 'package:soundcloud_clone/features/playlist/presentation/providers/playlists_provider.dart';
+import 'package:soundcloud_clone/features/station/data/datasources/station_remote_data_source.dart';
+import 'package:soundcloud_clone/injection_container.dart';
 
 // ── Mock ──────────────────────────────────────────────────────────────────────
 
 class MockPlaylistRepository extends Mock implements PlaylistRepository {}
+
+class MockEngagementRemoteDataSource extends Mock
+    implements EngagementRemoteDataSource {}
+
+class MockStationRemoteDataSource extends Mock
+    implements StationRemoteDataSource {}
 
 // ── Mock HTTP adapter ─────────────────────────────────────────────────────────
 
@@ -94,6 +105,7 @@ final _testPlaylist = Playlist(
   ownerName: 'DJ Test',
   isPublic: true,
   trackCount: 3,
+  firstTrackArtworkUrl: 'https://example.com/first.jpg',
 );
 
 // ── Finders ───────────────────────────────────────────────────────────────────
@@ -115,8 +127,21 @@ Future<ProviderContainer> _pumpDetailsPage(
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  SharedPreferences.setMockInitialValues({});
+  SharedPreferences.setMockInitialValues({
+    'playlists_data': jsonEncode([_testPlaylist.toJson()]),
+  });
   when(() => mockRepo.fetchById(any())).thenAnswer((_) async => {});
+  if (!sl.isRegistered<EngagementRemoteDataSource>()) {
+    sl.registerLazySingleton<EngagementRemoteDataSource>(
+      MockEngagementRemoteDataSource.new,
+    );
+  }
+  if (!sl.isRegistered<StationRemoteDataSource>()) {
+    final stationSource = MockStationRemoteDataSource();
+    when(() => stationSource.isStationLiked(any()))
+        .thenAnswer((_) async => false);
+    sl.registerLazySingleton<StationRemoteDataSource>(() => stationSource);
+  }
 
   // Swap the Dio adapter so _loadTracks returns our fixture data.
   final mockAdapter = _MockHttpAdapter()
@@ -134,14 +159,14 @@ Future<ProviderContainer> _pumpDetailsPage(
   dioClient.dio.httpClientAdapter = mockAdapter;
   addTearDown(() => dioClient.dio.httpClientAdapter = originalAdapter);
 
-  final container = ProviderContainer(
-    overrides: [playlistRepositoryProvider.overrideWithValue(mockRepo)],
-  );
-  addTearDown(container.dispose);
+  appAudioHandler ??= AppAudioHandler();
 
   await tester.pumpWidget(
-    UncontrolledProviderScope(
-      container: container,
+    ProviderScope(
+      overrides: [
+        playlistRepositoryProvider.overrideWithValue(mockRepo),
+        sessionUserIdProvider.overrideWith((ref) => 'user-1'),
+      ],
       child: MaterialApp(
         home: PlaylistDetailsPage(playlist: _testPlaylist),
       ),
@@ -149,7 +174,9 @@ Future<ProviderContainer> _pumpDetailsPage(
   );
 
   await tester.pumpAndSettle();
-  return container;
+  return ProviderScope.containerOf(
+    tester.element(find.byType(PlaylistDetailsPage)),
+  );
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ class SocketService {
   String? _blockedTokenFingerprint;
   final Set<String> _recentLocalNotificationMessageIds = {};
   final Set<String> _activeConversationIds = {};
+  
   final Map<String, DateTime> _recentNotificationPopups = {};
 
   final _newMessageController =
@@ -143,12 +144,12 @@ class SocketService {
       _activeConversationIds.contains(conversationId);
 
   // ── NEW ──────────────────────────────────────────────────────────────────
-  void sendTyping(String conversationId) {
-    _socket?.emit('typing', {'conversationId': conversationId});
+  void sendTyping(String receiverId) {
+    _socket?.emit('typing', {'receiverId': receiverId});
   }
 
-  void sendStoppedTyping(String conversationId) {
-    _socket?.emit('stop_typing', {'conversationId': conversationId});
+  void sendStoppedTyping(String receiverId) {
+    _socket?.emit('stop_typing', {'receiverId': receiverId});
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -409,13 +410,16 @@ class SocketService {
   // ─────────────────────────────────────────────────────────────────────────
 
   void _showMessageNotificationIfNeeded(Map<String, dynamic> message) {
-    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
-      return;
-    }
-
     final conversationId = _conversationIdFrom(message);
     if (conversationId.isEmpty ||
         _activeConversationIds.contains(conversationId)) {
+      return;
+    }
+
+    final title = _messageNotificationTitle(message);
+    final body = _messageNotificationBody(message);
+    final senderName = _senderNameFrom(message);
+    if (senderName == 'Someone' && title == 'New message') {
       return;
     }
 
@@ -432,12 +436,9 @@ class SocketService {
       }
     }
 
-    final title = _messageNotificationTitle(message);
-    final body = _messageNotificationBody(message);
-    final senderName = _senderNameFrom(message);
     unawaited(
       LocalNotificationService.showNotification(
-        title: 'Message from $senderName',
+        title: senderName == 'Someone' ? title : 'Message from $senderName',
         body: body,
         payload: '/messages/chat/$conversationId',
       ),
@@ -464,11 +465,19 @@ class SocketService {
     try {
       final notification = Map<String, dynamic>.from(data as Map);
       onNewNotification?.call(notification);
-      if ((notification['type']?.toString().toUpperCase() ?? '') == 'MESSAGE') {
+      final isMessage =
+          (notification['type']?.toString().toUpperCase() ?? '') == 'MESSAGE';
+      final messageId = _messageIdFromNotification(notification);
+      if (isMessage &&
+          messageId.isNotEmpty &&
+          _recentLocalNotificationMessageIds.contains(messageId)) {
         return;
       }
       if (_shouldSuppressNotificationPopup(notification)) {
         return;
+      }
+      if (isMessage && messageId.isNotEmpty) {
+        _recentLocalNotificationMessageIds.add(messageId);
       }
       unawaited(
         LocalNotificationService.showNotification(
@@ -510,12 +519,18 @@ class SocketService {
   }
 
   String _notificationPayload(Map<String, dynamic> json) {
+    final type = (json['type'] as String? ?? '').toUpperCase();
     final actionLink = json['actionLink']?.toString();
-    if (actionLink != null && _isSafeRoutePath(actionLink)) {
+    // Skip the actionLink shortcut for MESSAGE notifications. The backend sends
+    // actionLink: "/messages" (the inbox root), which passes _isSafeRoutePath
+    // because "/messages" is a valid prefix — but it is too broad. The MESSAGE
+    // case below correctly extracts the conversationId from the payload and
+    // builds the precise /messages/chat/$id path instead.
+    if (type != 'MESSAGE' && actionLink != null && _isSafeRoutePath(actionLink)) {
       return actionLink;
     }
 
-    switch ((json['type'] as String? ?? '').toUpperCase()) {
+    switch (type) {
       case 'FOLLOW':
       case 'NEW_TRACK':
       case 'NEW_PLAYLIST':
@@ -523,6 +538,15 @@ class SocketService {
         final permalink = actor['permalink']?.toString();
         if (permalink != null && permalink.trim().isNotEmpty) {
           return '/user/${permalink.replaceFirst('@', '')}';
+        }
+        return '/notifications';
+      case 'MESSAGE':
+        final conversationId = _conversationIdFrom(json);
+        if (conversationId.isNotEmpty) return '/messages/chat/$conversationId';
+        return '/messages';
+      case 'SYSTEM':
+        if (_isRecommendationNotification(json)) {
+          return '/home/recommended';
         }
         return '/notifications';
       case 'SYSTEM':
@@ -547,7 +571,7 @@ class SocketService {
       case 'COMMENT':
         return '$actor commented on your track';
       case 'MESSAGE':
-        return 'New message from $actor';
+        return 'Message from $actor';
       case 'NEW_TRACK':
         return '$actor posted a new track';
       case 'NEW_PLAYLIST':
@@ -579,9 +603,18 @@ class SocketService {
   }
 
   String _notificationActor(Map<String, dynamic> json) {
+    for (final key in const ['actorName', 'senderName', 'senderDisplayName']) {
+      final name = json[key]?.toString().trim();
+      if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+        return name;
+      }
+    }
+
     final firstMap = _firstActor(json);
     if (firstMap.isEmpty) return 'Someone';
-    final name = firstMap['displayName']?.toString();
+    final name =
+        (firstMap['displayName'] ?? firstMap['username'] ?? firstMap['name'])
+            ?.toString();
     final actorName = (name == null || name.trim().isEmpty) ? 'Someone' : name;
     final actors = json['actors'];
     final actorCount = json['actorCount'] is int
@@ -597,9 +630,15 @@ class SocketService {
 
   Map<String, dynamic> _firstActor(Map<String, dynamic> json) {
     final actors = json['actors'];
-    if (actors is! List || actors.isEmpty) return <String, dynamic>{};
-    final first = actors.first;
-    return first is Map ? Map<String, dynamic>.from(first) : <String, dynamic>{};
+    if (actors is List && actors.isNotEmpty) {
+      final first = actors.first;
+      if (first is Map) return Map<String, dynamic>.from(first);
+    }
+    for (final key in const ['actor', 'actorId', 'sender', 'senderId']) {
+      final map = _mapValue(json[key]);
+      if (map != null) return map;
+    }
+    return <String, dynamic>{};
   }
 
   bool _isSafeRoutePath(String value) {
@@ -621,7 +660,7 @@ class SocketService {
   }
 
   bool _looksLikeObjectId(String value) {
-    return RegExp(r'^[a-fA-F0-9]{24}$').hasMatch(value);
+    return RegExp(r'^[a-fA-F0-9]{20,32}$').hasMatch(value);
   }
 
   String _messageNotificationTitle(Map<String, dynamic> message) {
@@ -631,18 +670,8 @@ class SocketService {
   }
 
   String _messageNotificationBody(Map<String, dynamic> message) {
-    for (final key in const [
-      'contentSnippet',
-      'content',
-      'message',
-      'text',
-      'body',
-    ]) {
-      final value = message[key]?.toString().trim();
-      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
-        return value;
-      }
-    }
+    final body = _firstMessageText(message);
+    if (body.isNotEmpty) return body;
 
     if (message['attachment'] != null || message['attachments'] != null) {
       return 'Sent an attachment';
@@ -652,15 +681,19 @@ class SocketService {
   }
 
   String _conversationIdFrom(Map<String, dynamic> message) {
-    final direct = message['conversationId'] ?? message['chatId'];
-    final directValue = _idValue(direct);
-    if (directValue.isNotEmpty) return directValue;
+    for (final map in _messageMaps(message)) {
+      for (final key in const [
+        'conversationId',
+        'targetConversationId',
+        'chatId',
+        'conversation',
+      ]) {
+        final value = _idValue(map[key]);
+        if (value.isNotEmpty) return value;
+      }
+    }
 
-    final conversation = message['conversation'];
-    final conversationValue = _idValue(conversation);
-    if (conversationValue.isNotEmpty) return conversationValue;
-
-    return '';
+    return _conversationIdFromActionLink(message['actionLink']?.toString());
   }
 
   String _senderIdFrom(Map<String, dynamic> message) {
@@ -670,73 +703,176 @@ class SocketService {
   }
 
   String _senderNameFrom(Map<String, dynamic> message) {
-    for (final key in const ['sender', 'senderId', 'from', 'user']) {
-      final value = message[key];
-      if (value is Map) {
-        final map = Map<String, dynamic>.from(value);
-        for (final nameKey in const ['displayName', 'username', 'name']) {
-          final name = map[nameKey]?.toString().trim();
-          if (name != null &&
-              name.isNotEmpty &&
-              !_looksLikeObjectId(name)) {
-            return name;
+    for (final map in _messageMaps(message)) {
+      for (final key in const ['sender', 'senderId', 'from', 'user', 'actor', 'actorId']) {
+        final value = _mapValue(map[key]);
+        if (value != null) {
+          for (final nameKey in const ['displayName', 'username', 'name']) {
+            final name = value[nameKey]?.toString().trim();
+            if (name != null &&
+                name.isNotEmpty &&
+                !_looksLikeObjectId(name)) {
+              return name;
+            }
           }
         }
       }
     }
-    for (final key in const ['senderName', 'senderDisplayName', 'displayName']) {
-      final name = message[key]?.toString().trim();
-      if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
-        return name;
+    for (final map in _messageMaps(message)) {
+      for (final key in const [
+        'senderName',
+        'senderDisplayName',
+        'actorName',
+        'displayName',
+      ]) {
+        final name = map[key]?.toString().trim();
+        if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+          return name;
+        }
       }
     }
     return 'Someone';
   }
 
   String _senderDisplayNameFrom(Map<String, dynamic> message) {
-    for (final key in const [
-      'senderDisplayName',
-      'senderName',
-      'actorName',
-      'displayName',
-    ]) {
+    for (final key in const ['notificationTitle', 'title']) {
       final value = message[key]?.toString().trim();
-      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
-        return value;
+      if (value != null &&
+          value.startsWith('Message from ') &&
+          !_looksLikeObjectId(value)) {
+        return value.replaceFirst('Message from ', '').trim();
       }
     }
 
-    final sender = message['senderId'] is Map
-        ? message['senderId']
-        : message['sender'] is Map
-            ? message['sender']
-            : null;
-    if (sender is Map) {
-      final map = Map<String, dynamic>.from(sender);
-      final value = map['displayName']?.toString().trim();
-      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
-        return value;
+    for (final map in _messageMaps(message)) {
+      for (final key in const [
+        'senderDisplayName',
+        'senderName',
+        'actorName',
+        'displayName',
+      ]) {
+        final value = map[key]?.toString().trim();
+        if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+          return value;
+        }
+      }
+    }
+
+    for (final map in _messageMaps(message)) {
+      for (final key in const ['senderId', 'sender', 'from', 'user', 'actor', 'actorId']) {
+        final value = _mapValue(map[key]);
+        if (value == null) continue;
+        for (final nameKey in const ['displayName', 'username', 'name']) {
+          final name = value[nameKey]?.toString().trim();
+          if (name != null && name.isNotEmpty && !_looksLikeObjectId(name)) {
+            return name;
+          }
+        }
       }
     }
 
     final actors = message['actors'];
     if (actors is List && actors.isNotEmpty && actors.first is Map) {
       final first = Map<String, dynamic>.from(actors.first as Map);
-      final value = first['displayName']?.toString().trim();
-      if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
-        return value;
+      for (final key in const ['displayName', 'username', 'name']) {
+        final value = first[key]?.toString().trim();
+        if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+          return value;
+        }
       }
     }
 
     return '';
   }
 
+  String _messageIdFromNotification(Map<String, dynamic> notification) {
+    for (final key in const ['targetId', 'messageId']) {
+      final value = _idValue(notification[key]);
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  String _firstMessageText(Map<String, dynamic> message) {
+    for (final map in _messageMaps(message)) {
+      for (final key in const [
+        'contentSnippet',
+        'content',
+        'messageText',
+        'message',
+        'text',
+        'body',
+      ]) {
+        final value = map[key]?.toString().trim();
+        if (value != null && value.isNotEmpty && !_looksLikeObjectId(value)) {
+          return value;
+        }
+      }
+    }
+    return '';
+  }
+
+  List<Map<String, dynamic>> _messageMaps(Map<String, dynamic> message) {
+    final maps = <Map<String, dynamic>>[message];
+    for (final key in const ['extraData', 'target', 'targetJson', 'payload', 'data']) {
+      final map = _mapValue(message[key]);
+      if (map != null) maps.add(map);
+    }
+    return maps;
+  }
+
+  Map<String, dynamic>? _mapValue(dynamic value) {
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String) {
+      final trimmed = value.trim();
+      if (!trimmed.startsWith('{')) return null;
+      try {
+        final parsed = jsonDecode(trimmed);
+        if (parsed is Map) return Map<String, dynamic>.from(parsed);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  String _conversationIdFromActionLink(String? actionLink) {
+    if (actionLink == null || actionLink.trim().isEmpty) return '';
+    final uri = Uri.tryParse(actionLink);
+    final segments = uri?.pathSegments ?? const <String>[];
+    if (segments.length >= 3 &&
+        segments[0] == 'messages' &&
+        segments[1] == 'chat' &&
+        segments[2].trim().isNotEmpty) {
+      return segments[2].trim();
+    }
+    return '';
+  }
+
   String _idValue(dynamic value) {
     if (value == null) return '';
-    if (value is String) return value;
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return '';
+      final map = _mapValue(trimmed);
+      if (map != null) {
+        return (map['_id'] ??
+                map['id'] ??
+                map['conversationId'] ??
+                map['chatId'] ??
+                '')
+            .toString()
+            .trim();
+      }
+      return trimmed;
+    }
     if (value is Map) {
       final map = Map<String, dynamic>.from(value);
-      return (map['_id'] ?? map['id'] ?? '').toString();
+      return (map['_id'] ??
+              map['id'] ??
+              map['conversationId'] ??
+              map['chatId'] ??
+              '')
+          .toString()
+          .trim();
     }
     return value.toString();
   }

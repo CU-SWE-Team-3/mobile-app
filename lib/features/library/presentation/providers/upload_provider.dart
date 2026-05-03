@@ -1,9 +1,13 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:just_audio/just_audio.dart' as ja;
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/entities/upload_track.dart';
+import '../../../premium/presentation/providers/subscription_provider.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/core/providers/session_provider.dart';
 
@@ -75,10 +79,11 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
   // Initialize upload with audio file path
   Future<void> initializeUpload({required String audioFilePath}) async {
-    final filename = audioFilePath.split('/').last;
+    final stablePath = await _copyAudioToStableUploadLocation(audioFilePath);
+    final filename = path.basename(stablePath);
     state = state.copyWith(
       track: UploadTrack(
-        audioFilePath: audioFilePath,
+        audioFilePath: stablePath,
         title: filename.replaceAll(RegExp(r'\.[^.]*$'), ''), // Remove extension
         artist: '',
       ),
@@ -96,6 +101,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
     List<String>? tags,
     DateTime? releaseDate,
     bool? isPublic,
+    bool? enableDirectDownloads,
     String? description,
     int? duration,
   }) {
@@ -110,6 +116,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
         tags: tags,
         releaseDate: releaseDate,
         isPublic: isPublic,
+        enableDirectDownloads: enableDirectDownloads,
         description: description,
         duration: duration,
       ),
@@ -119,6 +126,17 @@ class UploadNotifier extends StateNotifier<UploadState> {
   // Set waveform loaded state
   void setWaveformLoaded(bool loaded) {
     state = state.copyWith(waveformLoaded: loaded);
+  }
+
+  String? _firstString(Map<dynamic, dynamic>? map, List<String> keys) {
+    if (map == null) return null;
+    for (final key in keys) {
+      final value = map[key];
+      if (value == null) continue;
+      final text = value.toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return null;
   }
 
   // Real API upload with Azure blob storage
@@ -144,13 +162,41 @@ class UploadNotifier extends StateNotifier<UploadState> {
       if (permalink.isNotEmpty) {
         final profileResp = await dioClient.dio.get('/profile/$permalink');
         final user = profileResp.data['data']?['user'] as Map<String, dynamic>?;
-        final subscription = user?['subscription'] as Map<String, dynamic>?;
-        final planType = (subscription?['planType'] as String?) ??
-            (subscription?['subscriptionPlan'] as String?) ??
-            (user?['planType'] as String?) ??
-            (user?['subscriptionPlan'] as String?) ??
-            prefs.getString('subscriptionPlanType');
-        if (planType != null && planType != 'Pro') {
+        final isPremium = (user?['isPremium'] as bool?) ??
+            prefs.getBool('isPremium') ??
+            false;
+        final subscription = _asStringMap(user?['subscription']);
+        final planType = _readPlanType(
+              user: user,
+              subscription: subscription,
+            ) ??
+            normalizeSubscriptionPlan(prefs.getString('subscriptionPlanType'));
+        final offlineListening = _readBoolEntitlement(
+              user: user,
+              subscription: subscription,
+              keys: const [
+                'offlineListening',
+                'canDownload',
+                'downloadsEnabled',
+              ],
+            ) ||
+            (prefs.getBool('subscriptionOfflineListening') ?? false);
+        final role =
+            ((user?['role'] as String?) ?? prefs.getString('role') ?? '')
+                .toLowerCase();
+        final legacyArtistPro =
+            isPremium && planType == null && role == 'artist';
+        final hasUnlimitedUploads = isPremium &&
+            (planType == 'Pro' || planType == 'Artist Pro' || legacyArtistPro);
+        final canDownload = planType == 'Go+' || offlineListening;
+        debugPrint(
+          '[Upload] entitlement â€” isPremium=$isPremium, '
+          'planType=${planType ?? "null"}, '
+          'canUploadUnlimited=$hasUnlimitedUploads, '
+          'canDownload=$canDownload, '
+          'role=$role, legacyArtistPro=$legacyArtistPro',
+        );
+        if (!hasUnlimitedUploads) {
           int? tracksCount;
           tracksCount = (user?['counts']?['tracks'] as int?) ??
               (user?['tracksCount'] as int?) ??
@@ -159,7 +205,6 @@ class UploadNotifier extends StateNotifier<UploadState> {
           if (tracksCount != null && tracksCount >= 3) {
             state = state.copyWith(
               isUploading: false,
-              needsRoleUpgrade: true,
               error:
                   'Upload limit reached. Free and Go+ accounts are limited to 3 tracks. Upgrade to Artist Pro for unlimited uploads.',
             );
@@ -213,13 +258,18 @@ class UploadNotifier extends StateNotifier<UploadState> {
       }
 
       final normalizedGenre = _normalizeGenre(state.track.genre);
+      debugPrint(
+          '[Upload] selectedGenre=${state.track.genre ?? "null"} → normalized=${normalizedGenre ?? "null"}');
       final uploadInitBody = <String, dynamic>{
         'title': state.track.title.isNotEmpty ? state.track.title : 'Untitled',
         'format': mimeType,
         'size': audioBytes.length,
         'duration': durationSeconds,
         'isPublic': state.track.isPublic,
+        'enableDirectDownloads': state.track.enableDirectDownloads,
       };
+      debugPrint(
+          '[Upload] enableDirectDownloads=${state.track.enableDirectDownloads}');
       if ((state.track.description ?? '').trim().isNotEmpty) {
         uploadInitBody['description'] = state.track.description!.trim();
       }
@@ -234,6 +284,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
             state.track.releaseDate!.toIso8601String();
       }
 
+      debugPrint('[Upload] metadata sent=$uploadInitBody');
       final uploadInitResponse = await dioClient.dio.post(
         '/tracks/upload',
         data: uploadInitBody,
@@ -241,6 +292,12 @@ class UploadNotifier extends StateNotifier<UploadState> {
 
       final trackId = uploadInitResponse.data['data']['trackId'] as String;
       final uploadUrl = uploadInitResponse.data['data']['uploadUrl'] as String;
+      final initData = uploadInitResponse.data['data'] is Map
+          ? uploadInitResponse.data['data'] as Map
+          : null;
+      final responseGenre = uploadInitResponse.data['data']?['genre'] ??
+          uploadInitResponse.data['data']?['track']?['genre'];
+      debugPrint('[Upload] backend response genre=${responseGenre ?? "null"}');
 
       // Step B: PUT file to Azure Blob Storage with progress.
       //
@@ -286,13 +343,26 @@ class UploadNotifier extends StateNotifier<UploadState> {
         '/tracks/$trackId/confirm',
       );
 
-      final permalink = confirmResponse.data['data']['permalink'] as String?;
+      final confirmData = confirmResponse.data['data'] is Map
+          ? confirmResponse.data['data'] as Map
+          : null;
+      final permalink = _firstString(
+            confirmData,
+            const ['permalink', 'slug'],
+          ) ??
+          _firstString(initData, const ['permalink', 'slug']);
+      final shareUrl = _firstString(
+            confirmData,
+            const ['shareUrl', 'trackLink', 'publicUrl'],
+          ) ??
+          _firstString(initData, const ['shareUrl', 'trackLink', 'publicUrl']);
 
       // Step D: PATCH /tracks/{trackId}/metadata — non-null fields only
       state = state.copyWith(uploadProgress: 0.85);
       final metadataBody = <String, dynamic>{};
-      if (state.track.title.isNotEmpty)
+      if (state.track.title.isNotEmpty) {
         metadataBody['title'] = state.track.title;
+      }
       if ((state.track.description ?? '').trim().isNotEmpty) {
         metadataBody['description'] = state.track.description!.trim();
       }
@@ -301,6 +371,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
         metadataBody['tags'] = state.track.tags;
       }
       metadataBody['isPublic'] = state.track.isPublic;
+      metadataBody['enableDirectDownloads'] = state.track.enableDirectDownloads;
       if (state.track.releaseDate != null) {
         metadataBody['releaseDate'] =
             state.track.releaseDate!.toIso8601String();
@@ -328,14 +399,21 @@ class UploadNotifier extends StateNotifier<UploadState> {
       }
 
       state = state.copyWith(
+        track: state.track.copyWith(
+          id: trackId,
+          permalink: permalink,
+          shareUrl: shareUrl,
+          publicUrl: shareUrl,
+        ),
         isUploading: false,
         uploadProgress: 1.0,
         successMessage: 'Upload complete! ✓',
         processingState: 'Finished',
       );
     } catch (e) {
+      final message = _uploadErrorMessage(e);
       state = state.copyWith(
-        error: 'Upload failed: ${e.toString()}',
+        error: message,
         isUploading: false,
         uploadProgress: 0.0,
       );
@@ -405,6 +483,128 @@ class UploadNotifier extends StateNotifier<UploadState> {
       default:
         return genre.trim();
     }
+  }
+
+  Future<String> _copyAudioToStableUploadLocation(String sourcePath) async {
+    final source = File(sourcePath);
+    if (!await source.exists()) {
+      if (sourcePath.contains('file_picker') || sourcePath.contains('cache')) {
+        throw FileSystemException(
+          'Selected audio file no longer exists',
+          sourcePath,
+        );
+      }
+      return sourcePath;
+    }
+
+    final docsDir = await getApplicationDocumentsDirectory();
+    final uploadDir = Directory(path.join(docsDir.path, 'pending_uploads'));
+    if (!await uploadDir.exists()) {
+      await uploadDir.create(recursive: true);
+    }
+
+    final normalizedUploadDir = path.normalize(uploadDir.path);
+    final normalizedSource = path.normalize(source.path);
+    if (path.isWithin(normalizedUploadDir, normalizedSource)) {
+      return normalizedSource;
+    }
+
+    final extension = path.extension(source.path);
+    final baseName = path.basenameWithoutExtension(source.path);
+    final safeBaseName = baseName
+        .replaceAll(RegExp(r'[^A-Za-z0-9._ -]+'), '_')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), '_');
+    final copiedPath = path.join(
+      uploadDir.path,
+      '${DateTime.now().millisecondsSinceEpoch}_${safeBaseName.isEmpty ? 'audio' : safeBaseName}$extension',
+    );
+    await source.copy(copiedPath);
+    return copiedPath;
+  }
+
+  String _uploadErrorMessage(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      final backendMessage = _bodyMessage(data);
+      if (backendMessage.isNotEmpty) {
+        return 'Upload failed: $backendMessage';
+      }
+      final status = error.response?.statusCode;
+      if (status == 403) {
+        return 'Upload failed: Backend rejected this upload. Please verify your account can upload tracks.';
+      }
+    }
+    if (error is FileSystemException) {
+      return 'Upload failed: ${error.message}';
+    }
+    return 'Upload failed: ${error.toString()}';
+  }
+
+  String _bodyMessage(dynamic data) {
+    if (data is Map) {
+      final message = data['message'] ?? data['error'] ?? data['msg'];
+      return message is String ? message : '';
+    }
+    return '';
+  }
+
+  bool _readBoolEntitlement({
+    required Map<String, dynamic>? user,
+    required Map<String, dynamic>? subscription,
+    required List<String> keys,
+  }) {
+    final sources = <Map<String, dynamic>?>[
+      subscription,
+      _asStringMap(subscription?['entitlements']),
+      user,
+      _asStringMap(user?['entitlements']),
+    ];
+    for (final source in sources) {
+      if (source == null) continue;
+      for (final key in keys) {
+        final value = source[key];
+        if (value is bool) return value;
+      }
+    }
+    return false;
+  }
+
+  Map<String, dynamic>? _asStringMap(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
+  String? _readPlanType({
+    required Map<String, dynamic>? user,
+    required Map<String, dynamic>? subscription,
+  }) {
+    final rawSubscriptionPlan = user?['subscription'] is Map
+        ? null
+        : normalizeSubscriptionPlan(user?['subscription']);
+    if (rawSubscriptionPlan != null) return rawSubscriptionPlan;
+
+    final sources = <Map<String, dynamic>?>[
+      subscription,
+      _asStringMap(subscription?['plan']),
+      user,
+      _asStringMap(user?['subscription']),
+    ];
+    const keys = [
+      'planType',
+      'subscriptionPlan',
+      'subscription_plan',
+      'plan',
+    ];
+    for (final source in sources) {
+      if (source == null) continue;
+      for (final key in keys) {
+        final normalized = normalizeSubscriptionPlan(source[key]);
+        if (normalized != null) return normalized;
+      }
+    }
+    return null;
   }
 
   // Simulate upload progress (pure local simulation - no HTTP calls)

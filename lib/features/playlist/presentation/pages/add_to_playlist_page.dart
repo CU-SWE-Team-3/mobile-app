@@ -14,17 +14,20 @@ class _ApiPlaylist {
   final String id;
   final String title;
   final String? artworkUrl;
+  final String? firstTrackArtworkUrl;
   final int trackCount;
   final bool isPublic;
+  final bool containsTrack;
 
   const _ApiPlaylist({
     required this.id,
     required this.title,
     this.artworkUrl,
+    this.firstTrackArtworkUrl,
     required this.trackCount,
     required this.isPublic,
+    this.containsTrack = false,
   });
-
 }
 
 // ── Page state ───────────────────────────────────────────────────────────────
@@ -32,6 +35,7 @@ class _ApiPlaylist {
 class _PageState {
   final List<_ApiPlaylist> playlists;
   final String? selectedId;
+  final String avatarUrl;
   final bool loadingPlaylists;
   final bool submitting;
   final String? error;
@@ -39,6 +43,7 @@ class _PageState {
   const _PageState({
     this.playlists = const [],
     this.selectedId,
+    this.avatarUrl = '',
     this.loadingPlaylists = true,
     this.submitting = false,
     this.error,
@@ -47,6 +52,7 @@ class _PageState {
   _PageState copyWith({
     List<_ApiPlaylist>? playlists,
     String? selectedId,
+    String? avatarUrl,
     bool clearSelected = false,
     bool? loadingPlaylists,
     bool? submitting,
@@ -56,6 +62,7 @@ class _PageState {
       _PageState(
         playlists: playlists ?? this.playlists,
         selectedId: clearSelected ? null : (selectedId ?? this.selectedId),
+        avatarUrl: avatarUrl ?? this.avatarUrl,
         loadingPlaylists: loadingPlaylists ?? this.loadingPlaylists,
         submitting: submitting ?? this.submitting,
         error: clearError ? null : (error ?? this.error),
@@ -67,10 +74,14 @@ class _PageState {
 class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
   final String trackId;
   final PlaylistRepository _repository;
+  final Ref _ref;
 
   _AddToPlaylistNotifier(
-      {required this.trackId, required PlaylistRepository repository})
+      {required this.trackId,
+      required PlaylistRepository repository,
+      required Ref ref})
       : _repository = repository,
+        _ref = ref,
         super(const _PageState()) {
     _fetchPlaylists();
   }
@@ -78,6 +89,7 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
   Future<void> _fetchPlaylists() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final avatarUrl = prefs.getString('avatarUrl') ?? '';
       // Read from the same local store that Library → Playlists uses so both
       // pages always show the same set of playlists.
       final raw = prefs.getString('playlists_data');
@@ -90,6 +102,7 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
                 id: json['id'] as String? ?? '',
                 title: json['title'] as String? ?? '',
                 artworkUrl: json['artworkUrl'] as String?,
+                firstTrackArtworkUrl: json['firstTrackArtworkUrl'] as String?,
                 trackCount: (json['trackCount'] as num?)?.toInt() ?? 0,
                 isPublic: json['isPublic'] as bool? ?? true,
               ))
@@ -98,10 +111,12 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
       if (mounted) {
         state = state.copyWith(
           playlists: playlists,
+          avatarUrl: avatarUrl,
           loadingPlaylists: false,
           clearError: true,
         );
       }
+      _hydratePlaylists(playlists);
     } catch (_) {
       if (mounted) {
         state = state.copyWith(
@@ -113,6 +128,8 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
   }
 
   void select(String playlistId) {
+    final playlist = _findPlaylist(playlistId);
+    if (playlist?.containsTrack == true) return;
     state = state.copyWith(selectedId: playlistId, clearError: true);
   }
 
@@ -120,14 +137,29 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
   Future<bool> addTrackToSelected() async {
     final playlistId = state.selectedId;
     if (playlistId == null) return false;
+    if (_findPlaylist(playlistId)?.containsTrack == true) {
+      state = state.copyWith(error: 'This track is already in that playlist.');
+      return false;
+    }
 
     state = state.copyWith(submitting: true, clearError: true);
     try {
-      final newCount = await _repository.appendTrack(playlistId, trackId);
+      await _repository.appendTrack(playlistId, trackId);
+      final snapshot = await _repository.trackSnapshot(playlistId);
 
       // Sync the real track count back into the local cache so that
       // Library → Playlists shows the correct number immediately.
-      await _syncLocalTrackCount(playlistId, newCount);
+      await _syncLocalPlaylistPreview(
+        playlistId,
+        snapshot.count,
+        firstTrackArtworkUrl: snapshot.firstTrackArtworkUrl,
+      );
+      _ref.read(playlistsProvider.notifier).updateTrackPreview(
+            playlistId,
+            snapshot.count,
+            firstTrackArtworkUrl: snapshot.firstTrackArtworkUrl,
+            replaceArtwork: true,
+          );
 
       if (mounted) state = state.copyWith(submitting: false);
       return true;
@@ -142,9 +174,42 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
     }
   }
 
+  _ApiPlaylist? _findPlaylist(String playlistId) {
+    for (final playlist in state.playlists) {
+      if (playlist.id == playlistId) return playlist;
+    }
+    return null;
+  }
+
+  Future<void> _hydratePlaylists(List<_ApiPlaylist> playlists) async {
+    final hydrated = <_ApiPlaylist>[];
+    for (final playlist in playlists) {
+      try {
+        final snapshot =
+            await _repository.trackSnapshot(playlist.id, trackId: trackId);
+        hydrated.add(_ApiPlaylist(
+          id: playlist.id,
+          title: playlist.title,
+          artworkUrl: playlist.artworkUrl,
+          firstTrackArtworkUrl: snapshot.firstTrackArtworkUrl,
+          trackCount: snapshot.count,
+          isPublic: playlist.isPublic,
+          containsTrack: snapshot.containsTrack,
+        ));
+      } catch (_) {
+        hydrated.add(playlist);
+      }
+    }
+    if (mounted) state = state.copyWith(playlists: hydrated);
+  }
+
   // Writes the updated track count for [playlistId] into SharedPreferences so
   // Library → Playlists reflects the real count without a full re-fetch.
-  Future<void> _syncLocalTrackCount(String playlistId, int newCount) async {
+  Future<void> _syncLocalPlaylistPreview(
+    String playlistId,
+    int newCount, {
+    String? firstTrackArtworkUrl,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('playlists_data');
@@ -156,6 +221,11 @@ class _AddToPlaylistNotifier extends StateNotifier<_PageState> {
       for (final entry in list) {
         if (entry['id'] == playlistId) {
           entry['trackCount'] = newCount;
+          if (newCount == 0) {
+            entry.remove('firstTrackArtworkUrl');
+          } else {
+            entry['firstTrackArtworkUrl'] = firstTrackArtworkUrl;
+          }
           changed = true;
           break;
         }
@@ -176,6 +246,7 @@ final _addToPlaylistProvider = StateNotifierProvider.autoDispose
   (ref, trackId) => _AddToPlaylistNotifier(
     trackId: trackId,
     repository: ref.read(playlistRepositoryProvider),
+    ref: ref,
   ),
 );
 
@@ -256,12 +327,10 @@ class AddToPlaylistPage extends ConsumerWidget {
             Container(
               width: double.infinity,
               color: const Color(0xFF3A1A1A),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Text(
                 state.error!,
-                style: const TextStyle(
-                    color: Color(0xFFFF6B6B), fontSize: 13),
+                style: const TextStyle(color: Color(0xFFFF6B6B), fontSize: 13),
               ),
             ),
           Expanded(
@@ -284,6 +353,7 @@ class AddToPlaylistPage extends ConsumerWidget {
                           return _PlaylistRow(
                             key: ValueKey('playlist_tile_${pl.id}'),
                             playlist: pl,
+                            avatarUrl: state.avatarUrl,
                             isSelected: state.selectedId == pl.id,
                             onTap: () => notifier.select(pl.id),
                           );
@@ -300,20 +370,23 @@ class AddToPlaylistPage extends ConsumerWidget {
 
 class _PlaylistRow extends StatelessWidget {
   final _ApiPlaylist playlist;
+  final String avatarUrl;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _PlaylistRow({
     super.key,
     required this.playlist,
+    required this.avatarUrl,
     required this.isSelected,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final artworkUrl = _resolvedArtworkUrl();
     return InkWell(
-      onTap: onTap,
+      onTap: playlist.containsTrack ? null : onTap,
       splashColor: Colors.white10,
       highlightColor: Colors.white10,
       child: KeyedSubtree(
@@ -322,84 +395,112 @@ class _PlaylistRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
             children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: playlist.artworkUrl != null &&
-                        playlist.artworkUrl!.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: playlist.artworkUrl!,
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => _artworkPlaceholder(),
-                        errorWidget: (_, __, ___) => _artworkPlaceholder(),
-                      )
-                    : _artworkPlaceholder(),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    playlist.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Text(
-                        '${playlist.trackCount} '
-                        '${playlist.trackCount == 1 ? 'track' : 'tracks'}',
-                        style: const TextStyle(
-                            color: Color(0xFF999999), fontSize: 12),
-                      ),
-                      if (!playlist.isPublic) ...[
-                        const Text(' · ',
-                            style: TextStyle(
-                                color: Color(0xFF999999), fontSize: 12)),
-                        const Icon(Icons.lock_outline,
-                            color: Color(0xFF999999), size: 12),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isSelected
-                    ? const Color(0xFFFF5500)
-                    : Colors.transparent,
-                border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFFFF5500)
-                      : const Color(0xFF666666),
-                  width: 2,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: SizedBox(
+                  width: 56,
+                  height: 56,
+                  child: artworkUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: artworkUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => _artworkPlaceholder(),
+                          errorWidget: (_, __, ___) => _artworkPlaceholder(),
+                        )
+                      : _artworkPlaceholder(),
                 ),
               ),
-              child: isSelected
-                  ? const Icon(Icons.check, color: Colors.white, size: 14)
-                  : null,
-            ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Opacity(
+                  opacity: playlist.containsTrack ? 0.72 : 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        playlist.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Text(
+                            playlist.containsTrack
+                                ? 'Already added'
+                                : '${playlist.trackCount} '
+                                    '${playlist.trackCount == 1 ? 'track' : 'tracks'}',
+                            style: const TextStyle(
+                                color: Color(0xFF999999), fontSize: 12),
+                          ),
+                          if (!playlist.isPublic) ...[
+                            const Text(' · ',
+                                style: TextStyle(
+                                    color: Color(0xFF999999), fontSize: 12)),
+                            const Icon(Icons.lock_outline,
+                                color: Color(0xFF999999), size: 12),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color:
+                      isSelected ? const Color(0xFFFF5500) : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFFFF5500)
+                        : const Color(0xFF666666),
+                    width: 2,
+                  ),
+                ),
+                child: playlist.containsTrack
+                    ? const Icon(Icons.check,
+                        color: Color(0xFF999999), size: 14)
+                    : isSelected
+                        ? const Icon(Icons.check, color: Colors.white, size: 14)
+                        : null,
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  String? _resolvedArtworkUrl() {
+    if (_isUsableArtworkUrl(playlist.artworkUrl)) return playlist.artworkUrl;
+    if (playlist.trackCount > 0) {
+      return _isUsableArtworkUrl(playlist.firstTrackArtworkUrl)
+          ? playlist.firstTrackArtworkUrl
+          : null;
+    }
+    return _isUsableAvatarUrl(avatarUrl) ? avatarUrl : null;
+  }
+
+  bool _isUsableArtworkUrl(String? url) =>
+      url != null &&
+      url.isNotEmpty &&
+      url.startsWith('http') &&
+      !url.contains('default');
+
+  bool _isUsableAvatarUrl(String? url) =>
+      url != null &&
+      url.isNotEmpty &&
+      url.startsWith('http') &&
+      !url.contains('default-avatar');
 
   Widget _artworkPlaceholder() => const ColoredBox(
         color: Color(0xFF2A2A2A),

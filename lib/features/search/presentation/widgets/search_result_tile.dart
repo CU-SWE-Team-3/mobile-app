@@ -10,6 +10,7 @@ class SearchResultTile extends StatelessWidget {
   final SearchEntityType type;
   final VoidCallback onTap;
   final Key? tileKey;
+  final Widget? trailing;
 
   /// When non-null, renders an × button that calls this callback.
   /// Used in history mode to permanently remove the entry.
@@ -23,6 +24,7 @@ class SearchResultTile extends StatelessWidget {
     required this.type,
     required this.onTap,
     this.tileKey,
+    this.trailing,
     this.onRemove,
   });
 
@@ -84,6 +86,11 @@ class SearchResultTile extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 12),
                   child: Icon(Icons.close, color: sub, size: 18),
                 ),
+              ),
+            if (trailing != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: trailing,
               ),
           ],
         ),

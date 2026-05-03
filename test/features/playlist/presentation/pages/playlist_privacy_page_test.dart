@@ -70,7 +70,9 @@ void main() {
   });
 
   testWidgets('Switch is OFF when playlist is private', (tester) async {
-    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+      return null;
+    });
 
     await tester.pumpWidget(_buildPage(mockRepo, _privatePlaylist()));
     await tester.pumpAndSettle();
@@ -83,7 +85,9 @@ void main() {
 
   testWidgets('toggling Switch calls repository.updatePrivacy with correct args',
       (tester) async {
-    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+      return null;
+    });
 
     await tester.pumpWidget(_buildPage(mockRepo, _publicPlaylist()));
     await tester.pumpAndSettle();
@@ -108,7 +112,9 @@ void main() {
 
   testWidgets('private-link section visible when playlist is private',
       (tester) async {
-    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+      return null;
+    });
 
     await tester.pumpWidget(_buildPage(mockRepo, _privatePlaylist()));
     await tester.pumpAndSettle();
@@ -119,7 +125,9 @@ void main() {
 
   testWidgets('private-link section appears after toggling public → private',
       (tester) async {
-    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+      return null;
+    });
 
     await tester.pumpWidget(_buildPage(mockRepo, _publicPlaylist()));
     await tester.pumpAndSettle();
@@ -134,7 +142,9 @@ void main() {
 
   testWidgets('private-link section hidden after toggling private → public',
       (tester) async {
-    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+      return null;
+    });
 
     await tester.pumpWidget(_buildPage(mockRepo, _privatePlaylist()));
     await tester.pumpAndSettle();
@@ -151,7 +161,9 @@ void main() {
 
   testWidgets('Copy private link button writes the secret-token URL to the clipboard',
       (tester) async {
-    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+    when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+      return null;
+    });
 
     // Intercept Clipboard.setData at the platform channel level.
     // This avoids calling Clipboard.getData (which hangs due to the SnackBar

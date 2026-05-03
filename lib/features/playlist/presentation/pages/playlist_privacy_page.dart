@@ -40,25 +40,31 @@ class _PlaylistPrivacyPageState extends ConsumerState<PlaylistPrivacyPage> {
       _error = null;
     });
     try {
-      await ref
+      final updated = await ref
           .read(playlistsProvider.notifier)
           .updateVisibility(widget.playlist.id, newIsPublic);
       if (mounted) {
         setState(() {
           _isPublic = newIsPublic;
-          // Backend clears the secret token when toggling to public.
-          if (newIsPublic) _secretToken = null;
+          _secretToken = newIsPublic ? null : updated?.secretToken;
           _loading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[PlaylistPrivacyPage] update failed: $e');
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = 'Failed to update privacy. Please try again.';
+          _error = _privacyErrorMessage(e);
         });
       }
     }
+  }
+
+  String _privacyErrorMessage(Object error) {
+    final message = error.toString().replaceFirst('Exception: ', '').trim();
+    if (message.startsWith('Update playlist privacy failed')) return message;
+    return 'Failed to update privacy. Please try again.';
   }
 
   /// Builds the private-link URL using current local state for isPublic/secretToken.
@@ -302,7 +308,8 @@ class _InfoCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   description,
-                  style: const TextStyle(color: Color(0xFF999999), fontSize: 12),
+                  style:
+                      const TextStyle(color: Color(0xFF999999), fontSize: 12),
                 ),
               ],
             ),

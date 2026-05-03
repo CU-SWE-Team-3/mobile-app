@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'package:dio/dio.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/features/engagement/data/sources/engagement_remote_data_source.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/library/domain/entities/upload_track.dart';
 import 'package:soundcloud_clone/features/playlist/presentation/providers/playlists_provider.dart';
 import 'package:soundcloud_clone/features/library/presentation/pages/your_insights_page.dart';
@@ -14,6 +16,8 @@ import 'package:soundcloud_clone/features/library/presentation/providers/my_trac
 import 'package:soundcloud_clone/features/playlist/domain/entities/playlist.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
 import 'package:soundcloud_clone/features/player/presentation/widgets/mini_player_widget.dart';
+import 'package:soundcloud_clone/core/providers/session_provider.dart';
+import 'package:soundcloud_clone/features/premium/presentation/providers/subscription_provider.dart';
 import 'package:soundcloud_clone/injection_container.dart';
 
 // ── API track model ───────────────────────────────────────────────────────────
@@ -104,6 +108,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _hasError = false;
 
   List<UploadTrack> _cachedTracks = [];
+  List<String> _pinnedTrackIds = [];
 
   List<_ProfilePlaylist> _playlists = [];
   bool _playlistsLoading = false;
@@ -133,12 +138,25 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   // Runs all profile fetches sequentially to avoid hammering the API
   Future<void> _loadAll() async {
     await _fetchProfile();
+    _loadPinnedTracks();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fetchReposts();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fetchLikes();
     await Future.delayed(const Duration(milliseconds: 300));
     await _fetchPlaylists();
+  }
+
+  Future<void> _loadPinnedTracks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList('spotlight_pinned_ids') ?? [];
+    if (mounted) setState(() => _pinnedTrackIds = ids);
+  }
+
+  Future<void> _savePinnedTracks(List<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('spotlight_pinned_ids', ids);
+    if (mounted) setState(() => _pinnedTrackIds = ids);
   }
 
   void _playFrom(int index) {
@@ -274,14 +292,58 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           })
           .map(_ProfilePlaylist.fromJson)
           .toList();
-      if (mounted)
+      for (var i = 0; i < playlists.length; i++) {
+        final p = playlists[i];
+        final snapshot = await _fetchPlaylistSnapshot(p.id);
+        if (snapshot == null) continue;
+        playlists[i] = _ProfilePlaylist(
+          id: p.id,
+          title: p.title,
+          artworkUrl: p.artworkUrl,
+          firstTrackArtworkUrl: snapshot.firstTrackArtworkUrl,
+          trackCount: snapshot.trackCount,
+          ownerName: p.ownerName,
+        );
+      }
+      if (mounted) {
         setState(() {
           _playlists = playlists;
           _playlistsLoading = false;
         });
+      }
     } catch (_) {
       if (mounted) setState(() => _playlistsLoading = false);
     }
+  }
+
+  Future<_ProfilePlaylistSnapshot?> _fetchPlaylistSnapshot(
+      String playlistId) async {
+    try {
+      final response =
+          await _withRetry(() => dioClient.dio.get('/playlists/$playlistId'));
+      final raw = response.data;
+      final data = raw is Map ? raw['data'] : null;
+      final playlist = data is Map ? data['playlist'] : null;
+      final tracks = playlist is Map ? playlist['tracks'] as List? : null;
+      if (tracks == null) return null;
+      String? firstTrackArtworkUrl;
+      if (tracks.isNotEmpty) {
+        final first = tracks.first;
+        if (first is Map) {
+          final track = first['track'];
+          final rawTrack = track is Map ? track : first;
+          final artworkUrl = rawTrack['artworkUrl']?.toString();
+          if (_ProfilePlaylist.isUsableArtworkUrl(artworkUrl)) {
+            firstTrackArtworkUrl = artworkUrl;
+          }
+        }
+      }
+      return _ProfilePlaylistSnapshot(
+        trackCount: tracks.length,
+        firstTrackArtworkUrl: firstTrackArtworkUrl,
+      );
+    } catch (_) {}
+    return null;
   }
 
   Future<void> _fetchReposts() async {
@@ -305,11 +367,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       final String userId = prefs.getString('userId') ?? '';
 
       if (userId.isEmpty) {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _username = prefs.getString('displayName') ?? '';
             _isLoading = false;
           });
+        }
         return;
       }
 
@@ -382,11 +445,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           return;
         }
         // No cached data at all — surface the error so the retry button appears.
-        if (mounted)
+        if (mounted) {
           setState(() {
             _isLoading = false;
             _hasError = true;
           });
+        }
         return;
       }
 
@@ -402,10 +466,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       await prefs.setString('city', city);
       await prefs.setString('country', country);
       final avatarUrl = data['avatarUrl'] as String? ?? '';
-      if (avatarUrl.isNotEmpty) {
-        await prefs.setString('avatarUrl', avatarUrl);
-        debugPrint('[Profile] avatarUrl persisted: $avatarUrl');
-      }
+      await prefs.setString('avatarUrl', avatarUrl);
+      debugPrint('[Profile] avatarUrl persisted: $avatarUrl');
 
       // Always fetch counts from the network endpoints — they are authoritative.
       int followerCount = 0;
@@ -440,11 +502,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } catch (e, st) {
       // ignore: avoid_print
       print('=== PROFILE FETCH ERROR: $e\n$st');
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isLoading = false;
           _hasError = true;
         });
+      }
     }
   }
 
@@ -500,6 +563,13 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
     return Scaffold(
       backgroundColor: _bg,
+      bottomNavigationBar: _ProfileBottomNavBar(
+        currentIndex: 3,
+        onTap: (index) {
+          const routes = ['/home', '/feed', '/search', '/library', '/upgrade'];
+          context.go(routes[index]);
+        },
+      ),
       body: Stack(
         children: [
           SafeArea(
@@ -548,6 +618,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                             _insightsRow(context),
                             _spotlight(),
                             _sectionHeader('Tracks',
+                                fontSize: 24,
                                 onSeeAll: () =>
                                     context.push('/profile/tracks')),
                             _tracksSection(myTracksAsync),
@@ -591,9 +662,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             _iconBtn(Icons.arrow_back_ios_new_rounded,
                 () => context.canPop() ? context.pop() : null),
             const Spacer(),
-            _iconBtn(Icons.cast_rounded, () {}),
-            const SizedBox(width: 8),
-            _iconBtn(Icons.more_vert_rounded, () {}),
+            _iconBtn(Icons.more_vert_rounded, _showMyProfileMoreSheet,
+                key: const ValueKey('my_profile_more_button')),
           ],
         ),
       );
@@ -609,8 +679,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               key: const ValueKey('profile_avatar_view_button'),
               onTap: () => context.push('/profile/avatar-view'),
               child: Container(
-                width: 88,
-                height: 88,
+                width: 112,
+                height: 112,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(color: _orange, width: 2.5),
@@ -620,8 +690,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           !_avatarUrl.contains('default-avatar')
                       ? CachedNetworkImage(
                           imageUrl: _avatarUrl,
-                          width: 84,
-                          height: 84,
+                          width: 108,
+                          height: 108,
                           fit: BoxFit.cover,
                           errorWidget: (_, __, ___) => const _AvatarFallback(),
                         )
@@ -640,6 +710,37 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 letterSpacing: 0.5,
               ),
             ),
+            // Plan badge
+            Builder(builder: (_) {
+              final sub = ref.watch(subscriptionProvider);
+              if (!sub.isPremium) return const SizedBox.shrink();
+              final isArtistPro = sub.planType == 'Pro';
+              return Padding(
+                key: const ValueKey('profile_plan_badge'),
+                padding: const EdgeInsets.only(top: 6),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: isArtistPro
+                          ? const [Color(0xFF6B1DC8), Color(0xFFE0188A)]
+                          : const [Color(0xFF1A6FFF), Color(0xFF0A4DBF)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    sub.displayPlanName.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              );
+            }),
             const SizedBox(height: 4),
             // City / Country subtitle
             if (_city.isNotEmpty || _country.isNotEmpty)
@@ -677,24 +778,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 GestureDetector(
                   key: const ValueKey('profile_edit_button'),
                   onTap: _openEdit,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.white38),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.edit_outlined,
-                            color: Colors.white, size: 16),
-                        SizedBox(width: 6),
-                        Text('Edit',
-                            style:
-                                TextStyle(color: Colors.white, fontSize: 13)),
-                      ],
-                    ),
+                  child: const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Icon(Icons.edit_outlined,
+                        color: Colors.white70, size: 22),
                   ),
                 ),
                 const Spacer(),
@@ -763,9 +850,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             .push(MaterialPageRoute(builder: (_) => const YourInsightsPage())),
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-              color: _surface, borderRadius: BorderRadius.circular(10)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           child: Row(
             children: [
               const Text('Your insights',
@@ -781,7 +866,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       );
 
   // ── spotlight ────────────────────────────────────────────────────────
-  Widget _spotlight() => Padding(
+  Widget _spotlight() {
+    final pinnedTracks = _cachedTracks
+        .where((t) => t.id != null && _pinnedTrackIds.contains(t.id))
+        .toList();
+
+    return KeyedSubtree(
+      key: const ValueKey('spotlight_section'),
+      child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -795,8 +887,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         fontWeight: FontWeight.w700)),
                 const Spacer(),
                 GestureDetector(
-                  key: const ValueKey('profile_spotlight_edit_button'),
-                  onTap: () {},
+                  key: const ValueKey('spotlight_edit_button'),
+                  onTap: _onSpotlightEdit,
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -810,11 +902,209 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ],
             ),
             const SizedBox(height: 6),
-            Text('Pin items to your Spotlight',
-                style: TextStyle(color: _sub, fontSize: 13)),
+            if (pinnedTracks.isEmpty)
+              Text('Pin items to your Spotlight',
+                  style: TextStyle(color: _sub, fontSize: 13))
+            else
+              Column(
+                children: pinnedTracks.map((t) {
+                  return Container(
+                    key: ValueKey('spotlight_track_tile_${t.id}'),
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _surface,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: t.artworkUrl != null
+                              ? CachedNetworkImage(
+                                  imageUrl: t.artworkUrl!,
+                                  width: 44,
+                                  height: 44,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (_, __, ___) => Container(
+                                    width: 44,
+                                    height: 44,
+                                    color: const Color(0xFF2C2C2E),
+                                    child: const Icon(Icons.music_note,
+                                        color: Colors.white54, size: 20),
+                                  ),
+                                )
+                              : Container(
+                                  width: 44,
+                                  height: 44,
+                                  color: const Color(0xFF2C2C2E),
+                                  child: const Icon(Icons.music_note,
+                                      color: Colors.white54, size: 20),
+                                ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                t.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                t.artist,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: _sub, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.push_pin, color: _orange, size: 16),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _onSpotlightEdit() {
+    final sub = ref.read(subscriptionProvider);
+    if (!sub.isPremium) {
+      context.push('/upgrade');
+      return;
+    }
+    _showSpotlightPinDialog();
+  }
+
+  void _showSpotlightPinDialog() {
+    final tracks = _cachedTracks;
+    if (tracks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Upload some tracks first to pin them to Spotlight.'),
+          backgroundColor: Color(0xFF333333),
+        ),
       );
+      return;
+    }
+
+    final selected = Set<String>.from(_pinnedTrackIds);
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1C1C1E),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: const Text(
+                'Pin to Spotlight',
+                style: TextStyle(color: Colors.white, fontSize: 17),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: tracks.length,
+                  itemBuilder: (_, i) {
+                    final t = tracks[i];
+                    final isPinned = t.id != null && selected.contains(t.id);
+                    return ListTile(
+                      key: ValueKey('spotlight_pin_option_${t.id}'),
+                      dense: true,
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: t.artworkUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: t.artworkUrl!,
+                                width: 36,
+                                height: 36,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => Container(
+                                  width: 36,
+                                  height: 36,
+                                  color: const Color(0xFF2C2C2E),
+                                  child: const Icon(Icons.music_note,
+                                      color: Colors.white54, size: 16),
+                                ),
+                              )
+                            : Container(
+                                width: 36,
+                                height: 36,
+                                color: const Color(0xFF2C2C2E),
+                                child: const Icon(Icons.music_note,
+                                    color: Colors.white54, size: 16),
+                              ),
+                      ),
+                      title: Text(
+                        t.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                      trailing: isPinned
+                          ? const Icon(Icons.push_pin,
+                              color: Color(0xFFFF5500), size: 20)
+                          : Icon(Icons.push_pin_outlined,
+                              color: Colors.white38, size: 20),
+                      onTap: () {
+                        if (t.id == null) return;
+                        setDialogState(() {
+                          if (isPinned) {
+                            selected.remove(t.id);
+                          } else if (selected.length < 3) {
+                            selected.add(t.id!);
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Max 3 tracks in Spotlight.'),
+                                backgroundColor: Color(0xFF333333),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel',
+                      style: TextStyle(color: Colors.white54)),
+                ),
+                TextButton(
+                  key: const ValueKey('spotlight_save_button'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _savePinnedTracks(selected.toList());
+                  },
+                  child: const Text('Save',
+                      style: TextStyle(color: Color(0xFFFF5500))),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
   // ── tracks section (inline preview, up to 3) ─────────────────────────
   Widget _tracksSection(AsyncValue<List<UploadTrack>> myTracksAsync) {
@@ -849,7 +1139,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               track: _Track(t.title, t.artist, _fmtDuration(t.duration)),
               artworkUrl: t.artworkUrl,
               onTap: () => _playFrom(fullIdx < 0 ? e.key : fullIdx),
-              onMore: () {},
+              onMore: () => _openTrackOptions(t),
             );
           }).toList(),
         );
@@ -858,14 +1148,73 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   // ── section header ───────────────────────────────────────────────────
-  Widget _sectionHeader(String title, {VoidCallback? onSeeAll}) => Padding(
+  void _openTrackOptions(UploadTrack track) {
+    final trackId = track.id;
+    if (trackId == null || trackId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Track options are not available yet.')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: trackId,
+        title: track.title,
+        artistName: track.artist,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.hlsUrl,
+        waveform: track.waveform,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
+      ),
+    );
+  }
+
+  void _openSummaryTrackOptions(
+    TrackSummary track, {
+    bool isLiked = false,
+    bool isReposted = false,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => TrackOptionsSheet(
+        trackId: track.id,
+        title: track.title,
+        artistName: track.artistName,
+        artworkUrl: track.artworkUrl,
+        audioUrl: track.audioUrl,
+        waveform: track.waveform,
+        artistId: track.artistId,
+        artistPermalink: track.artistPermalink,
+        initialIsLiked: isLiked,
+        initialIsReposted: isReposted,
+        initialLikeCount: track.likeCount,
+        initialRepostCount: track.repostCount,
+      ),
+    );
+  }
+
+  Widget _sectionHeader(String title,
+          {VoidCallback? onSeeAll, double fontSize = 20}) =>
+      Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
         child: Row(
           children: [
             Text(title,
-                style: const TextStyle(
+                style: TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: fontSize,
                     fontWeight: FontWeight.w700)),
             const Spacer(),
             if (onSeeAll != null)
@@ -957,7 +1306,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ],
                   ),
                 ),
-                Icon(Icons.more_vert_rounded, color: sub, size: 20),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openSummaryTrackOptions(r, isReposted: true),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1031,7 +1387,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ],
                   ),
                 ),
-                Icon(Icons.more_vert_rounded, color: sub, size: 20),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openSummaryTrackOptions(r, isLiked: true),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1054,7 +1417,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   // ── playlist row ─────────────────────────────────────────────────────
   Widget _playlistRow(BuildContext context) {
-    if (_playlistsLoading) {
+    final visiblePlaylists = _playlists;
+
+    if (_playlistsLoading && visiblePlaylists.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 16),
         child: Center(
@@ -1067,7 +1432,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       );
     }
-    if (_playlists.isEmpty) {
+    if (visiblePlaylists.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Text('No playlists yet',
@@ -1079,18 +1444,23 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: _playlists.length,
+        itemCount: visiblePlaylists.length,
         itemBuilder: (_, i) {
-          final p = _playlists[i];
+          final p = visiblePlaylists[i];
           // Artwork chain: own HTTPS artwork → first track HTTPS artwork → placeholder
           final cardArtwork = () {
             final own = p.artworkUrl;
-            if (own != null &&
-                own.startsWith('https://') &&
-                !own.contains('default')) {
+            if (_ProfilePlaylist.isUsableArtworkUrl(own)) {
               return own;
             }
-            return p.firstTrackArtworkUrl;
+            if (p.trackCount > 0) {
+              return _ProfilePlaylist.isUsableArtworkUrl(p.firstTrackArtworkUrl)
+                  ? p.firstTrackArtworkUrl
+                  : null;
+            }
+            return _ProfilePlaylist.isUsableArtworkUrl(_avatarUrl)
+                ? _avatarUrl
+                : null;
           }();
           return GestureDetector(
             key: ValueKey('profile_playlist_tile_$i'),
@@ -1160,8 +1530,159 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
+  // ── My profile more sheet ─────────────────────────────────────────────────
+
+  void _showMyProfileMoreSheet() {
+    final userId = ref.read(sessionUserIdProvider);
+    final link = userId.isNotEmpty
+        ? 'https://biobeats.app/users/$userId'
+        : 'https://biobeats.app';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 8),
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border:
+                          Border.all(color: const Color(0xFFFF5500), width: 2),
+                    ),
+                    child: ClipOval(
+                      child: _avatarUrl.isNotEmpty &&
+                              !_avatarUrl.contains('default-avatar')
+                          ? CachedNetworkImage(
+                              imageUrl: _avatarUrl,
+                              fit: BoxFit.cover,
+                              errorWidget: (_, __, ___) =>
+                                  const _AvatarFallback(),
+                            )
+                          : const _AvatarFallback(),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _username,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          '$_followerCount followers',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white12, height: 1),
+            _profileSheetTile(
+              key: const ValueKey('my_profile_share_button'),
+              icon: Icons.share_outlined,
+              label: 'Share profile',
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: link));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Profile link copied to clipboard')),
+                );
+              },
+            ),
+            _profileSheetTile(
+              key: const ValueKey('my_profile_copy_link_button'),
+              icon: Icons.link,
+              label: 'Copy link',
+              onTap: () {
+                Navigator.pop(ctx);
+                Clipboard.setData(ClipboardData(text: link));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Profile link copied')),
+                );
+              },
+            ),
+            _profileSheetTile(
+              key: const ValueKey('my_profile_start_station_button'),
+              icon: Icons.radio,
+              label: 'Start station',
+              onTap: () {
+                Navigator.pop(ctx);
+                if (_cachedTracks.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('No tracks available to start station.')),
+                  );
+                  return;
+                }
+                _playFrom(0);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _profileSheetTile({
+    Key? key,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) =>
+      InkWell(
+        key: key,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: Colors.white70, size: 22),
+              const SizedBox(width: 16),
+              Text(label,
+                  style: const TextStyle(color: Colors.white, fontSize: 15)),
+            ],
+          ),
+        ),
+      );
+
   // ── helpers ──────────────────────────────────────────────────────────
-  Widget _iconBtn(IconData icon, VoidCallback? onTap) => GestureDetector(
+  Widget _iconBtn(IconData icon, VoidCallback? onTap, {Key? key}) =>
+      GestureDetector(
+        key: key,
         onTap: onTap,
         child: Container(
           width: 38,
@@ -1220,15 +1741,99 @@ class _AvatarFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 84,
-      height: 84,
+      width: double.infinity,
+      height: double.infinity,
       color: const Color(0xFF2A2A2A),
-      child: const Icon(Icons.person, size: 48, color: Colors.white38),
+      child: const Icon(Icons.person, size: 64, color: Colors.white38),
     );
   }
 }
 
 // ── data models ──────────────────────────────────────────────────────────
+class _ProfileBottomNavBar extends StatelessWidget {
+  final int currentIndex;
+  final void Function(int) onTap;
+
+  const _ProfileBottomNavBar({
+    required this.currentIndex,
+    required this.onTap,
+  });
+
+  static const _navColor = Color(0xFF2C2C2C);
+
+  static const _items = <({String label, IconData active, IconData inactive})>[
+    (label: 'Home', active: Icons.home, inactive: Icons.home_outlined),
+    (
+      label: 'Feed',
+      active: Icons.web_asset,
+      inactive: Icons.web_asset_outlined
+    ),
+    (label: 'Search', active: Icons.search, inactive: Icons.search),
+    (
+      label: 'Library',
+      active: Icons.library_music,
+      inactive: Icons.library_music_outlined,
+    ),
+    (label: 'Upgrade', active: Icons.graphic_eq, inactive: Icons.graphic_eq),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: _navColor,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          height: 55,
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0xFF3B3B3B))),
+          ),
+          child: Row(
+            children: [
+              for (int index = 0; index < _items.length; index++)
+                Expanded(
+                  child: InkWell(
+                    onTap: () => onTap(index),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4, bottom: 3),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            currentIndex == index
+                                ? _items[index].active
+                                : _items[index].inactive,
+                            color: currentIndex == index
+                                ? Colors.white
+                                : const Color(0xFFB4B4B4),
+                            size: 30,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _items[index].label,
+                            style: TextStyle(
+                              color: currentIndex == index
+                                  ? Colors.white
+                                  : const Color(0xFFB4B4B4),
+                              fontSize: 8,
+                              fontWeight: currentIndex == index
+                                  ? FontWeight.w500
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Track {
   final String title;
   final String artist;
@@ -1241,6 +1846,7 @@ class _ProfilePlaylist {
   final String title;
   final String? artworkUrl;
   final String? firstTrackArtworkUrl;
+  final int trackCount;
   final String ownerName;
 
   const _ProfilePlaylist({
@@ -1248,8 +1854,15 @@ class _ProfilePlaylist {
     required this.title,
     this.artworkUrl,
     this.firstTrackArtworkUrl,
+    this.trackCount = 0,
     required this.ownerName,
   });
+
+  static bool isUsableArtworkUrl(String? url) =>
+      url != null &&
+      url.isNotEmpty &&
+      url.startsWith('http') &&
+      !url.contains('default');
 
   factory _ProfilePlaylist.fromJson(Map<String, dynamic> json) {
     final creator = json['creator'] as Map<String, dynamic>?;
@@ -1260,11 +1873,11 @@ class _ProfilePlaylist {
     final tracks = json['tracks'] as List?;
     if (tracks != null && tracks.isNotEmpty) {
       final first = tracks.first;
-      if (first is Map<String, dynamic>) {
-        final url = first['artworkUrl'] as String?;
-        if (url != null &&
-            url.startsWith('https://') &&
-            !url.contains('default')) {
+      if (first is Map) {
+        final track = first['track'];
+        final rawTrack = track is Map ? track : first;
+        final url = rawTrack['artworkUrl']?.toString();
+        if (isUsableArtworkUrl(url)) {
           firstTrackArtwork = url;
         }
       }
@@ -1275,11 +1888,23 @@ class _ProfilePlaylist {
       title: json['title'] as String? ?? '',
       artworkUrl: json['artworkUrl'] as String?,
       firstTrackArtworkUrl: firstTrackArtwork,
+      trackCount: (json['trackCount'] as num?)?.toInt() ??
+          (tracks != null ? tracks.length : 0),
       ownerName: (json['ownerName'] as String?) ??
           (creator?['displayName'] as String?) ??
           '',
     );
   }
+}
+
+class _ProfilePlaylistSnapshot {
+  final int trackCount;
+  final String? firstTrackArtworkUrl;
+
+  const _ProfilePlaylistSnapshot({
+    required this.trackCount,
+    this.firstTrackArtworkUrl,
+  });
 }
 
 // ── track tile ───────────────────────────────────────────────────────────
@@ -1299,70 +1924,82 @@ class _TrackTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sub = Colors.white.withOpacity(0.55);
-    return GestureDetector(
-      key: const ValueKey('profile_track_tile'),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: (artworkUrl != null && artworkUrl!.isNotEmpty)
-                  ? CachedNetworkImage(
-                      imageUrl: artworkUrl!,
-                      width: 56,
-                      height: 56,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
-                        width: 56,
-                        height: 56,
-                        color: const Color(0xFF2A2A2A),
-                        child: const Icon(Icons.music_note,
-                            color: Colors.white38, size: 24),
-                      ),
-                    )
-                  : Container(
-                      width: 56,
-                      height: 56,
-                      color: const Color(0xFF2A2A2A),
-                      child: const Icon(Icons.music_note,
-                          color: Colors.white38, size: 24),
-                    ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              key: const ValueKey('profile_track_tile'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: Row(
                 children: [
-                  Text(track.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 2),
-                  Text(track.artist,
-                      style: TextStyle(color: sub, fontSize: 12)),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      Icon(Icons.play_arrow_rounded, size: 13, color: sub),
-                      Text('  ${track.duration}',
-                          style: TextStyle(color: sub, fontSize: 11)),
-                    ],
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: (artworkUrl != null && artworkUrl!.isNotEmpty)
+                        ? CachedNetworkImage(
+                            imageUrl: artworkUrl!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Container(
+                              width: 56,
+                              height: 56,
+                              color: const Color(0xFF2A2A2A),
+                              child: const Icon(Icons.music_note,
+                                  color: Colors.white38, size: 24),
+                            ),
+                          )
+                        : Container(
+                            width: 56,
+                            height: 56,
+                            color: const Color(0xFF2A2A2A),
+                            child: const Icon(Icons.music_note,
+                                color: Colors.white38, size: 24),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(track.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 2),
+                        Text(track.artist,
+                            style: TextStyle(color: sub, fontSize: 12)),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.play_arrow_rounded,
+                                size: 13, color: sub),
+                            Text('  ${track.duration}',
+                                style: TextStyle(color: sub, fontSize: 11)),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-            GestureDetector(
-              key: const ValueKey('profile_track_more_button'),
-              onTap: onMore,
+          ),
+          GestureDetector(
+            key: const ValueKey('profile_track_more_button'),
+            behavior: HitTestBehavior.opaque,
+            onTap: onMore,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

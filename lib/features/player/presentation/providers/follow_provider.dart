@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/network/user_session.dart';
 import '../../../../core/providers/session_provider.dart';
+import '../../../feed/presentation/providers/feed_provider.dart';
 
 class FollowState {
   final bool isFollowing;
@@ -15,7 +16,8 @@ class FollowState {
     this.isChecking = true,
   });
 
-  FollowState copyWith({bool? isFollowing, bool? isLoading, bool? isChecking}) =>
+  FollowState copyWith(
+          {bool? isFollowing, bool? isLoading, bool? isChecking}) =>
       FollowState(
         isFollowing: isFollowing ?? this.isFollowing,
         isLoading: isLoading ?? this.isLoading,
@@ -24,7 +26,9 @@ class FollowState {
 }
 
 class FollowNotifier extends StateNotifier<FollowState> {
-  FollowNotifier() : super(const FollowState(isChecking: true));
+  final Ref _ref;
+
+  FollowNotifier(this._ref) : super(const FollowState(isChecking: true));
 
   Future<void> checkStatus(String artistId) async {
     if (mounted) state = state.copyWith(isChecking: true);
@@ -41,9 +45,16 @@ class FollowNotifier extends StateNotifier<FollowState> {
           isFollowing: data.any((u) => u['_id'] == artistId),
         );
       }
-    } catch (_) {} finally {
+    } catch (_) {
+    } finally {
       if (mounted) state = state.copyWith(isChecking: false);
     }
+  }
+
+  /// Directly sets follow state without making an API call.
+  /// Used to sync shared state after another widget completes the toggle.
+  void setFollowState(bool isFollowing) {
+    if (mounted) state = state.copyWith(isFollowing: isFollowing, isChecking: false);
   }
 
   Future<void> toggle(String artistId) async {
@@ -56,6 +67,8 @@ class FollowNotifier extends StateNotifier<FollowState> {
       } else {
         await dioClient.dio.post('/network/$artistId/follow');
       }
+      _ref.invalidate(followingFeedProvider);
+      await _ref.read(followingFeedProvider.notifier).load();
     } catch (_) {
       if (mounted) state = state.copyWith(isFollowing: wasFollowing);
     } finally {
@@ -67,10 +80,11 @@ class FollowNotifier extends StateNotifier<FollowState> {
 /// Keyed by artistId. Stays alive for the session so follow state is consistent
 /// across FullPlayerPage and MiniPlayerWidget.
 /// Automatically triggers [checkStatus] when first created for an artistId.
-final followProvider = StateNotifierProvider
-    .family<FollowNotifier, FollowState, String>((ref, artistId) {
+final followProvider =
+    StateNotifierProvider.family<FollowNotifier, FollowState, String>(
+        (ref, artistId) {
   ref.watch(sessionUserIdProvider);
-  final notifier = FollowNotifier();
+  final notifier = FollowNotifier(ref);
   Future.microtask(() => notifier.checkStatus(artistId));
   return notifier;
 });

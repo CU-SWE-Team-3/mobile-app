@@ -106,7 +106,9 @@ void main() {
 
   group('PlaylistNotifier — updateVisibility', () {
     test('calls repository.updatePrivacy with correct id and isPublic', () async {
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+        return null;
+      });
       final notifier = await _buildNotifier(mockRepo);
       await notifier.add(_playlist(id: 'p1', isPublic: true));
 
@@ -116,7 +118,9 @@ void main() {
     });
 
     test('flips isPublic in state after success', () async {
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+        return null;
+      });
       final notifier = await _buildNotifier(mockRepo);
       await notifier.add(_playlist(id: 'p1', isPublic: true));
 
@@ -140,7 +144,9 @@ void main() {
     });
 
     test('does not affect other playlists in state', () async {
-      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {});
+      when(() => mockRepo.updatePrivacy(any(), any())).thenAnswer((_) async {
+        return null;
+      });
       final notifier = await _buildNotifier(mockRepo);
       await notifier.add(_playlist(id: 'p1', isPublic: true));
       await notifier.add(_playlist(id: 'p2', isPublic: true));

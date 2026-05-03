@@ -31,12 +31,6 @@ class LegalPage extends ConsumerWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: ListView(
         children: [
@@ -234,12 +228,6 @@ class _WebViewPageState extends State<_WebViewPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: Stack(
         children: [
@@ -306,12 +294,6 @@ class _LicensesPage extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: ListView.builder(
         padding: const EdgeInsets.all(16),

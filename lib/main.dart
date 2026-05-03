@@ -17,6 +17,7 @@ import 'features/messaging/presentation/providers/messaging_providers.dart';
 import 'features/notifications/presentation/providers/notification_fcm_lifecycle_provider.dart';
 import 'features/notifications/presentation/providers/notification_socket_lifecycle_provider.dart';
 import 'features/player/presentation/providers/player_provider.dart';
+import 'features/player/presentation/widgets/mock_audio_ad_overlay.dart';
 import 'features/premium/presentation/providers/subscription_provider.dart';
 import 'injection_container.dart';
 
@@ -76,9 +77,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       final prefs = await SharedPreferences.getInstance();
       final pending = prefs.getBool('pendingCheckout') ?? false;
       if (!pending) return;
-      await prefs.setBool('pendingCheckout', false);
       final sub = ref.read(subscriptionProvider);
       if (sub.isPremium) {
+        await prefs.setBool('pendingCheckout', false);
         try {
           appRouter.go('/payment-success');
         } catch (_) {
@@ -100,11 +101,21 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _handleLink(Uri uri) async {
-    if (uri.path == '/payment-success') {
+    final paymentTarget = uri.scheme == 'biobeats' ? uri.host : uri.path;
+    if (paymentTarget == 'payment-success' ||
+        paymentTarget == '/payment-success') {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pendingCheckout', false);
+      await ref.read(subscriptionProvider.notifier).refreshFromProfile();
       appRouter.go('/payment-success');
       return;
     }
-    if (uri.path == '/payment-cancel') {
+    if (paymentTarget == 'payment-cancel' ||
+        paymentTarget == 'payment-cancelled' ||
+        paymentTarget == '/payment-cancel' ||
+        paymentTarget == '/payment-cancelled') {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('pendingCheckout', false);
       appRouter.go('/upgrade');
       return;
     }
@@ -214,6 +225,15 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       routerConfig: appRouter,
+      builder: (context, child) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (child != null) child,
+            const MockAudioAdOverlay(),
+          ],
+        );
+      },
     );
   }
 }

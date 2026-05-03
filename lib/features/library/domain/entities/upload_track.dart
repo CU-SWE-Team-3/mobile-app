@@ -5,6 +5,9 @@ class UploadTrack extends Equatable {
   final String? id;
   final String? hlsUrl;
   final String? artworkUrl;
+  final String? permalink;
+  final String? shareUrl;
+  final String? publicUrl;
   final List<int>? waveform;
 
   final String? audioFilePath;
@@ -19,11 +22,20 @@ class UploadTrack extends Equatable {
   final String? description;
   final int? duration; // in milliseconds
   final String? processingState; // "Processing", "Finished", or null
+  final bool enableDirectDownloads;
+  final int playCount;
+  final int likeCount;
+  final int commentCount;
+  final int repostCount;
+  final int downloadCount;
 
   const UploadTrack({
     this.id,
     this.hlsUrl,
     this.artworkUrl,
+    this.permalink,
+    this.shareUrl,
+    this.publicUrl,
     this.waveform,
     this.audioFilePath,
     this.coverImagePath,
@@ -37,12 +49,21 @@ class UploadTrack extends Equatable {
     this.description,
     this.duration,
     this.processingState,
+    this.enableDirectDownloads = false,
+    this.playCount = 0,
+    this.likeCount = 0,
+    this.commentCount = 0,
+    this.repostCount = 0,
+    this.downloadCount = 0,
   });
 
   UploadTrack copyWith({
     String? id,
     String? hlsUrl,
     String? artworkUrl,
+    String? permalink,
+    String? shareUrl,
+    String? publicUrl,
     List<int>? waveform,
     String? audioFilePath,
     String? coverImagePath,
@@ -56,11 +77,20 @@ class UploadTrack extends Equatable {
     String? description,
     int? duration,
     String? processingState,
+    bool? enableDirectDownloads,
+    int? playCount,
+    int? likeCount,
+    int? commentCount,
+    int? repostCount,
+    int? downloadCount,
   }) {
     return UploadTrack(
       id: id ?? this.id,
       hlsUrl: hlsUrl ?? this.hlsUrl,
       artworkUrl: artworkUrl ?? this.artworkUrl,
+      permalink: permalink ?? this.permalink,
+      shareUrl: shareUrl ?? this.shareUrl,
+      publicUrl: publicUrl ?? this.publicUrl,
       waveform: waveform ?? this.waveform,
       audioFilePath: audioFilePath ?? this.audioFilePath,
       coverImagePath: coverImagePath ?? this.coverImagePath,
@@ -74,6 +104,13 @@ class UploadTrack extends Equatable {
       description: description ?? this.description,
       duration: duration ?? this.duration,
       processingState: processingState ?? this.processingState,
+      enableDirectDownloads:
+          enableDirectDownloads ?? this.enableDirectDownloads,
+      playCount: playCount ?? this.playCount,
+      likeCount: likeCount ?? this.likeCount,
+      commentCount: commentCount ?? this.commentCount,
+      repostCount: repostCount ?? this.repostCount,
+      downloadCount: downloadCount ?? this.downloadCount,
     );
   }
 
@@ -82,6 +119,9 @@ class UploadTrack extends Equatable {
         id,
         hlsUrl,
         artworkUrl,
+        permalink,
+        shareUrl,
+        publicUrl,
         waveform,
         audioFilePath,
         coverImagePath,
@@ -95,5 +135,11 @@ class UploadTrack extends Equatable {
         description,
         duration,
         processingState,
+        enableDirectDownloads,
+        playCount,
+        likeCount,
+        commentCount,
+        repostCount,
+        downloadCount,
       ];
 }

@@ -1,8 +1,14 @@
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:soundcloud_clone/core/network/dio_client.dart';
 import 'package:soundcloud_clone/core/network/user_session.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/providers/comments_provider.dart';
 import 'package:soundcloud_clone/features/engagement/presentation/providers/engagement_provider.dart';
+import 'package:soundcloud_clone/features/engagement/presentation/widgets/track_options_sheet.dart';
 import 'package:soundcloud_clone/features/feed/presentation/providers/feed_provider.dart';
 import 'package:soundcloud_clone/features/feed/presentation/widgets/feed_track_card.dart';
 import 'package:soundcloud_clone/features/player/presentation/providers/player_provider.dart';
@@ -19,9 +25,14 @@ class FeedPage extends ConsumerStatefulWidget {
 }
 
 class _FeedPageState extends ConsumerState<FeedPage> {
+  static const _discoverPreviewLength = Duration(seconds: 30);
+
   _Tab _tab = _Tab.following;
   final PageController _pageController = PageController();
+  final ScrollController _followingScrollController = ScrollController();
   int _currentPage = 0;
+  Timer? _discoverPreviewTimer;
+  int _discoverPreviewRequestId = 0;
 
   // Track which tabs have had their initial load triggered so we only fire once
   // per provider lifecycle (the providers themselves hold the data).
@@ -35,6 +46,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
   @override
   void initState() {
     super.initState();
+    _followingScrollController.addListener(_onFollowingScroll);
     _fetchUserInteractionIds();
     // Trigger initial load after the first frame so providers are accessible.
     WidgetsBinding.instance.addPostFrameCallback((_) => _ensureLoaded(_tab));
@@ -116,7 +128,9 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
   @override
   void dispose() {
+    _stopDiscoverPlayback();
     _pageController.dispose();
+    _followingScrollController.dispose();
     super.dispose();
   }
 
@@ -124,6 +138,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
   void _switchTab(_Tab tab) {
     if (_tab == tab) return;
+    final wasDiscover = _tab == _Tab.discover;
     setState(() {
       _tab = tab;
       _currentPage = 0;
@@ -131,7 +146,13 @@ class _FeedPageState extends ConsumerState<FeedPage> {
     if (_pageController.hasClients) {
       _pageController.jumpToPage(0);
     }
+    if (wasDiscover && tab != _Tab.discover) {
+      _stopDiscoverPlayback();
+    }
     _ensureLoaded(tab);
+    if (tab == _Tab.discover) {
+      _playCurrentDiscoverPreviewIfReady();
+    }
   }
 
   void _ensureLoaded(_Tab tab) {
@@ -149,14 +170,133 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 
   Future<void> _refreshCurrentTab() => _loadTab(_tab);
 
+  void _onFollowingScroll() {
+    if (!_followingScrollController.hasClients || _tab != _Tab.following) {
+      return;
+    }
+    final position = _followingScrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 240) {
+      ref.read(followingFeedProvider.notifier).loadNextPage();
+    }
+  }
+
   // ── Page change ─────────────────────────────────────────────────────────────
 
   void _onPageChanged(int index, List<FeedTrack> tracks) {
     if (index < 0 || index >= tracks.length) return;
+    _stopDiscoverPlayback(clearManualFlag: false);
     setState(() => _currentPage = index);
     final track = tracks[index];
-    ref.read(playerProvider.notifier).playTrack(track.toPlayerTrack());
+    _playDiscoverPreview(track);
     _maybeLoadMoreFollowing(index, tracks.length);
+  }
+
+  Future<void> _playDiscoverPreview(FeedTrack track) async {
+    if (_tab != _Tab.discover) return;
+    final requestId = ++_discoverPreviewRequestId;
+    _cancelDiscoverPreviewTimer();
+    ref.read(discoverManualPlaybackTrackIdProvider.notifier).state = null;
+
+    final playerTrack = track.toPlayerTrack();
+    final duration = playerTrack.duration ?? Duration.zero;
+    final notifier = ref.read(playerProvider.notifier);
+    if (duration <= _discoverPreviewLength) {
+      await notifier.playTrack(playerTrack);
+      if (!mounted ||
+          _tab != _Tab.discover ||
+          requestId != _discoverPreviewRequestId) {
+        return;
+      }
+      _scheduleDiscoverPreviewStop(
+        track.id,
+        requestId,
+        Duration.zero,
+        duration,
+      );
+      return;
+    }
+
+    final start = Duration(
+      milliseconds: ((duration.inMilliseconds -
+                  _discoverPreviewLength.inMilliseconds) /
+              2)
+          .round(),
+    );
+    await notifier.playTrack(playerTrack);
+    await notifier.seekTo(start);
+    if (!mounted ||
+        _tab != _Tab.discover ||
+        requestId != _discoverPreviewRequestId) {
+      return;
+    }
+    _scheduleDiscoverPreviewStop(
+      track.id,
+      requestId,
+      start,
+      _discoverPreviewLength,
+    );
+  }
+
+  void _playCurrentDiscoverPreviewIfReady() {
+    final tracks = ref.read(discoverFeedProvider).tracks;
+    if (tracks.isEmpty) return;
+
+    final index = _currentPage.clamp(0, tracks.length - 1).toInt();
+    _playDiscoverPreview(tracks[index]);
+  }
+
+  void _scheduleDiscoverPreviewStop(
+    String trackId,
+    int requestId,
+    Duration previewStart,
+    Duration length,
+  ) {
+    if (length <= Duration.zero) return;
+    _discoverPreviewTimer = Timer(length, () {
+      if (!mounted ||
+          requestId != _discoverPreviewRequestId ||
+          ModalRoute.of(context)?.isCurrent != true) {
+        return;
+      }
+
+      final playerState = ref.read(playerProvider);
+      final previewEnd = previewStart + length;
+      final nearPreviewEnd =
+          playerState.position >= previewEnd - const Duration(seconds: 2);
+      if (playerState.currentTrack?.id == trackId &&
+          playerState.isPlaying &&
+          nearPreviewEnd) {
+        ref.read(playerProvider.notifier).pause();
+      }
+    });
+  }
+
+  void _cancelDiscoverPreviewTimer() {
+    _discoverPreviewTimer?.cancel();
+    _discoverPreviewTimer = null;
+  }
+
+  void _stopDiscoverPlayback({bool clearManualFlag = true}) {
+    _discoverPreviewRequestId++;
+    _cancelDiscoverPreviewTimer();
+
+    final playerState = ref.read(playerProvider);
+    final discoverTrackIds =
+        ref.read(discoverFeedProvider).tracks.map((track) => track.id).toSet();
+    final manualTrackId = ref.read(discoverManualPlaybackTrackIdProvider);
+    final currentTrackId = playerState.currentTrack?.id;
+    final isDiscoverTrack =
+        currentTrackId != null && discoverTrackIds.contains(currentTrackId);
+    final isManualDiscoverTrack =
+        currentTrackId != null && currentTrackId == manualTrackId;
+
+    if (playerState.isPlaying && (isDiscoverTrack || isManualDiscoverTrack)) {
+      ref.read(playerProvider.notifier).pause();
+    }
+
+    if (clearManualFlag) {
+      ref.read(discoverManualPlaybackTrackIdProvider.notifier).state = null;
+    }
   }
 
   void _maybeLoadMoreFollowing(int index, int totalTracks) {
@@ -186,9 +326,13 @@ class _FeedPageState extends ConsumerState<FeedPage> {
         if ((prev == null || prev.tracks.isEmpty) &&
             next.tracks.isNotEmpty &&
             _currentPage == 0) {
-          ref
-              .read(playerProvider.notifier)
-              .playTrack(next.tracks[0].toPlayerTrack());
+          if (_tab == _Tab.discover) {
+            _playDiscoverPreview(next.tracks[0]);
+          } else {
+            ref
+                .read(playerProvider.notifier)
+                .playTrack(next.tracks[0].toPlayerTrack());
+          }
         }
       },
     );
@@ -198,10 +342,10 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 16),
+            if (_tab == _Tab.following) const SizedBox(height: 8),
 
             // ── Toggle buttons ─────────────────────────────────────
-            Center(
+            if (_tab == _Tab.following) Center(
               child: Container(
                 decoration: BoxDecoration(
                   color: const Color(0xFF1A1A1A),
@@ -232,14 +376,63 @@ class _FeedPageState extends ConsumerState<FeedPage> {
                 ),
               ),
             ),
+            if (_tab == _Tab.following) const SizedBox(height: 8),
 
-            const SizedBox(height: 24),
+            // â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            Expanded(
+              child: _tab == _Tab.discover
+                  ? Stack(
+                      children: [
+                        _buildFeedBody(feedState),
+                        Positioned(
+                          top: 8,
+                          left: 0,
+                          right: 0,
+                          child: _buildTransparentDiscoverTabs(),
+                        ),
+                      ],
+                    )
+                  : _buildFeedBody(feedState),
+            ),
 
+            // â”€â”€ Mini player bar (Following tab only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            if (_tab == _Tab.following) MiniPlayerWidget(),
             // ── Body ───────────────────────────────────────────────
-            Expanded(child: _buildFeedBody(feedState)),
 
             // ── Mini player bar (Following tab only) ───────────────
-            const MiniPlayerWidget(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransparentDiscoverTabs() {
+    final selectedColor = Colors.black.withValues(alpha: 0.34);
+
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(32),
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _TabButton(
+              key: const ValueKey('feed_discover_tab_button_overlay'),
+              label: 'Discover',
+              isSelected: _tab == _Tab.discover,
+              selectedColor: selectedColor,
+              onTap: () => _switchTab(_Tab.discover),
+            ),
+            _TabButton(
+              key: const ValueKey('feed_following_tab_button_overlay'),
+              label: 'Following',
+              isSelected: _tab == _Tab.following,
+              selectedColor: selectedColor,
+              onTap: () => _switchTab(_Tab.following),
+            ),
           ],
         ),
       ),
@@ -286,6 +479,10 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       );
     }
 
+    if (_tab == _Tab.following) {
+      return _buildFollowingFeed(feedState);
+    }
+
     return Stack(
       children: [
         RefreshIndicator(
@@ -329,6 +526,41 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       ],
     );
   }
+
+  Widget _buildFollowingFeed(FeedState feedState) {
+    return RefreshIndicator(
+      onRefresh: _refreshCurrentTab,
+      color: const Color(0xFFFF5500),
+      backgroundColor: const Color(0xFF1A1A1A),
+      child: ListView.builder(
+        key: const ValueKey('feed_track_list'),
+        controller: _followingScrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
+        itemCount: feedState.tracks.length + (feedState.isLoadingMore ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index == feedState.tracks.length) {
+            return const Padding(
+              key: ValueKey('feed_following_pagination_loader'),
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Color(0xFFFF5500),
+                ),
+              ),
+            );
+          }
+
+          final track = feedState.tracks[index];
+          return _FollowingTrackItem(
+            key: ValueKey('feed_following_tile_${track.id}_${index}'),
+            track: track,
+          );
+        },
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -338,12 +570,14 @@ class _FeedPageState extends ConsumerState<FeedPage> {
 class _TabButton extends StatelessWidget {
   final String label;
   final bool isSelected;
+  final Color selectedColor;
   final VoidCallback onTap;
 
   const _TabButton({
     super.key,
     required this.label,
     required this.isSelected,
+    this.selectedColor = const Color(0xFF2A2A2A),
     required this.onTap,
   });
 
@@ -355,7 +589,7 @@ class _TabButton extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF2A2A2A) : Colors.transparent,
+          color: isSelected ? selectedColor : Colors.transparent,
           borderRadius: BorderRadius.circular(32),
         ),
         child: Text(
@@ -447,4 +681,570 @@ class _EmptyView extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FollowingTrackItem extends ConsumerWidget {
+  final FeedTrack track;
+
+  const _FollowingTrackItem({
+    super.key,
+    required this.track,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final playerState = ref.watch(playerProvider);
+    final isCurrentTrack = playerState.currentTrack?.id == track.id;
+    final isPlaying = isCurrentTrack && playerState.isPlaying;
+
+    final engParams = EngagementParams(
+      trackId: track.id,
+      isLiked: track.isLiked,
+      isReposted: track.isReposted,
+      likeCount: track.likeCount,
+      repostCount: track.repostCount,
+    );
+    final engState = ref.watch(engagementProvider(engParams));
+    final commentsState = ref.watch(commentsProvider(track.id));
+    final commentTotal = commentsState.error == null
+        ? commentsState.total
+        : track.commentCount;
+    final artworkUrl = _resolveImageUrl(track.artworkUrl);
+    final hasArtwork = artworkUrl != null &&
+        !(track.artworkUrl?.startsWith('default') ?? false) &&
+        !artworkUrl.contains('default-artwork');
+    final cardWidth = MediaQuery.sizeOf(context).width - 24;
+    final cardHeight = (cardWidth * 1.08).clamp(360.0, 430.0).toDouble();
+    final displayDuration = isCurrentTrack
+        ? (playerState.duration > Duration.zero
+            ? playerState.duration
+            : playerState.currentTrack?.duration ?? Duration.zero)
+        : track.toPlayerTrack().duration ?? Duration.zero;
+
+    void playOrPause() {
+      if (isCurrentTrack && playerState.error == null) {
+        ref.read(playerProvider.notifier).togglePlayPause();
+      } else {
+        ref.read(playerProvider.notifier).playTrack(track.toPlayerTrack());
+      }
+    }
+
+    void openOptionsSheet() {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: const Color(0xFF1A1A1A),
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        builder: (_) => TrackOptionsSheet(
+          trackId: track.id,
+          title: track.title,
+          artistName: track.artistName,
+          artworkUrl: artworkUrl,
+          audioUrl: track.audioUrl,
+          waveform: track.waveform,
+          artistId: track.artistId,
+          artistPermalink: track.artistPermalink,
+          initialIsLiked: engState.isLiked,
+          initialIsReposted: engState.isReposted,
+          initialLikeCount: engState.likeCount,
+          initialRepostCount: engState.repostCount,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _FollowingActivityHeader(
+            track: track,
+            onMoreTap: openOptionsSheet,
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              height: cardHeight,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  hasArtwork
+                      ? CachedNetworkImage(
+                          imageUrl: artworkUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) =>
+                              const ColoredBox(color: Color(0xFF1A1A1A)),
+                          errorWidget: (_, __, ___) =>
+                              const _ArtworkFallback(),
+                        )
+                      : const _ArtworkFallback(),
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Color(0x44000000),
+                          Color(0x08000000),
+                          Color(0xCC000000),
+                        ],
+                        stops: [0.0, 0.45, 1.0],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 18,
+                    right: 14,
+                    child: _InlineActionButton(
+                      icon: playerState.volume == 0.0
+                          ? Icons.volume_off_outlined
+                          : Icons.volume_up_outlined,
+                      onTap: () =>
+                          ref.read(playerProvider.notifier).toggleMute(),
+                    ),
+                  ),
+                  Positioned(
+                    top: cardHeight * 0.22,
+                    right: 14,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _InlineActionButton(
+                          icon: engState.isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          iconColor: engState.isLiked
+                              ? const Color(0xFFFF5500)
+                              : Colors.white,
+                          label: _formatCount(engState.likeCount),
+                          loading: engState.isLoadingLike,
+                          onTap: () => ref
+                              .read(engagementProvider(engParams).notifier)
+                              .toggleLike(),
+                        ),
+                        const SizedBox(height: 12),
+                        _InlineActionButton(
+                          icon: Icons.chat_bubble_outline,
+                          label: _formatCount(
+                            commentTotal,
+                            showZero: true,
+                          ),
+                          onTap: () => context.push('/comments', extra: {
+                            'trackId': track.id,
+                            'trackTitle': track.title,
+                            'trackArtist': track.artistName,
+                            'trackArtworkUrl': artworkUrl ?? '',
+                            'currentPositionSeconds': isCurrentTrack
+                                ? playerState.position.inSeconds
+                                : 0,
+                          }),
+                        ),
+                        const SizedBox(height: 12),
+                        _InlineActionButton(
+                          icon: Icons.playlist_add,
+                          label: 'Add',
+                          onTap: () => context.push(
+                            '/playlist/add-track',
+                            extra: {'trackId': track.id},
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    right: 14,
+                    bottom: 26,
+                    child: _InlinePlayButton(
+                      isLoading: playerState.isLoading && isCurrentTrack,
+                      isPlaying: isPlaying,
+                      onTap: playOrPause,
+                    ),
+                  ),
+                  Positioned(
+                    left: 18,
+                    right: 64,
+                    bottom: 72,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          track.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            height: 1.15,
+                            fontWeight: FontWeight.w700,
+                            shadows: [
+                              Shadow(color: Colors.black87, blurRadius: 8),
+                            ],
+                          ),
+                        ),
+                        if (displayDuration > Duration.zero) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            _formatDuration(displayDuration),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              shadows: [
+                                Shadow(color: Colors.black87, blurRadius: 6),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    left: 18,
+                    right: 64,
+                    bottom: 28,
+                    child: Row(
+                      children: [
+                        _MiniAvatar(avatarUrl: track.artistAvatarUrl),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            track.artistName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              shadows: [
+                                Shadow(color: Colors.black87, blurRadius: 8),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FollowingActivityHeader extends StatelessWidget {
+  final FeedTrack track;
+  final VoidCallback onMoreTap;
+
+  const _FollowingActivityHeader({
+    required this.track,
+    required this.onMoreTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final actor = track.actorName?.isNotEmpty == true
+        ? track.actorName!
+        : track.artistName;
+    final action = _activityText(track.activityType);
+    final timeAgo = _formatRelativeTime(track.activityTimestamp);
+    final avatarUrl = track.actorAvatarUrl;
+    final hasAvatar = avatarUrl != null &&
+        avatarUrl.isNotEmpty &&
+        avatarUrl.startsWith('http');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 0, 4, 0),
+      child: Row(
+        children: [
+          _HeaderAvatar(avatarUrl: hasAvatar ? avatarUrl : null),
+          const SizedBox(width: 10),
+          Expanded(
+            child: RichText(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              text: TextSpan(
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+                children: [
+                  TextSpan(
+                    text: actor,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  TextSpan(text: ' $action'),
+                  if (timeAgo != null) TextSpan(text: ' - $timeAgo'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onMoreTap,
+            behavior: HitTestBehavior.opaque,
+            child: const SizedBox(
+              width: 36,
+              height: 36,
+              child: Icon(Icons.more_vert, color: Colors.white70, size: 24),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlineActionButton extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final bool loading;
+  final VoidCallback onTap;
+
+  const _InlineActionButton({
+    required this.icon,
+    this.iconColor = Colors.white,
+    this.label = '',
+    this.loading = false,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: loading ? null : onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 40,
+        height: 50,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            loading
+                ? const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Icon(icon, color: iconColor, size: 32),
+            if (label.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  shadows: [Shadow(color: Colors.black87, blurRadius: 5)],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InlinePlayButton extends StatelessWidget {
+  final bool isLoading;
+  final bool isPlaying;
+  final VoidCallback onTap;
+
+  const _InlinePlayButton({
+    required this.isLoading,
+    required this.isPlaying,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.32),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.10),
+          ),
+        ),
+        child: isLoading
+            ? const Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+              )
+            : Icon(
+                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 31,
+              ),
+      ),
+    );
+  }
+}
+
+class _HeaderAvatar extends StatelessWidget {
+  final String? avatarUrl;
+
+  const _HeaderAvatar({this.avatarUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white24),
+      ),
+      child: ClipOval(
+        child: avatarUrl != null
+            ? CachedNetworkImage(
+                imageUrl: avatarUrl!,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => const _AvatarFallback(iconSize: 12),
+                errorWidget: (_, __, ___) =>
+                    const _AvatarFallback(iconSize: 12),
+              )
+            : const _AvatarFallback(iconSize: 12),
+      ),
+    );
+  }
+}
+
+class _MiniAvatar extends StatelessWidget {
+  final String? avatarUrl;
+
+  const _MiniAvatar({this.avatarUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAvatar = avatarUrl != null &&
+        avatarUrl!.isNotEmpty &&
+        avatarUrl!.startsWith('http');
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white24),
+      ),
+      child: ClipOval(
+        child: hasAvatar
+            ? CachedNetworkImage(
+                imageUrl: avatarUrl!,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => const _AvatarFallback(iconSize: 18),
+                errorWidget: (_, __, ___) =>
+                    const _AvatarFallback(iconSize: 18),
+              )
+            : const _AvatarFallback(iconSize: 18),
+      ),
+    );
+  }
+}
+
+class _AvatarFallback extends StatelessWidget {
+  final double iconSize;
+
+  const _AvatarFallback({required this.iconSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFF2A2A2A),
+      child: Center(
+        child: Icon(
+          Icons.person,
+          color: Colors.white38,
+          size: iconSize,
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtworkFallback extends StatelessWidget {
+  const _ArtworkFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(
+      color: Color(0xFF1A1A1A),
+      child: Center(
+        child: Icon(Icons.music_note, color: Colors.white24, size: 64),
+      ),
+    );
+  }
+}
+
+String? _resolveImageUrl(String? url) {
+  if (url == null || url.isEmpty) return null;
+  if (url.startsWith('http')) return url;
+  final path = url.startsWith('/') ? url : '/$url';
+  return 'https://biobeats.duckdns.org$path';
+}
+
+String _formatCount(int n, {bool showZero = false}) {
+  if (n <= 0) return showZero ? '0' : '';
+  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+  return '$n';
+}
+
+String _formatDuration(Duration duration) {
+  final minutes = duration.inMinutes;
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
+
+String _activityText(String? activityType) {
+  switch (activityType) {
+    case 'repost':
+      return 'reposted a track';
+    case 'like':
+      return 'liked a track';
+    default:
+      return 'posted a track';
+  }
+}
+
+String? _formatRelativeTime(DateTime? timestamp) {
+  if (timestamp == null) return null;
+  final diff = DateTime.now().difference(timestamp);
+  if (diff.inDays >= 365) return '${(diff.inDays / 365).floor()}y ago';
+  if (diff.inDays >= 30) return '${(diff.inDays / 30).floor()}mo ago';
+  if (diff.inDays >= 1) return '${diff.inDays}d ago';
+  if (diff.inHours >= 1) return '${diff.inHours}h ago';
+  if (diff.inMinutes >= 1) return '${diff.inMinutes}m ago';
+  return 'just now';
 }

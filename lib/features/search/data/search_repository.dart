@@ -90,7 +90,10 @@ class SearchRepository {
     return '';
   }
 
-  SearchResults _parse(dynamic responseData) {
+  SearchResults _parse(
+    dynamic responseData, {
+    SearchEntityType? forcedType,
+  }) {
     List<SearchResultTrack> tracks = [];
     List<SearchResultUser> users = [];
     List<SearchResultPlaylist> playlists = [];
@@ -127,7 +130,7 @@ class SearchRepository {
     } else if (data is List) {
       // Flat list — discriminate by 'type' field, default to track
       for (final item in data.whereType<Map<String, dynamic>>()) {
-        final kind = item['type'] as String?;
+        final kind = forcedType?.name ?? item['type'] as String?;
         if (kind == 'user') {
           users.add(SearchResultUser.fromJson(item));
         } else if (kind == 'playlist') {

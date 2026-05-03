@@ -90,7 +90,7 @@ class _PushNotificationSettingsPageState
                         ),
                       ),
 
-                      _SectionLabel('Activity'),
+                      const _SectionLabel('Activity'),
                       _ToggleTile(
                         icon: Icons.favorite,
                         label: 'Likes',
@@ -125,7 +125,7 @@ class _PushNotificationSettingsPageState
                       ),
 
                       const Divider(color: Color(0xFF222222), height: 1),
-                      _SectionLabel('People'),
+                      const _SectionLabel('People'),
                       _ToggleTile(
                         icon: Icons.person_add,
                         label: 'New Followers',
@@ -144,7 +144,7 @@ class _PushNotificationSettingsPageState
                       ),
 
                       const Divider(color: Color(0xFF222222), height: 1),
-                      _SectionLabel('Content'),
+                      const _SectionLabel('Content'),
                       _ToggleTile(
                         icon: Icons.music_note,
                         label: 'New Tracks',
@@ -163,7 +163,7 @@ class _PushNotificationSettingsPageState
                       ),
 
                       const Divider(color: Color(0xFF222222), height: 1),
-                      _SectionLabel('System'),
+                      const _SectionLabel('System'),
                       _ToggleTile(
                         icon: Icons.info_outline,
                         label: 'System Notifications',
@@ -244,7 +244,7 @@ class _ToggleTile extends StatelessWidget {
       trailing: Switch(
         value: value,
         onChanged: enabled ? onChanged : null,
-        activeColor: const Color(0xFFFF5500),
+        activeThumbColor: const Color(0xFFFF5500),
         activeTrackColor: const Color(0x4DFF5500),
         inactiveThumbColor: Colors.white30,
         inactiveTrackColor: Colors.white12,

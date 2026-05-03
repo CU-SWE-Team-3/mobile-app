@@ -114,12 +114,6 @@ class _LibraryFollowingPageState extends ConsumerState<LibraryFollowingPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.cast, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(
@@ -296,12 +290,6 @@ class TrueFriendsPage extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.cast, color: Colors.white),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: Center(
         child: Text(

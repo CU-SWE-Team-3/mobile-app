@@ -32,11 +32,15 @@ class StartPage extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Logo black
-                    Image.asset(
-                      'assets/icons/SoundCloud_Dark_Icon.png',
-                      width: 90,
-                      //color: Colors.black,
+                    ClipRect(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        heightFactor: 0.58,
+                        child: Image.asset(
+                          'assets/icons/logo.png',
+                          width: size.width * 0.65,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 16),
 

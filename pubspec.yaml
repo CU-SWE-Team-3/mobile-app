@@ -9,9 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  restart_app: ^1.0.1  # 👈 use this insteadpp
+  restart_app: ^1.0.1  # ≡ƒæê use this insteadpp
   path_provider: ^2.1.2  # already in your project most likely
-  webview_flutter: ^4.4.2  # 👈 add it here
+  webview_flutter: ^4.4.2  # ≡ƒæê add it here
 
 
   # State Management
@@ -45,6 +45,7 @@ dependencies:
   image_picker: ^1.0.7
 
   # Utilities
+  path: ^1.9.0
   get_it: ^7.6.7
   equatable: ^2.0.5
   dartz: ^0.10.1
@@ -54,6 +55,9 @@ dependencies:
 
   # Payment
   flutter_stripe: ^10.1.1
+
+  # Sharing
+  share_plus: ^10.1.0
 
   # URL Launcher
   url_launcher: ^6.2.5
@@ -69,12 +73,12 @@ dev_dependencies:
   integration_test:
     sdk: flutter
   flutter_lints: ^3.0.0
-  build_runner: ^2.4.8
+  build_runner: ^2.5.4
   riverpod_generator: ^2.3.9
   freezed: ^2.4.7
   json_serializable: ^6.7.1
   mocktail: ^1.0.3
-  mockito: ^5.4.4
+  mockito: ^5.4.6
 
 
 

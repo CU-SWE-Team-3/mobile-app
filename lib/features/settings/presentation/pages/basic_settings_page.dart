@@ -32,12 +32,6 @@ class BasicSettingsPage extends ConsumerWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -356,12 +350,6 @@ class _AppIconPageState extends State<AppIconPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: Icon(Icons.cast, color: Colors.white),
-          ),
-        ],
       ),
       body: ListView.builder(
         itemCount: _icons.length,

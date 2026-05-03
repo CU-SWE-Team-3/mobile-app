@@ -10,11 +10,15 @@ import '../../../engagement/data/sources/engagement_remote_data_source.dart';
 import '../../../engagement/presentation/providers/engagement_provider.dart';
 import '../../../engagement/presentation/widgets/track_options_sheet.dart';
 import '../../../player/presentation/providers/player_provider.dart';
+import '../../../player/presentation/widgets/mini_player_widget.dart';
+import '../../../premium/data/services/track_download_service.dart';
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 class LibraryLikesPage extends ConsumerStatefulWidget {
-  const LibraryLikesPage({super.key});
+  final bool showMiniPlayer;
+
+  const LibraryLikesPage({super.key, this.showMiniPlayer = false});
 
   @override
   ConsumerState<LibraryLikesPage> createState() => _LibraryLikesPageState();
@@ -125,275 +129,283 @@ class _LibraryLikesPageState extends ConsumerState<LibraryLikesPage> {
 
     return Scaffold(
       backgroundColor: _bg,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── top bar ──────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    key: const ValueKey('library_likes_back_button'),
-                    onTap: () => context.pop(),
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.arrow_back_ios_new_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Your likes',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    key: const ValueKey('library_likes_cast_button'),
-                    onTap: () {},
-                    child: Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.cast_rounded,
-                          color: Colors.white, size: 18),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── content ──────────────────────────────────────────────
-            Expanded(
-              child: async.when(
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFFF5500)),
-                ),
-                error: (_, __) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                // ── top bar ──────────────────────────────────────────────
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
                     children: [
-                      const Text('Failed to load likes',
-                          style: TextStyle(color: Colors.white54)),
-                      const SizedBox(height: 12),
-                      TextButton(
-                        key: const ValueKey('library_likes_retry_button'),
-                        onPressed: () =>
-                            ref.invalidate(backendUserLikesProvider),
-                        child: const Text('Retry',
-                            style: TextStyle(color: Color(0xFFFF5500))),
+                      GestureDetector(
+                        key: const ValueKey('library_likes_back_button'),
+                        onTap: () => context.pop(),
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white, size: 18),
+                        ),
                       ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Your likes',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
                     ],
                   ),
                 ),
-                data: (allTracks) {
-                  final tracks =
-                      _applyFiltersAndSort(allTracks, const <String>{}, likedOrder);
-                  final playableTracks =
-                      tracks.where((t) => t.audioUrl != null).toList();
-                  final playableQueue = _toPlayerTracks(playableTracks);
-                  final currentTrackId = playerState.currentTrack?.id;
-                  final queueMatchesPage =
-                      _sameQueue(playerState.queue, playableQueue);
-                  final isFromThisPage = currentTrackId != null &&
-                      queueMatchesPage &&
-                      playableTracks.any((track) => track.id == currentTrackId);
-                  final showPause = isFromThisPage && playerState.isPlaying;
-                  final visibleTotalCount = allTracks.length;
 
-                  return Column(
-                    children: [
-                      // ── search + sort ─────────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(22),
-                                ),
-                                child: TextField(
-                                  controller: _searchController,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  decoration: InputDecoration(
-                                    hintText:
-                                        'Search $visibleTotalCount track${visibleTotalCount == 1 ? '' : 's'}',
-                                    hintStyle: TextStyle(
+                // ── content ──────────────────────────────────────────────
+                Expanded(
+                  child: async.when(
+                    loading: () => const Center(
+                      child:
+                          CircularProgressIndicator(color: Color(0xFFFF5500)),
+                    ),
+                    error: (_, __) => Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Failed to load likes',
+                              style: TextStyle(color: Colors.white54)),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            key: const ValueKey('library_likes_retry_button'),
+                            onPressed: () =>
+                                ref.invalidate(backendUserLikesProvider),
+                            child: const Text('Retry',
+                                style: TextStyle(color: Color(0xFFFF5500))),
+                          ),
+                        ],
+                      ),
+                    ),
+                    data: (allTracks) {
+                      final tracks = _applyFiltersAndSort(
+                          allTracks, const <String>{}, likedOrder);
+                      final playableTracks =
+                          tracks.where((t) => t.audioUrl != null).toList();
+                      final playableQueue = _toPlayerTracks(playableTracks);
+                      final currentTrackId = playerState.currentTrack?.id;
+                      final queueMatchesPage =
+                          _sameQueue(playerState.queue, playableQueue);
+                      final isFromThisPage = currentTrackId != null &&
+                          queueMatchesPage &&
+                          playableTracks
+                              .any((track) => track.id == currentTrackId);
+                      final showPause = isFromThisPage && playerState.isPlaying;
+                      final visibleTotalCount = allTracks.length;
+
+                      return Column(
+                        children: [
+                          // ── search + sort ─────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    height: 42,
+                                    decoration: BoxDecoration(
                                       color:
-                                          Colors.white.withValues(alpha: 0.4),
-                                      fontSize: 14,
+                                          Colors.white.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(22),
                                     ),
-                                    prefixIcon: Icon(
-                                      Icons.search_rounded,
+                                    child: TextField(
+                                      controller: _searchController,
+                                      style: const TextStyle(
+                                          color: Colors.white, fontSize: 14),
+                                      decoration: InputDecoration(
+                                        hintText:
+                                            'Search $visibleTotalCount track${visibleTotalCount == 1 ? '' : 's'}',
+                                        hintStyle: TextStyle(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.4),
+                                          fontSize: 14,
+                                        ),
+                                        prefixIcon: Icon(
+                                          Icons.search_rounded,
+                                          color: Colors.white
+                                              .withValues(alpha: 0.4),
+                                          size: 20,
+                                        ),
+                                        border: InputBorder.none,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                vertical: 12),
+                                      ),
+                                      onChanged: (v) =>
+                                          setState(() => _searchQuery = v),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                GestureDetector(
+                                  onTap: _showSortSheet,
+                                  child: Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
                                       color:
-                                          Colors.white.withValues(alpha: 0.4),
+                                          Colors.white.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(22),
+                                    ),
+                                    child: Icon(
+                                      Icons.tune_rounded,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.7),
                                       size: 20,
                                     ),
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                        vertical: 12),
                                   ),
-                                  onChanged: (v) =>
-                                      setState(() => _searchQuery = v),
                                 ),
-                              ),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            GestureDetector(
-                              onTap: _showSortSheet,
-                              child: Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(22),
-                                ),
-                                child: Icon(
-                                  Icons.tune_rounded,
-                                  color: Colors.white.withValues(alpha: 0.7),
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
 
-                      // ── action row ────────────────────────────────
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                        child: Row(
-                          children: [
-                            // Download (placeholder)
-                            GestureDetector(
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Coming soon'),
-                                    duration: Duration(seconds: 2),
+                          // ── action row ────────────────────────────────
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                            child: Row(
+                              children: [
+                                // Download (placeholder)
+                                GestureDetector(
+                                  onTap: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Coming soon'),
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  },
+                                  child: Icon(
+                                    Icons.download_rounded,
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    size: 26,
                                   ),
-                                );
-                              },
-                              child: Icon(
-                                Icons.download_rounded,
-                                color: Colors.white.withValues(alpha: 0.7),
-                                size: 26,
-                              ),
+                                ),
+                                const Spacer(),
+                                // Shuffle
+                                GestureDetector(
+                                  onTap: () {
+                                    final shuffledTracks =
+                                        List<TrackSummary>.from(tracks)
+                                          ..shuffle(Random());
+                                    ref
+                                            .read(likedTrackOrderProvider.notifier)
+                                            .state =
+                                        shuffledTracks
+                                            .map((track) => track.id)
+                                            .toList();
+                                    final shuffled =
+                                        _toPlayerTracks(shuffledTracks);
+                                    if (shuffled.isEmpty) return;
+                                    ref
+                                        .read(playerProvider.notifier)
+                                        .playQueue(shuffled);
+                                  },
+                                  child: Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.08),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.shuffle_rounded,
+                                      color: Colors.white,
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                // Play all
+                                GestureDetector(
+                                  onTap: () {
+                                    if (isFromThisPage) {
+                                      ref
+                                          .read(playerProvider.notifier)
+                                          .togglePlayPause();
+                                      return;
+                                    }
+                                    if (playableQueue.isEmpty) return;
+                                    ref
+                                        .read(playerProvider.notifier)
+                                        .playQueue(playableQueue);
+                                  },
+                                  child: Container(
+                                    width: 52,
+                                    height: 52,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      showPause
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      color: Colors.black,
+                                      size: showPause ? 28 : 32,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const Spacer(),
-                            // Shuffle
-                            GestureDetector(
-                              onTap: () {
-                                final shuffledTracks =
-                                    List<TrackSummary>.from(tracks)
-                                      ..shuffle(Random());
-                                ref
-                                    .read(likedTrackOrderProvider.notifier)
-                                    .state = shuffledTracks
-                                        .map((track) => track.id)
-                                        .toList();
-                                final shuffled = _toPlayerTracks(shuffledTracks);
-                                if (shuffled.isEmpty) return;
-                                ref
-                                    .read(playerProvider.notifier)
-                                    .playQueue(shuffled);
-                              },
-                              child: Container(
-                                width: 42,
-                                height: 42,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.08),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.shuffle_rounded,
-                                  color: Colors.white,
-                                  size: 22,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            // Play all
-                            GestureDetector(
-                              onTap: () {
-                                if (isFromThisPage) {
-                                  ref
-                                      .read(playerProvider.notifier)
-                                      .togglePlayPause();
-                                  return;
-                                }
-                                if (playableQueue.isEmpty) return;
-                                ref
-                                    .read(playerProvider.notifier)
-                                    .playQueue(playableQueue);
-                              },
-                              child: Container(
-                                width: 52,
-                                height: 52,
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  showPause
-                                      ? Icons.pause_rounded
-                                      : Icons.play_arrow_rounded,
-                                  color: Colors.black,
-                                  size: showPause ? 28 : 32,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
 
-                      // ── track list ────────────────────────────────
-                      Expanded(
-                        child: tracks.isEmpty
-                            ? Center(
-                                child: Text(
-                                  _searchQuery.isEmpty
-                                      ? 'No liked tracks yet'
-                                      : 'No results',
-                                  style: const TextStyle(
-                                      color: Colors.white54, fontSize: 16),
-                                ),
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.only(bottom: 132),
-                                physics: const BouncingScrollPhysics(),
-                                itemCount: tracks.length,
-                                itemBuilder: (_, i) => _LikeTile(
-                                  key: ValueKey(
-                                    'library_likes_track_tile_${tracks[i].id}',
+                          // ── track list ────────────────────────────────
+                          Expanded(
+                            child: tracks.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      _searchQuery.isEmpty
+                                          ? 'No liked tracks yet'
+                                          : 'No results',
+                                      style: const TextStyle(
+                                          color: Colors.white54, fontSize: 16),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: const EdgeInsets.only(bottom: 132),
+                                    physics: const BouncingScrollPhysics(),
+                                    itemCount: tracks.length,
+                                    itemBuilder: (_, i) => _LikeTile(
+                                      key: ValueKey(
+                                        'library_likes_track_tile_${tracks[i].id}',
+                                      ),
+                                      track: tracks[i],
+                                      onRemove: () {},
+                                    ),
                                   ),
-                                  track: tracks[i],
-                                ),
-                              ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+          if (widget.showMiniPlayer)
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: MiniPlayerWidget(),
+            ),
+        ],
       ),
     );
   }
@@ -465,50 +477,107 @@ class _SortSheet extends StatelessWidget {
 
 // ── Like Tile ──────────────────────────────────────────────────────────────────
 
-class _LikeTile extends ConsumerWidget {
+class _LikeTile extends ConsumerStatefulWidget {
   final TrackSummary track;
+  final VoidCallback onRemove;
 
-  const _LikeTile({super.key, required this.track});
+  const _LikeTile({super.key, required this.track, required this.onRemove});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LikeTile> createState() => _LikeTileState();
+}
+
+class _LikeTileState extends ConsumerState<_LikeTile> {
+  bool _isDownloading = false;
+  bool _downloadSuccess = false;
+
+  Future<void> _download() async {
+    setState(() {
+      _isDownloading = true;
+      _downloadSuccess = false;
+    });
+
+    final result = await downloadTrack(
+      ref: ref,
+      trackId: widget.track.id,
+      title: widget.track.title,
+      artistName: widget.track.artistName,
+      artworkUrl: widget.track.artworkUrl,
+      audioUrl: widget.track.audioUrl,
+      source: 'likes_tile',
+    );
+
+    if (!mounted) return;
+    setState(() => _isDownloading = false);
+
+    switch (result) {
+      case TrackDownloadSuccess():
+        setState(() => _downloadSuccess = true);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Track saved to Offline Downloads.'),
+          backgroundColor: Color(0xFF333333),
+        ));
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) setState(() => _downloadSuccess = false);
+        });
+      case TrackDownloadMetadataOnly():
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+            'Direct download is disabled for this track. '
+            'Saved to Offline Downloads preview.',
+          ),
+          backgroundColor: Color(0xFF333333),
+          duration: Duration(seconds: 4),
+        ));
+      case TrackDownloadPlanGated():
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Requires a Go+ Subscription for offline listening.'),
+          backgroundColor: Color(0xFF333333),
+        ));
+      case TrackDownloadError(:final message):
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final params = EngagementParams(
-      trackId: track.id,
+      trackId: widget.track.id,
       isLiked: true,
-      likeCount: track.likeCount,
-      repostCount: track.repostCount,
+      likeCount: widget.track.likeCount,
+      repostCount: widget.track.repostCount,
     );
     ref.watch(engagementProvider(params));
 
-    // Seed authoritative liked state. Only isLiked is seeded — we don't know
-    // isReposted from this API, so we leave it untouched. No-op if user has
-    // already toggled this track in the current session.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(engagementProvider(params).notifier).seed(
             isLiked: true,
-            likeCount: track.likeCount,
-            repostCount: track.repostCount,
+            likeCount: widget.track.likeCount,
+            repostCount: widget.track.repostCount,
           );
     });
 
     final sub = Colors.white.withValues(alpha: 0.55);
-    final hasArtwork = track.artworkUrl != null &&
-        track.artworkUrl!.isNotEmpty &&
-        track.artworkUrl!.startsWith('http');
+    final hasArtwork = widget.track.artworkUrl != null &&
+        widget.track.artworkUrl!.isNotEmpty &&
+        widget.track.artworkUrl!.startsWith('http');
 
     return GestureDetector(
       onTap: () {
-        if (track.audioUrl != null) {
+        if (widget.track.audioUrl != null) {
           ref.read(playerProvider.notifier).playTrack(
                 PlayerTrack(
-                  id: track.id,
-                  title: track.title,
-                  artist: track.artistName,
-                  artistId: track.artistId,
-                  audioUrl: track.audioUrl!,
-                  coverUrl: track.artworkUrl,
-                  waveform: track.waveform,
-                  artistPermalink: track.artistPermalink,
+                  id: widget.track.id,
+                  title: widget.track.title,
+                  artist: widget.track.artistName,
+                  artistId: widget.track.artistId,
+                  audioUrl: widget.track.audioUrl!,
+                  coverUrl: widget.track.artworkUrl,
+                  waveform: widget.track.waveform,
+                  artistPermalink: widget.track.artistPermalink,
                 ),
               );
         }
@@ -524,7 +593,7 @@ class _LikeTile extends ConsumerWidget {
                 height: 56,
                 child: hasArtwork
                     ? CachedNetworkImage(
-                        imageUrl: track.artworkUrl!,
+                        imageUrl: widget.track.artworkUrl!,
                         fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => _placeholder(),
                       )
@@ -537,7 +606,7 @@ class _LikeTile extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    track.title,
+                    widget.track.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -549,18 +618,18 @@ class _LikeTile extends ConsumerWidget {
                   const SizedBox(height: 3),
                   GestureDetector(
                     onTap: () {
-                      final id = track.artistId;
-                      final permalink = track.artistPermalink;
+                      final id = widget.track.artistId;
+                      final permalink = widget.track.artistPermalink;
                       if (id != null && permalink != null) {
                         navigateToUserProfile(
                           context,
                           userId: id,
                           permalink: permalink,
-                          displayName: track.artistName,
+                          displayName: widget.track.artistName,
                         );
                       }
                     },
-                    child: Text(track.artistName,
+                    child: Text(widget.track.artistName,
                         style: TextStyle(color: sub, fontSize: 13)),
                   ),
                   const SizedBox(height: 3),
@@ -568,7 +637,7 @@ class _LikeTile extends ConsumerWidget {
                     children: [
                       Icon(Icons.play_arrow_rounded, size: 13, color: sub),
                       Text(
-                        '  ${_formatCount(track.playCount)}',
+                        '  ${_formatCount(widget.track.playCount)}',
                         style: TextStyle(color: sub, fontSize: 11),
                       ),
                     ],
@@ -576,8 +645,28 @@ class _LikeTile extends ConsumerWidget {
                 ],
               ),
             ),
+            // Per-track download button
             GestureDetector(
-              onTap: () => _showTrackMenu(context),
+              onTap: (_isDownloading || _downloadSuccess) ? null : _download,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: _downloadSuccess
+                      ? const Icon(Icons.check_circle,
+                          color: Color(0xFF00C853), size: 20)
+                      : _isDownloading
+                          ? const CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.orange,
+                            )
+                          : Icon(Icons.download_rounded, color: sub, size: 20),
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: () => _showTrackMenu(context, params),
               child: Padding(
                 padding: const EdgeInsets.all(8),
                 child: Icon(Icons.more_vert_rounded, color: sub, size: 20),
@@ -589,29 +678,28 @@ class _LikeTile extends ConsumerWidget {
     );
   }
 
-  void _showTrackMenu(BuildContext context) {
+  void _showTrackMenu(BuildContext context, EngagementParams params) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: const Color(0xFF1A1A1A),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => TrackOptionsSheet(
-        trackId: track.id,
-        title: track.title,
-        artistName: track.artistName,
-        artworkUrl: track.artworkUrl,
-        audioUrl: track.audioUrl,
-        waveform: track.waveform,
-        artistId: track.artistId,
-        artistPermalink: track.artistPermalink,
-        showSendTo: false,
-        showShare: false,
-        showReport: false,
+        trackId: widget.track.id,
+        title: widget.track.title,
+        artistName: widget.track.artistName,
+        artworkUrl: widget.track.artworkUrl,
+        audioUrl: widget.track.audioUrl,
+        waveform: widget.track.waveform,
+        artistId: widget.track.artistId,
+        artistPermalink: widget.track.artistPermalink,
         initialIsLiked: true,
-        initialLikeCount: track.likeCount,
-        initialRepostCount: track.repostCount,
+        initialIsReposted: params.isReposted,
+        initialLikeCount: widget.track.likeCount,
+        initialRepostCount: widget.track.repostCount,
+        onUnlike: widget.onRemove,
       ),
     );
   }
